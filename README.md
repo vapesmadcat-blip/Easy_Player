@@ -20,7 +20,7 @@ Detecta: **apt**, **pacman**, **dnf**, **zypper**, **apk**.
 
 ```bash
 chmod +x packaging/build-deb.sh && ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-1_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-2_all.deb
 ```
 
 ### Arch / Manjaro
@@ -61,7 +61,7 @@ eazy --config
 
 | Tecla | Ação |
 |-------|------|
-| `Enter` | Tocar / entrar na pasta |
+| `Enter` | Tocar / entrar na pasta / abrir playlist `.m3u` |
 | `Tab` / `Espaço` | Marcar |
 | `Insert` | Enviar para fila 1, 2 ou 3 |
 | `Ctrl-P` | Alternar filas 1→2→3→diretório |

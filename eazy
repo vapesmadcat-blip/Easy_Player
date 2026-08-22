@@ -2174,6 +2174,27 @@ registrar_historico() {
     fi
 }
 
+eh_playlist_m3u() {
+    local f="$1" ext
+    [ -f "$f" ] || return 1
+    ext="${f##*.}"
+    ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
+    [ "$ext" = "m3u" ]
+}
+
+# Abre uma playlist no navegador interno, sem iniciar o player imediatamente.
+abrir_playlist_no_navegador() {
+    local lista="$1"
+    [ -f "$lista" ] || return 1
+    ARQUIVO_PLAYLIST_ABERTO="$(readlink -f -- "$lista" 2>/dev/null || echo "$lista")"
+    MODO_PLAYLIST=1
+    MODO_BUSCA=0
+    MODO_DUP=0
+    MODO_DOWNLOAD=0
+    TMP=2
+    registrar_status
+}
+
 # Toca um único arquivo
 tocar_arquivo() {
     local arq="$1"
@@ -3865,16 +3886,12 @@ while true; do
             ULTIMO_ARQUIVO="$tocado"
             registrar_status
             if [ -f "$tocado" ]; then
-                if eh_arquivo_texto "$tocado"; then
+                if eh_playlist_m3u "$tocado"; then
+                    abrir_playlist_no_navegador "$tocado"
+                elif eh_arquivo_texto "$tocado"; then
                     mostrar_texto "$tocado"
                 else
-                    ext="${tocado##*.}"
-                    ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-                    if [[ "$ext" =~ ^(m3u|pls)$ ]]; then
-                        tocar_lista "$tocado"
-                    else
-                        tocar_arquivo "$tocado"
-                    fi
+                    tocar_arquivo "$tocado"
                 fi
             else
                 whiptail --title "Arquivo ausente" --msgbox "Arquivo não encontrado:\n$tocado" 9 60
@@ -3911,7 +3928,9 @@ while true; do
         elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
-            if eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
+            if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
+                abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
             else
                 tocar_arquivo "$ULTIMO_ARQUIVO"
@@ -3947,7 +3966,9 @@ while true; do
         elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
-            if eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
+            if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
+                abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
             else
                 tocar_arquivo "$ULTIMO_ARQUIVO"
@@ -4012,16 +4033,12 @@ while true; do
             tocado=$(head -n1 "$playlist_sel")
             ULTIMO_ARQUIVO="$tocado"
             registrar_status
-            if eh_arquivo_texto "$tocado"; then
+            if eh_playlist_m3u "$tocado"; then
+                abrir_playlist_no_navegador "$tocado"
+            elif eh_arquivo_texto "$tocado"; then
                 mostrar_texto "$tocado"
             else
-                ext="${tocado##*.}"
-                ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
-                if [[ "$ext" =~ ^(m3u|pls)$ ]]; then
-                    tocar_lista "$tocado"
-                else
-                    tocar_arquivo "$tocado"
-                fi
+                tocar_arquivo "$tocado"
             fi
         fi
         rm -f "$playlist_sel"
