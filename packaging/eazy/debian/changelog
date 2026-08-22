@@ -1,3 +1,12 @@
+eazy (3.0-8) unstable; urgency=medium
+
+  * Mark automatically selected duplicate representatives with a visible checkmark.
+  * Show the selected item count and aggregate byte total in the Duplicados header.
+  * Keep the same totals synchronized when Ctrl-R selects all duplicate rows.
+  * Preserve F12 as the automatic one-per-group shortcut and Tab as manual selection.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-7) unstable; urgency=medium
 
   * Move automatic duplicate-group selection from F11 to F12 because
@@ -11,15 +20,5 @@ eazy (3.0-6) unstable; urgency=medium
   * Add F11 in Duplicados to select one existing file from each duplicate group.
   * Keep Tab, Space, Ctrl-A, Ctrl-X, and Ctrl-R available for manual selection.
   * Show the number of automatically selected representatives in the header.
-
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
-
-eazy (3.0-5) unstable; urgency=medium
-
-  * Expand the F9 system overview with CPU, BIOS, firmware, SMART, USB, PCI,
-    GPU, drivers, OpenGL, Vulkan, monitors, network, battery, sensors,
-    processes, and eazy tool versions.
-  * Use optional diagnostic utilities when available and report missing tools
-    without blocking the overview.
 
  -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300

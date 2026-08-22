@@ -1480,7 +1480,7 @@ eazy_busca_msg() {
 # Uso: eazy_status_header [caminho1 caminho2 ...]
 # Preserva atalhos em EAZY_HEADER_HINT (exportado antes do fzf)
 eazy_status_header() {
-    local livre total livre_h total_h sel_bytes sel_h
+    local livre total livre_h total_h sel_bytes sel_h sel_count=0
     read -r livre total < <(info_disco)
     livre=${livre:-0}; total=${total:-0}
     livre_h=$(formatar_bytes_label "$livre")
@@ -1497,10 +1497,20 @@ eazy_status_header() {
             t=$(tamanho_caminho "$p")
             t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
             sel_bytes=$((sel_bytes + t))
+            sel_count=$((sel_count + 1))
         done
+    elif [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "${SELECTED_FILE:-}" ]; then
+        local p t
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            t=$(tamanho_caminho "$p")
+            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+            sel_bytes=$((sel_bytes + t))
+            sel_count=$((sel_count + 1))
+        done < "$SELECTED_FILE"
     fi
     sel_h=$(formatar_bytes_label "$sel_bytes")
-    printf "HD livre: %s / %s  |  Sel: %s" "$livre_h" "$total_h" "$sel_h"
+    printf "HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$livre_h" "$total_h" "$sel_h" "$sel_count"
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
     fi
@@ -1825,7 +1835,7 @@ encontrar_duplicados() {
     local -a ext_arr
     construir_iname_array ext_arr "$extensoes"
 
-    local -a find_dup=("." "-type" "f" "(" "${ext_arr[@]}" ")")
+    local -a find_dup=("$(pwd -P)" "-type" "f" "(" "${ext_arr[@]}" ")")
 
     : > "$saida"
     find "${find_dup[@]}" -printf "%s\t%p\n" 2>/dev/null > "$tmp_all"
@@ -1992,20 +2002,27 @@ obter_lista_rapida() {
             "$C_DIR" "◀ Voltar (Sair de Duplicados)" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
 
         if [ -s "$DUP_FILE" ]; then
-            awk -F'\t' -v c_zip="$C_ZIP" -v c_size="$C_SIZE" -v c_reset="$C_RESET" '
-            BEGIN { grupo = 0; anterior = "" }
+            awk -F'\t' -v c_zip="$C_ZIP" -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v selected_file="$SELECTED_FILE" '
+            BEGIN {
+                grupo = 0; anterior = ""
+                if (selected_file != "") {
+                    while ((getline escolhido < selected_file) > 0) marcado[escolhido] = 1
+                    close(selected_file)
+                }
+            }
             {
                 hash = $1; tam = $2; caminho = $3
                 if (hash != anterior) { grupo++; anterior = hash }
 
+                marca = (caminho in marcado) ? "✓ " : "  "
                 nome_exib = caminho
                 if (length(nome_exib) > 40) {
                     nome_exib = "..." substr(nome_exib, length(nome_exib) - 37)
                 }
                 mb = sprintf("%.1f", tam / 1048576)
 
-                printf "%015d\t%s🔁 G%02d %-36s%s\t%s[%s MB]%s\t%s\n",
-                    tam, c_zip, grupo, nome_exib, c_reset, c_size, mb, c_reset, caminho
+                printf "%015d\t%s%s🔁 G%02d %-34s%s\t%s[%s MB]%s\t%s\n",
+                    tam, c_zip, marca, grupo, nome_exib, c_reset, c_size, mb, c_reset, caminho
             }' "$DUP_FILE"
         fi
         return
@@ -3663,11 +3680,15 @@ while true; do
         TOTAL_DUP=${TOTAL_DUP:-0}
         TEXTO_PROMPT=" 🔁 DUPLICADOS [${EXT_DUP:-todas}] — $TOTAL_DUP arquivo(s) ❯ "
         DUP_AUTO_INFO=""
-        if [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -s "$SELECTED_FILE" ]; then
+        if [ -s "$SELECTED_FILE" ]; then
             DUP_AUTO_COUNT=$(grep -c '^' "$SELECTED_FILE" 2>/dev/null || echo 0)
-            DUP_AUTO_INFO=" | [AUTO: ${DUP_AUTO_COUNT} 1/grupo]"
+            DUP_AUTO_BYTES=$(somar_selecao_bytes < "$SELECTED_FILE")
+            DUP_AUTO_BYTES=$(echo "$DUP_AUTO_BYTES" | tr -cd '0-9')
+            DUP_AUTO_BYTES=${DUP_AUTO_BYTES:-0}
+            DUP_AUTO_LABEL=$(formatar_bytes_label "$DUP_AUTO_BYTES")
+            DUP_AUTO_INFO=" | [SEL: ${DUP_AUTO_COUNT} item(ns) / ${DUP_AUTO_LABEL}]"
         fi
-        EAZY_HEADER_HINT=" [F12]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
+        EAZY_HEADER_HINT=" [F12]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [CTRL-R]: Marcar todos | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
