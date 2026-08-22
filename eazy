@@ -1,0 +1,4029 @@
+#!/usr/bin/env bash
+#
+#  eazy — navegador e reprodutor multimídia no terminal
+#  https://github.com/ (local)  |  fzf + mpv/mplayer/cvlc/ffplay
+#
+#  Licença: uso livre. Sem garantias.
+#
+set -o pipefail
+
+EAZY_VERSION="3.0"
+EAZY_CODENAME="professional"
+EAZY_NAME="eazy"
+
+# --- DIRETÓRIOS E ARQUIVOS DE CONFIGURAÇÃO ---
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/eazy"
+CONFIG_FILE="$CONFIG_DIR/config"
+DOWNLOAD_QUEUE="$CONFIG_DIR/download_queue"
+DOWNLOAD_PASSWORDS="$CONFIG_DIR/download_passwords"
+HISTORY_FILE="$CONFIG_DIR/history"
+PLAYLIST_PERSISTENTE="$CONFIG_DIR/temp_playlist"   # legado → migrado para _1
+PLAYLIST_1="$CONFIG_DIR/temp_playlist_1"
+PLAYLIST_2="$CONFIG_DIR/temp_playlist_2"
+PLAYLIST_3="$CONFIG_DIR/temp_playlist_3"
+FILA_ATUAL=1   # 1, 2 ou 3
+SESSION_FILE="$CONFIG_DIR/session"
+POSITIONS_FILE="$CONFIG_DIR/dir_positions"
+MARK_DELETE_FILE="$CONFIG_DIR/marked_delete"
+MPV_SCRIPT_DIR="$CONFIG_DIR/mpv_scripts"
+
+# --- VALORES PADRÃO (FALLBACKS) ---
+TELA_PADRAO="fs"
+OSD_PADRAO="1"
+VOL_PADRAO="100"
+DIR_PADRAO="$PWD"
+PLAYLIST_DIR_PADRAO="${HOME}/Playlists"
+PLAYER_PADRAO="mpv"
+SEM_AUDIO="0"       # 1 = vídeo sem áudio (mute)
+PREVIEW_ATIVO="0"   # 0=desligado (padrão) | 1=ligado — persiste entre sessões
+
+# Carrega as configurações salvas, se existirem
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+fi
+# Garante default se config antiga não tiver a chave
+PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
+SEM_AUDIO="${SEM_AUDIO:-0}"
+
+# --- FUNÇÃO DE CONFIGURAÇÃO (WIZARD WHIPTAIL) ---
+configurar_defaults() {
+    mkdir -p "$CONFIG_DIR"
+
+    local nova_tela
+    nova_tela=$(whiptail --title "Configuração: Modo de Tela" \
+        --radiolist "Modo de vídeo padrão (Espaço marca, Enter avança):" 15 60 2 \
+        "fs" "Tela Cheia (Fullscreen)" $( [ "$TELA_PADRAO" = "fs" ] && echo "ON" || echo "OFF" ) \
+        "janela" "Modo Janela" $( [ "$TELA_PADRAO" = "janela" ] && echo "ON" || echo "OFF" ) \
+        3>&1 1>&2 2>&3)
+    [ -n "$nova_tela" ] && TELA_PADRAO="$nova_tela"
+
+    local novo_osd
+    novo_osd=$(whiptail --title "Configuração: OSD (On-Screen Display)" \
+        --radiolist "Detalhes exibidos na tela do player (Espaço marca, Enter avança):" 16 65 4 \
+        "0" "Ocultar tudo" $( [ "$OSD_PADRAO" = "0" ] && echo "ON" || echo "OFF" ) \
+        "1" "Mostrar volume/tempo (Padrão)" $( [ "$OSD_PADRAO" = "1" ] && echo "ON" || echo "OFF" ) \
+        "2" "Mostrar barra de progresso" $( [ "$OSD_PADRAO" = "2" ] && echo "ON" || echo "OFF" ) \
+        "3" "Mostrar tempo total" $( [ "$OSD_PADRAO" = "3" ] && echo "ON" || echo "OFF" ) \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_osd" ] && OSD_PADRAO="$novo_osd"
+
+    local novo_vol
+    novo_vol=$(whiptail --title "Configuração: Volume Padrão" \
+        --inputbox "Digite o volume inicial (0 a 100):" 10 60 "$VOL_PADRAO" \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_vol" ] && VOL_PADRAO="$novo_vol"
+
+    local novo_dir
+    novo_dir=$(whiptail --title "Configuração: Diretório Inicial Padrão" \
+        --inputbox "Caminho da pasta que o eazy deve abrir ao iniciar:" 10 65 "$DIR_PADRAO" \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_dir" ] && DIR_PADRAO="$novo_dir"
+
+    local novo_pl_dir
+    novo_pl_dir=$(whiptail --title "Configuração: Pasta Padrão de Playlists" \
+        --inputbox "Pasta onde as playlists serão salvas por padrão:\n(ex: $HOME/Playlists)" 11 70 "$PLAYLIST_DIR_PADRAO" \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_pl_dir" ] && PLAYLIST_DIR_PADRAO="$novo_pl_dir"
+
+    local novo_player
+    novo_player=$(whiptail --title "Configuração: Player de Mídia" \
+        --radiolist "Escolha o player padrão (Espaço marca, Enter confirma):\n(cvlc e ffplay precisam estar instalados)" 16 68 4 \
+        "mpv" "mpv (recomendado)" $( [ "$PLAYER_PADRAO" = "mpv" ] && echo "ON" || echo "OFF" ) \
+        "mplayer" "mplayer (clássico)" $( [ "$PLAYER_PADRAO" = "mplayer" ] && echo "ON" || echo "OFF" ) \
+        "cvlc" "VLC CLI (cvlc)" $( [ "$PLAYER_PADRAO" = "cvlc" ] && echo "ON" || echo "OFF" ) \
+        "ffplay" "ffplay (FFmpeg)" $( [ "$PLAYER_PADRAO" = "ffplay" ] && echo "ON" || echo "OFF" ) \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_player" ] && PLAYER_PADRAO="$novo_player"
+
+    # Checkbox: vídeo sem áudio
+    local audio_sel
+    audio_sel=$(whiptail --title "Áudio do player" --checklist \
+        "Espaço marca, Enter confirma:" 10 55 1 \
+        "SEM_AUDIO" "Sem áudio (vídeo mudo)" $( [ "${SEM_AUDIO:-0}" = "1" ] && echo "ON" || echo "OFF" ) \
+        3>&1 1>&2 2>&3)
+    if echo "$audio_sel" | grep -q "SEM_AUDIO"; then
+        SEM_AUDIO="1"
+    else
+        SEM_AUDIO="0"
+    fi
+
+    # Preserva PREVIEW_ATIVO se já existir no config
+    local preview_keep="${PREVIEW_ATIVO:-0}"
+    [ -f "$CONFIG_FILE" ] && preview_keep=$(grep '^PREVIEW_ATIVO=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || echo "$preview_keep")
+
+    cat <<EOF > "$CONFIG_FILE"
+TELA_PADRAO="$TELA_PADRAO"
+OSD_PADRAO="$OSD_PADRAO"
+VOL_PADRAO="$VOL_PADRAO"
+DIR_PADRAO="$DIR_PADRAO"
+PLAYLIST_DIR_PADRAO="$PLAYLIST_DIR_PADRAO"
+PLAYER_PADRAO="$PLAYER_PADRAO"
+SEM_AUDIO="$SEM_AUDIO"
+PREVIEW_ATIVO="$preview_keep"
+EOF
+    whiptail --title "Sucesso" --msgbox "Configurações salvas com sucesso em:\n$CONFIG_FILE\n\nPlayer: $PLAYER_PADRAO\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 12 55
+}
+
+# --- FUNÇÃO DE AJUDA VISUAL (WHIPTAIL) ---
+# Ajuda no terminal (stdout) — estilo utilitário Unix
+exibir_help_cli() {
+    cat <<EOF
+${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME}) — navegador e player multimídia no terminal
+
+Uso:
+  ${EAZY_NAME} [OPÇÕES] [PASTA|ARQUIVO]
+
+Argumentos:
+  PASTA              Abre o eazy nesse diretório
+  ARQUIVO            Abre a pasta do arquivo e posiciona o cursor nele
+
+Opções:
+  -h, --help         Mostra esta ajuda
+  -V, --version      Mostra a versão
+  --config           Assistente de configuração (player, volume, pastas…)
+  --install          Instala dependências (apt/pacman/dnf/zypper/apk) e o comando
+  --uninstall        Remove /usr/local/bin/eazy e o launcher .desktop
+  --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+
+Atalhos principais (dentro do eazy):
+  Enter              Tocar / entrar na pasta
+  Tab · Espaço       Marcar itens
+  Ctrl-A / X / R     Marcar todos / limpar / inverter
+  Insert             Enviar para uma das 3 filas temporárias
+  Ctrl-P             Alternar Filas 1 → 2 → 3 → diretório
+  Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
+  Ctrl-D             Duplicados
+  Ctrl-B             Downloads (yt-dlp, aria2c, axel, wget)
+  Ctrl-O             Abrir playlist .m3u / .pls
+  Ctrl-G             Histórico
+  Ctrl-K             Menu de ações
+  Ctrl-L             Ir à pasta do arquivo
+  Ctrl-/             Preview on/off (persiste)
+  Del                Apagar (contexto: lista ou disco)
+  Alt-D              Apagar do disco (em playlists/filas)
+  F9                 Configuração · F10 Ajuda
+  Q · X · Ctrl-Q     Sair (salva sessão)
+
+No mpv:
+  d                  Marcar para exclusão ao sair
+  D                  Marcar e ir ao próximo
+
+Arquivos de configuração:
+  ~/.config/eazy/config
+  ~/.config/eazy/session
+  ~/.config/eazy/temp_playlist_{1,2,3}
+
+Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk
+Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, rar (oficial)
+
+EOF
+}
+
+# Ajuda visual (F10)
+exibir_help() {
+    if [ -t 1 ] && command -v whiptail &>/dev/null; then
+        whiptail --title "eazy ${EAZY_VERSION} — Ajuda" --msgbox "\
+eazy ${EAZY_VERSION} (${EAZY_CODENAME})
+
+Uso: eazy [pasta|arquivo]
+
+NAVEGAÇÃO
+  Enter          Tocar / entrar na pasta
+  Tab · Espaço   Marcar · Ctrl-A/X/R seleção
+  Ctrl-L         Pasta do arquivo
+  Ctrl-/         Preview (persiste)
+
+FILAS
+  Insert         Escolhe fila 1/2/3
+  Ctrl-P         Alterna 1→2→3→dir
+
+BUSCA E DISCO
+  Ctrl-F         Busca recursiva
+  Ctrl-D         Duplicados
+  Del            Lista ou disco (conforme contexto)
+  Alt-D          Disco (em playlist/fila)
+
+OUTROS
+  Ctrl-B downloads · Ctrl-O playlist · Ctrl-G histórico
+  Ctrl-K ações · F9 config · Q sair
+
+mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
+    else
+        exibir_help_cli
+    fi
+}
+
+# --- TRATAMENTO DE ARGUMENTOS INICIAIS ---
+if [ "$1" = "--install" ]; then
+    echo -e "\033[1;36m=== ${EAZY_NAME} ${EAZY_VERSION} — instalador ===\033[0m"
+
+    # Mapa pacote → binário (quando diferem)
+    bin_do_pkg() {
+        case "$1" in
+            gawk) echo awk ;;
+            findutils) echo find ;;
+            aria2) echo aria2c ;;
+            p7zip-full|p7zip) echo 7z ;;
+            libnewt|newt) echo whiptail ;;
+            *) echo "$1" ;;
+        esac
+    }
+
+    instalar_pkgs() {
+        local mgr="$1"; shift
+        local -a pkgs=("$@") falt=()
+        local p b
+        for p in "${pkgs[@]}"; do
+            b=$(bin_do_pkg "$p")
+            command -v "$b" &>/dev/null || falt+=("$p")
+        done
+        if [ ${#falt[@]} -eq 0 ]; then
+            echo -e "\033[1;32m✓ Dependências principais OK\033[0m"
+            return 0
+        fi
+        echo -e "\033[1;33mAusentes: ${falt[*]}\033[0m"
+        case "$mgr" in
+            apt)
+                echo -e "  \033[0;90msudo apt update && sudo apt install -y ${falt[*]}\033[0m"
+                sudo apt update && sudo apt install -y "${falt[@]}"
+                ;;
+            pacman)
+                echo -e "  \033[0;90msudo pacman -S --needed ${falt[*]}\033[0m"
+                sudo pacman -S --needed --noconfirm "${falt[@]}"
+                ;;
+            dnf)
+                echo -e "  \033[0;90msudo dnf install -y ${falt[*]}\033[0m"
+                sudo dnf install -y "${falt[@]}"
+                ;;
+            zypper)
+                echo -e "  \033[0;90msudo zypper install -y ${falt[*]}\033[0m"
+                sudo zypper install -y "${falt[@]}"
+                ;;
+            apk)
+                echo -e "  \033[0;90msudo apk add ${falt[*]}\033[0m"
+                sudo apk add "${falt[@]}"
+                ;;
+        esac
+    }
+
+    if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
+        echo -e "Gerenciador: \033[1;37mapt\033[0m"
+        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget axel aria2 unzip p7zip-full rar yt-dlp
+        echo -e "\033[0;90mOpcionais: sudo apt install -y chafa ffmpeg vlc\033[0m"
+        echo -e "\033[0;90mNota: pacote 'rar' (non-free) — RAR oficial; não usamos unrar.\033[0m"
+    elif command -v pacman &>/dev/null; then
+        echo -e "Gerenciador: \033[1;37mpacman\033[0m"
+        # Arch: rar costuma estar no AUR; 7z como fallback na extração
+        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 unzip p7zip yt-dlp
+    elif command -v dnf &>/dev/null; then
+        echo -e "Gerenciador: \033[1;37mdnf\033[0m"
+        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip p7zip-plugins yt-dlp
+    elif command -v zypper &>/dev/null; then
+        echo -e "Gerenciador: \033[1;37mzypper\033[0m"
+        instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+    elif command -v apk &>/dev/null; then
+        echo -e "Gerenciador: \033[1;37mapk\033[0m (Alpine)"
+        instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+    else
+        echo -e "\033[1;31mNenhum gerenciador conhecido (apt/pacman/dnf/zypper/apk).\033[0m" >&2
+        echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget" >&2
+        exit 1
+    fi
+
+    SCRIPT_ATUAL="$(readlink -f "$0")"
+    DESTINO="/usr/local/bin/eazy"
+    SCRIPT_DIR="$(dirname -- "$SCRIPT_ATUAL")"
+    DESKTOP_SRC="$SCRIPT_DIR/eazy.desktop"
+    DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+
+    echo -e "\033[1;34mInstalando comando global em $DESTINO...\033[0m"
+    if sudo cp "$SCRIPT_ATUAL" "$DESTINO" && sudo chmod +x "$DESTINO"; then
+        echo -e "\033[1;32m✓\033[0m Comando: \033[1;37meazy\033[0m"
+    else
+        echo -e "\033[1;31m✗\033[0m Falha ao copiar para $DESTINO" >&2
+        exit 1
+    fi
+
+    if [ -f "$DESKTOP_SRC" ]; then
+        mkdir -p "$DESKTOP_DIR"
+        cp "$DESKTOP_SRC" "$DESKTOP_DIR/eazy.desktop"
+        echo -e "\033[1;32m✓\033[0m Launcher: $DESKTOP_DIR/eazy.desktop"
+        command -v update-desktop-database &>/dev/null && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+    fi
+
+    echo -e "\n\033[1;32m${EAZY_NAME} ${EAZY_VERSION} instalado.\033[0m"
+    echo -e "  ${EAZY_NAME} --help"
+    echo -e "  ${EAZY_NAME} ~/Videos"
+    exit 0
+
+elif [ "$1" = "--uninstall" ]; then
+    echo -e "\033[1;36m=== ${EAZY_NAME} — desinstalação ===\033[0m"
+    REMOVIDO=0
+    if [ -f /usr/local/bin/eazy ]; then
+        sudo rm -f /usr/local/bin/eazy && echo -e "\033[1;32m✓\033[0m /usr/local/bin/eazy" && REMOVIDO=1
+    fi
+    if [ -f /usr/bin/eazy ]; then
+        sudo rm -f /usr/bin/eazy && echo -e "\033[1;32m✓\033[0m /usr/bin/eazy" && REMOVIDO=1
+    fi
+    DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    [ -f "$DESKTOP_DIR/eazy.desktop" ] && rm -f "$DESKTOP_DIR/eazy.desktop" && echo -e "\033[1;32m✓\033[0m launcher local"
+    [ -f /usr/share/applications/eazy.desktop ] && sudo rm -f /usr/share/applications/eazy.desktop && echo -e "\033[1;32m✓\033[0m launcher sistema"
+    # Pacote .deb / rpm instalado
+    if command -v dpkg &>/dev/null && dpkg -l eazy &>/dev/null; then
+        echo -e "Pacote deb detectado: \033[1;33msudo apt remove eazy\033[0m"
+    fi
+    if command -v pacman &>/dev/null && pacman -Q eazy &>/dev/null; then
+        echo -e "Pacote arch detectado: \033[1;33msudo pacman -R eazy\033[0m"
+    fi
+    if command -v rpm &>/dev/null && rpm -q eazy &>/dev/null; then
+        echo -e "Pacote rpm detectado: \033[1;33msudo dnf remove eazy\033[0m"
+    fi
+    echo -e "\033[0;90mConfig em ~/.config/eazy/ preservada (remova manualmente se quiser).\033[0m"
+    [ "$REMOVIDO" -eq 0 ] && echo -e "Nada encontrado em /usr/local/bin ou /usr/bin."
+    exit 0
+elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    exibir_help_cli
+    exit 0
+elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
+    echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"
+    exit 0
+elif [ "$1" = "--config" ]; then
+    configurar_defaults
+    exit 0
+elif [ "$1" = "--update-ytdlp" ]; then
+    # Atualiza yt-dlp SEM pip (baixa binário oficial do GitHub)
+    DEST_YT="$HOME/.local/bin"
+    mkdir -p "$DEST_YT"
+    URL_YT="https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+    echo -e "\033[1;36mBaixando yt-dlp mais recente (sem pip)...\033[0m"
+    if command -v curl &>/dev/null; then
+        curl -L --fail -o "$DEST_YT/yt-dlp" "$URL_YT" || {
+            echo -e "\033[1;31mFalha no download.\033[0m"; exit 1
+        }
+    elif command -v wget &>/dev/null; then
+        wget -O "$DEST_YT/yt-dlp" "$URL_YT" || {
+            echo -e "\033[1;31mFalha no download.\033[0m"; exit 1
+        }
+    else
+        echo -e "\033[1;31mPrecisa de curl ou wget.\033[0m"
+        exit 1
+    fi
+    chmod a+rx "$DEST_YT/yt-dlp"
+    # Garante que ~/.local/bin está no PATH desta sessão
+    export PATH="$DEST_YT:$PATH"
+    echo -e "\033[1;32mOK → $DEST_YT/yt-dlp\033[0m"
+    echo -e "Versão: $($DEST_YT/yt-dlp --version 2>/dev/null || echo '?')"
+    echo -e "\nSe 'yt-dlp' não for encontrado em novos terminais, adicione ao ~/.bashrc:"
+    echo -e "  export PATH=\"\$HOME/.local/bin:\$PATH\""
+    exit 0
+fi
+
+# Inicialização com base nas configurações
+MODO_ATUAL="tamanho"
+TELA_ATUAL="$TELA_PADRAO"
+FILTRO_ATUAL="ambos"
+FILTRO_ANTERIOR="ambos"
+FZF_QUERY=""          # filtro digitado no fzf — persiste até o usuário apagar
+TMP=1
+TMP_FILE="/tmp/fzf_tmp_$$"
+DUP_FILE="/tmp/fzf_dup_$$"
+SELECTED_FILE="/tmp/fzf_selected_$$"
+mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+# Migra fila legada e garante 3 filas
+[ -f "$PLAYLIST_PERSISTENTE" ] && [ ! -f "$PLAYLIST_1" ] && mv "$PLAYLIST_PERSISTENTE" "$PLAYLIST_1" 2>/dev/null || true
+touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
+FILA_ATUAL="${FILA_ATUAL:-1}"
+case "$FILA_ATUAL" in 1|2|3) ;; *) FILA_ATUAL=1 ;; esac
+PLAYLIST_FILE="$CONFIG_DIR/temp_playlist_${FILA_ATUAL}"
+
+# Atualiza PLAYLIST_FILE conforme FILA_ATUAL
+atualizar_fila_atual() {
+    case "${FILA_ATUAL:-1}" in
+        2) PLAYLIST_FILE="$PLAYLIST_2" ;;
+        3) PLAYLIST_FILE="$PLAYLIST_3" ;;
+        *) FILA_ATUAL=1; PLAYLIST_FILE="$PLAYLIST_1" ;;
+    esac
+}
+
+# Conta itens de uma fila (1/2/3)
+contar_fila() {
+    local n f
+    f="$CONFIG_DIR/temp_playlist_${1}"
+    n=$(grep -c '^' "$f" 2>/dev/null || echo 0)
+    echo "$n" | tr -cd '0-9'
+}
+
+MODO_PLAYLIST=0
+MODO_BUSCA=0
+MODO_DUP=0
+MODO_DOWNLOAD=0
+ARQUIVO_PLAYLIST_ABERTO=""
+ALVO=""
+ULTIMO_ARQUIVO=""
+ULTIMO_DIR=""
+
+# --- Persistência: posição por diretório ---
+salvar_posicao_dir() {
+    local dir="$1" pos="$2" item="${3:-}"
+    [ -z "$dir" ] && return
+    dir=$(readlink -f -- "$dir" 2>/dev/null || echo "$dir")
+    pos=$(echo "${pos:-1}" | tr -cd '0-9'); pos=${pos:-1}
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    touch "$POSITIONS_FILE"
+    # remove entrada antiga deste dir
+    grep -vF "|${dir}|" "$POSITIONS_FILE" 2>/dev/null | grep -v "^${dir}|" > "${POSITIONS_FILE}.tmp" 2>/dev/null || true
+    # formato: DIR|POS|ITEM
+    printf '%s|%s|%s\n' "$dir" "$pos" "$item" >> "${POSITIONS_FILE}.tmp"
+    # limpa linhas vazias e mantém últimas 500 pastas
+    grep -v '^$' "${POSITIONS_FILE}.tmp" 2>/dev/null | tail -n 500 > "$POSITIONS_FILE"
+    rm -f "${POSITIONS_FILE}.tmp"
+}
+
+carregar_posicao_dir() {
+    # define TMP e ULTIMO_ARQUIVO a partir do mapa de posições
+    local dir="$1"
+    [ -z "$dir" ] || [ ! -f "$POSITIONS_FILE" ] && { TMP="${TMP:-1}"; return; }
+    dir=$(readlink -f -- "$dir" 2>/dev/null || echo "$dir")
+    local linha pos item
+    linha=$(awk -F'|' -v d="$dir" '$1 == d {line=$0} END {print line}' "$POSITIONS_FILE" 2>/dev/null)
+    [ -z "$linha" ] && { TMP="${TMP:-1}"; return; }
+    pos=$(echo "$linha" | cut -d'|' -f2)
+    item=$(echo "$linha" | cut -d'|' -f3-)
+    pos=$(echo "${pos:-1}" | tr -cd '0-9'); pos=${pos:-1}
+    TMP="$pos"
+    [ -n "$item" ] && ULTIMO_ARQUIVO="$item"
+}
+
+# Salva sessão completa (ao sair ou periodicamente)
+salvar_sessao() {
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    local cwd
+    cwd=$(pwd)
+    # posição atual
+    salvar_posicao_dir "$cwd" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+    cat > "$SESSION_FILE" <<EOF
+EAZY_CWD=$(printf '%q' "$cwd")
+MODO_ATUAL=$(printf '%q' "${MODO_ATUAL:-tamanho}")
+FILTRO_ATUAL=$(printf '%q' "${FILTRO_ATUAL:-ambos}")
+FILTRO_ANTERIOR=$(printf '%q' "${FILTRO_ANTERIOR:-ambos}")
+TELA_ATUAL=$(printf '%q' "${TELA_ATUAL:-fs}")
+PREVIEW_ATIVO=$(printf '%q' "${PREVIEW_ATIVO:-0}")
+ULTIMO_ARQUIVO=$(printf '%q' "${ULTIMO_ARQUIVO:-}")
+TMP=$(printf '%q' "${TMP:-1}")
+EOF
+    # preview também no config permanente
+    if [ -f "$CONFIG_FILE" ]; then
+        if grep -q '^PREVIEW_ATIVO=' "$CONFIG_FILE" 2>/dev/null; then
+            sed -i "s|^PREVIEW_ATIVO=.*|PREVIEW_ATIVO=\"${PREVIEW_ATIVO:-0}\"|" "$CONFIG_FILE"
+        else
+            echo "PREVIEW_ATIVO=\"${PREVIEW_ATIVO:-0}\"" >> "$CONFIG_FILE"
+        fi
+    else
+        echo "PREVIEW_ATIVO=\"${PREVIEW_ATIVO:-0}\"" > "$CONFIG_FILE"
+    fi
+}
+
+carregar_sessao() {
+    [ ! -f "$SESSION_FILE" ] && return 1
+    # shellcheck disable=SC1090
+    source "$SESSION_FILE" 2>/dev/null || return 1
+    if [ -n "${EAZY_CWD:-}" ] && [ -d "$EAZY_CWD" ]; then
+        cd "$EAZY_CWD" || true
+    fi
+    MODO_ATUAL="${MODO_ATUAL:-tamanho}"
+    FILTRO_ATUAL="${FILTRO_ATUAL:-ambos}"
+    FILTRO_ANTERIOR="${FILTRO_ANTERIOR:-ambos}"
+    TELA_ATUAL="${TELA_ATUAL:-$TELA_PADRAO}"
+    PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
+    TMP="${TMP:-1}"
+    # posição salva da pasta
+    carregar_posicao_dir "$(pwd)"
+    return 0
+}
+
+toggle_preview_persistente() {
+    if [ "${PREVIEW_ATIVO:-0}" = "1" ]; then
+        PREVIEW_ATIVO="0"
+    else
+        PREVIEW_ATIVO="1"
+    fi
+    # grava imediatamente
+    if [ -f "$CONFIG_FILE" ]; then
+        if grep -q '^PREVIEW_ATIVO=' "$CONFIG_FILE" 2>/dev/null; then
+            sed -i "s|^PREVIEW_ATIVO=.*|PREVIEW_ATIVO=\"$PREVIEW_ATIVO\"|" "$CONFIG_FILE"
+        else
+            echo "PREVIEW_ATIVO=\"$PREVIEW_ATIVO\"" >> "$CONFIG_FILE"
+        fi
+    else
+        mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+        echo "PREVIEW_ATIVO=\"$PREVIEW_ATIVO\"" > "$CONFIG_FILE"
+    fi
+}
+
+# Cache de busca em RAM/disco temporário — dura só enquanto o script roda
+BUSCA_CACHE_DIR="/tmp/eazy_busca_cache_$$"
+mkdir -p "$BUSCA_CACHE_DIR" 2>/dev/null || true
+
+chave_cache_busca() {
+    # chave estável: pasta + extensões + tamanho + conteúdo
+    local base
+    base="$(pwd)|${EXT_BUSCA:-}|${BUSCA_TAM_MIN:-}|${BUSCA_TAM_MAX:-}|${BUSCA_CONTEUDO:-}"
+    if command -v md5sum &>/dev/null; then
+        printf '%s' "$base" | md5sum | awk '{print $1}'
+    elif command -v sha256sum &>/dev/null; then
+        printf '%s' "$base" | sha256sum | awk '{print $1}'
+    else
+        # fallback simples
+        printf '%s' "$base" | cksum | awk '{print $1}'
+    fi
+}
+
+# Restaura sessão anterior (cwd, filtro, preview, cursor)
+# Prioridade: argumento de caminho > sessão > DIR_PADRAO
+# Uso: eazy /mnt/videos   |   eazy ~/Downloads   |   eazy ./pasta   |   eazy filme.mp4
+ARG_CAMINHO=""
+ARG_ERRO=""
+if [ -n "${1:-}" ] && [[ "$1" != --* ]]; then
+    _arg="$1"
+    # Expande ~ no início
+    case "$_arg" in
+        "~/"*) _arg="$HOME/${_arg#~/}" ;;
+        "~")   _arg="$HOME" ;;
+    esac
+    # Resolve relativo → absoluto quando existir
+    if [ -d "$_arg" ]; then
+        ARG_CAMINHO=$(cd -- "$_arg" 2>/dev/null && pwd -P || readlink -f -- "$_arg" 2>/dev/null || echo "$_arg")
+    elif [ -f "$_arg" ]; then
+        ARG_CAMINHO=$(readlink -f -- "$_arg" 2>/dev/null || echo "$_arg")
+        # se readlink falhar, monta abs a partir do dir
+        if [ ! -e "$ARG_CAMINHO" ]; then
+            _dir=$(cd -- "$(dirname -- "$_arg")" 2>/dev/null && pwd -P)
+            ARG_CAMINHO="${_dir}/$(basename -- "$_arg")"
+        fi
+    elif [ -e "$_arg" ]; then
+        ARG_CAMINHO=$(readlink -f -- "$_arg" 2>/dev/null || echo "$_arg")
+    else
+        ARG_ERRO="$_arg"
+    fi
+fi
+
+if [ -n "$ARG_CAMINHO" ]; then
+    # Caminho na linha de comando tem prioridade sobre a sessão
+    if [ -d "$ARG_CAMINHO" ]; then
+        cd -- "$ARG_CAMINHO" || {
+            echo -e "\033[1;31meazy: não foi possível entrar em:\033[0m $ARG_CAMINHO" >&2
+            ARG_CAMINHO=""
+        }
+        ULTIMO_ARQUIVO=""
+    elif [ -f "$ARG_CAMINHO" ]; then
+        cd -- "$(dirname -- "$ARG_CAMINHO")" || true
+        ULTIMO_ARQUIVO=$(basename -- "$ARG_CAMINHO")
+    fi
+    # Preferências da sessão (filtro/preview), sem sobrescrever o cwd
+    if [ -n "$ARG_CAMINHO" ] && [ -f "$SESSION_FILE" ]; then
+        # shellcheck disable=SC1090
+        source "$SESSION_FILE" 2>/dev/null || true
+        PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
+        MODO_ATUAL="${MODO_ATUAL:-tamanho}"
+        FILTRO_ATUAL="${FILTRO_ATUAL:-ambos}"
+        TELA_ATUAL="${TELA_ATUAL:-$TELA_PADRAO}"
+    fi
+elif [ -n "$ARG_ERRO" ]; then
+    echo -e "\033[1;31meazy: caminho não encontrado:\033[0m $ARG_ERRO" >&2
+    echo -e "\033[0;90mAbrindo sessão/pasta padrão…\033[0m" >&2
+    if ! carregar_sessao; then
+        [ -d "$DIR_PADRAO" ] && cd -- "$DIR_PADRAO" || true
+    fi
+elif ! carregar_sessao; then
+    if [ -d "$DIR_PADRAO" ]; then
+        cd -- "$DIR_PADRAO" || true
+    fi
+fi
+
+TODAS_EXT=(mp4 wmv flv mkv avi mov webm m4v mp3 m4a wav flac webp jpg jpeg png gif zip tar gz bz2 xz rar 7z m3u pls)
+EXT_TODAS="${TODAS_EXT[*]}"
+EXT_BUSCA=""
+EXT_DUP=""
+BUSCA_TAM_MIN=""   # bytes; vazio = sem mínimo
+BUSCA_TAM_MAX=""   # bytes; vazio = sem máximo
+BUSCA_TAM_LABEL="" # texto amigável p/ o prompt
+BUSCA_CONTEUDO=""  # texto a buscar dentro dos arquivos (grep -i)
+
+atualizar_fila_atual
+touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
+touch "$DOWNLOAD_QUEUE"
+touch "$DOWNLOAD_PASSWORDS"
+touch "$SELECTED_FILE"
+touch "$HISTORY_FILE"
+export TMP_FILE PLAYLIST_FILE DOWNLOAD_QUEUE DOWNLOAD_PASSWORDS SELECTED_FILE CONFIG_DIR
+LISTA_FZF_FILE="/tmp/eazy_lista_fzf_$$"
+export LISTA_FZF_FILE
+
+# Linha de navegação (.. / Voltar) — nunca filtrada, nunca selecionável nas ações
+eazy_eh_navegacao() {
+    local linha="$1"
+    local campo2 campo_fim
+    campo2=$(printf '%s\n' "$linha" | awk -F '\t' '{print $2}')
+    campo_fim=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+    [[ "$campo_fim" == ".." ]] && return 0
+    [[ "$campo2" == *'◀ Voltar'* ]] && return 0
+    [[ "$campo2" == *'📁 ..'* ]] && return 0
+    [[ "$campo2" == *'📁  ..'* ]] && return 0
+    return 1
+}
+
+# Remove linhas de navegação de uma seleção (TAB/ctrl-a/etc.)
+eazy_sem_navegacao() {
+    local linha
+    while IFS= read -r linha || [ -n "$linha" ]; do
+        [ -z "$linha" ] && continue
+        eazy_eh_navegacao "$linha" && continue
+        printf '%s\n' "$linha"
+    done
+}
+
+# Lista para o fzf: navegação sempre no topo; filtro só no restante
+# Highlight amarelo nas letras que batem com o filtro (como o fzf nativo fazia)
+eazy_lista_filtrada() {
+    local q="${1:-}"
+    local f="${LISTA_FZF_FILE:-}"
+    [ -z "$f" ] || [ ! -f "$f" ] && return 0
+
+    # 1) sempre as linhas de navegação
+    awk -F '\t' '
+        $NF == ".." { print; next }
+        $2 ~ /◀ Voltar/ { print; next }
+        $2 ~ /📁 \.\./ { print; next }
+    ' "$f"
+
+    # 2) demais itens — filtro + highlight (verde base + amarelo no match)
+    awk -F '\t' -v q="$q" -v OFS='\t' '
+    BEGIN {
+        # Match: amarelo brilhante no fundo preto do terminal
+        HL = "\033[1;93m"
+        OFF = "\033[0m"
+    }
+    function strip_ansi(s) {
+        gsub(/\033\[[0-9;]*m/, "", s)
+        return s
+    }
+    function lower(s) { return tolower(s) }
+    # Cor base do item (verde, ciano, etc.) a partir do campo original
+    function cor_base(s) {
+        if (s ~ /32m/) return "\033[1;32m"   # verde
+        if (s ~ /36m/) return "\033[1;36m"   # ciano
+        if (s ~ /35m/) return "\033[1;35m"   # magenta
+        if (s ~ /34m/) return "\033[1;34m"   # azul
+        if (s ~ /33m/) return "\033[1;33m"   # amarelo base
+        if (s ~ /31m/) return "\033[1;31m"   # vermelho
+        return "\033[0m"
+    }
+    function hi_tok(plain, tok, base,    lp, lt, out, i, pre, mid, rest) {
+        if (tok == "" || plain == "") return plain
+        lp = lower(plain)
+        lt = lower(tok)
+        out = ""
+        rest = plain
+        while ((i = index(lp, lt)) > 0) {
+            pre = substr(rest, 1, i - 1)
+            mid = substr(rest, i, length(tok))
+            # trecho normal na cor base (ex: verde) + match em amarelo + volta ao base
+            out = out base pre OFF HL mid OFF base
+            rest = substr(rest, i + length(tok))
+            lp = lower(rest)
+        }
+        return out rest
+    }
+    function hi_all(plain, base,    n, i, s) {
+        s = plain
+        n = split(q, toks, /[[:space:]]+/)
+        for (i = 1; i <= n; i++) {
+            if (toks[i] == "") continue
+            s = hi_tok(s, toks[i], base)
+        }
+        return base s OFF
+    }
+    $NF == ".." { next }
+    $2 ~ /◀ Voltar/ { next }
+    $2 ~ /📁 \.\./ { next }
+    {
+        if (q == "") { print; next }
+        nome_plain = strip_ansi($2)
+        path_plain = strip_ansi($NF)
+        hay = lower(nome_plain) " " lower(path_plain)
+        n = split(lower(q), toks, /[[:space:]]+/)
+        ok = 1
+        for (i = 1; i <= n; i++) {
+            if (toks[i] == "") continue
+            if (index(hay, toks[i]) == 0) { ok = 0; break }
+        }
+        if (!ok) next
+        base = cor_base($2)
+        $2 = hi_all(nome_plain, base)
+        print
+    }
+    ' "$f"
+}
+export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao 2>/dev/null || true
+
+# Salva sessão + limpa cache de busca ao sair
+trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null || true; rm -f "$LISTA_FZF_FILE" 2>/dev/null || true' EXIT INT TERM
+
+encontrar_posicao() {
+    local alvo="$1"
+    local lista="$2"
+    echo "$lista" | awk -F'\t' -v a="$alvo" '$NF == a {print NR; exit}'
+}
+
+construir_iname_array() {
+    local -n _saida_ref="$1"
+    local lista="${2:-$EXT_TODAS}"
+    [ -z "$lista" ] && lista="$EXT_TODAS"
+
+    _saida_ref=()
+    local primeiro=1
+    local ext
+    for ext in $lista; do
+        [ -z "$ext" ] && continue
+        if [ "$primeiro" -eq 1 ]; then
+            _saida_ref+=("-iname" "*.${ext}")
+            primeiro=0
+        else
+            _saida_ref+=("-o" "-iname" "*.${ext}")
+        fi
+    done
+}
+
+selecionar_extensoes() {
+    local -a dialog_args=()
+    local ext
+
+    dialog_args+=("TODAS" "[ SELECIONAR TODAS AS EXTENSÕES ]" "OFF")
+    dialog_args+=("TODOS_VIDEOS" "[ ATALHO: TODOS OS VÍDEOS ]" "OFF")
+    dialog_args+=("TODOS_AUDIOS" "[ ATALHO: TODOS OS ÁUDIOS ]" "OFF")
+    dialog_args+=("TODAS_IMGS" "[ ATALHO: TODAS AS IMAGENS ]" "OFF")
+    dialog_args+=("TODOS_COMPACTADOS" "[ ATALHO: TODOS OS COMPACTADOS ]" "OFF")
+    dialog_args+=("DIGITAR" "[ DIGITAR extensões livres ]" "OFF")
+
+    for ext in "${TODAS_EXT[@]}"; do
+        dialog_args+=("$ext" "Formato .$ext" "OFF")
+    done
+
+    local resultado
+    resultado=$(whiptail --title "Seleção de Extensões" \
+        --checklist "Espaço marca, Enter confirma.\nDIGITAR = escrever extensões livres (ex: iso srt nfo)." \
+        0 0 0 \
+        "${dialog_args[@]}" 3>&1 1>&2 2>&3)
+
+    resultado=$(echo "$resultado" | tr -d '"')
+
+    local lista_expandida=""
+
+    if echo "$resultado" | grep -q "TODAS"; then
+        lista_expandida="$EXT_TODAS"
+    else
+        if echo "$resultado" | grep -q "TODOS_VIDEOS"; then
+            lista_expandida="$lista_expandida mp4 wmv flv mkv avi mov webm m4v"
+        fi
+        if echo "$resultado" | grep -q "TODOS_AUDIOS"; then
+            lista_expandida="$lista_expandida mp3 m4a wav flac"
+        fi
+        if echo "$resultado" | grep -q "TODAS_IMGS"; then
+            lista_expandida="$lista_expandida webp jpg jpeg png gif"
+        fi
+        if echo "$resultado" | grep -q "TODOS_COMPACTADOS"; then
+            lista_expandida="$lista_expandida zip tar gz bz2 xz rar 7z"
+        fi
+
+        for ext in $resultado; do
+            [[ "$ext" =~ ^(TODAS|TODOS_VIDEOS|TODOS_AUDIOS|TODAS_IMGS|TODOS_COMPACTADOS|DIGITAR)$ ]] && continue
+            if ! echo "$lista_expandida" | grep -qw "$ext"; then
+                lista_expandida="$lista_expandida $ext"
+            fi
+        done
+    fi
+
+    # DIGITAR ou extras manuais
+    if echo "$resultado" | grep -q "DIGITAR" || [ -n "$lista_expandida" ]; then
+        local extras
+        extras=$(whiptail --title "Extensões extras (opcional)" \
+            --inputbox "Digite extensões separadas por espaço (sem ponto):\nEx: iso nfo srt ass ts vob\nDeixe em branco para pular." 12 60 \
+            3>&1 1>&2 2>&3)
+        for ext in $extras; do
+            ext=$(echo "$ext" | tr -d '.')
+            [ -z "$ext" ] && continue
+            if ! echo "$lista_expandida" | grep -qw "$ext"; then
+                lista_expandida="$lista_expandida $ext"
+            fi
+        done
+    fi
+
+    # Conteúdo do arquivo (grep dentro)
+    BUSCA_CONTEUDO=""
+    local quer_conteudo
+    quer_conteudo=$(whiptail --title "Busca por conteúdo" --radiolist \
+        "Procurar texto DENTRO dos arquivos?\n(grep -i nos arquivos encontrados)" 12 60 2 \
+        "nao" "Não — só filtrar por extensão/tamanho" "ON" \
+        "sim" "Sim — digitar texto a buscar" "OFF" \
+        3>&1 1>&2 2>&3)
+    if [ "$quer_conteudo" = "sim" ]; then
+        BUSCA_CONTEUDO=$(whiptail --title "Texto no conteúdo" \
+            --inputbox "Texto a buscar dentro dos arquivos (case-insensitive):\nEx: password, TODO, error" 11 65 \
+            3>&1 1>&2 2>&3)
+    fi
+
+    echo "$lista_expandida" | xargs
+}
+
+# Converte tamanho humano (10M, 1G, 500K, 1024) → bytes
+parse_tamanho_humano() {
+    local entrada="$1"
+    entrada=$(echo "$entrada" | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+    [ -z "$entrada" ] && { echo ""; return; }
+
+    local num unidade
+    if [[ "$entrada" =~ ^([0-9]+([.][0-9]+)?)([KMGTP]?)$ ]]; then
+        num="${BASH_REMATCH[1]}"
+        unidade="${BASH_REMATCH[3]}"
+    else
+        echo ""
+        return
+    fi
+
+    case "$unidade" in
+        K) awk -v n="$num" 'BEGIN {printf "%.0f", n * 1024}' ;;
+        M) awk -v n="$num" 'BEGIN {printf "%.0f", n * 1048576}' ;;
+        G) awk -v n="$num" 'BEGIN {printf "%.0f", n * 1073741824}' ;;
+        T) awk -v n="$num" 'BEGIN {printf "%.0f", n * 1099511627776}' ;;
+        P) awk -v n="$num" 'BEGIN {printf "%.0f", n * 1125899906842624}' ;;
+        *) awk -v n="$num" 'BEGIN {printf "%.0f", n}' ;;  # bytes
+    esac
+}
+
+# Formata bytes para label legível
+formatar_bytes_label() {
+    local b="$1"
+    [ -z "$b" ] && { echo "0B"; return; }
+    awk -v b="$b" 'BEGIN {
+        if (b >= 1073741824) printf "%.2fG", b/1073741824
+        else if (b >= 1048576) printf "%.2fM", b/1048576
+        else if (b >= 1024) printf "%.1fK", b/1024
+        else printf "%dB", b
+    }'
+}
+
+# Tamanho de arquivo ou pasta (recursivo, em bytes)
+tamanho_caminho() {
+    local p="$1"
+    [ -z "$p" ] && { echo 0; return; }
+    if [ -d "$p" ]; then
+        du -sb -- "$p" 2>/dev/null | awk '{print $1+0}'
+    elif [ -f "$p" ]; then
+        stat -c%s -- "$p" 2>/dev/null || echo 0
+    else
+        echo 0
+    fi
+}
+
+# Soma tamanhos de uma lista de caminhos (um por linha); pastas via du
+somar_selecao_bytes() {
+    local total=0
+    local p t
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        [[ "$p" =~ \.\.$ ]] && continue
+        t=$(tamanho_caminho "$p")
+        t=$(echo "$t" | tr -cd '0-9')
+        t=${t:-0}
+        total=$((total + t))
+    done
+    echo "$total"
+}
+
+# Disco: livre e total (bytes) do filesystem de um caminho (padrão: .)
+info_disco() {
+    local alvo="${1:-.}"
+    df -B1 --output=avail,size "$alvo" 2>/dev/null | tail -n1 | awk '{print $1+0, $2+0}'
+}
+
+# Margem mínima de segurança (abaixo disso o sistema fica instável)
+EAZY_MIN_LIVRE_SISTEMA_MB=500
+EAZY_MIN_LIVRE_SISTEMA=$((EAZY_MIN_LIVRE_SISTEMA_MB * 1024 * 1024))
+
+# Verifica espaço antes de operações que gravam no disco.
+# $1 = bytes necessários (estimativa)
+# $2 = caminho no filesystem de destino (pasta)
+# $3 = nome da operação (Copiar, Compactar…)
+# $4 = lista detalhe opcional: linhas "bytes|caminho" (um item por linha)
+# Retorna 0 = pode seguir | 1 = abortar
+verificar_espaco_disco() {
+    local necessario="${1:-0}"
+    local alvo="${2:-.}"
+    local op_nome="${3:-operação}"
+    local detalhe="${4:-}"
+
+    necessario=$(echo "$necessario" | tr -cd '0-9')
+    necessario=${necessario:-0}
+
+    local livre total
+    read -r livre total < <(info_disco "$alvo")
+    livre=$(echo "${livre:-0}" | tr -cd '0-9'); livre=${livre:-0}
+    total=$(echo "${total:-0}" | tr -cd '0-9'); total=${total:-0}
+
+    # Folga: +10% ou no mínimo 50 MB
+    local folga=$((necessario / 10))
+    local min_folga=$((50 * 1024 * 1024))
+    [ "$folga" -lt "$min_folga" ] && folga=$min_folga
+    local preciso=$((necessario + folga))
+    local sobra_apos=$((livre - necessario))
+    [ "$sobra_apos" -lt 0 ] && sobra_apos=0
+
+    local nec_h livre_h prec_h sobra_h min_h
+    nec_h=$(formatar_bytes_label "$necessario")
+    livre_h=$(formatar_bytes_label "$livre")
+    prec_h=$(formatar_bytes_label "$preciso")
+    sobra_h=$(formatar_bytes_label "$sobra_apos")
+    min_h="${EAZY_MIN_LIVRE_SISTEMA_MB} MB"
+
+    echo -e "\n\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+    echo -e "\033[1;37m  VERIFICAÇÃO DE ESPAÇO — $op_nome\033[0m"
+    echo -e "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+    echo -e "  Destino     : \033[1;37m$alvo\033[0m"
+    echo -e "  Livre agora : \033[1;37m$livre_h\033[0m"
+    echo -e "  Necessário  : \033[1;33m$nec_h\033[0m  (+ folga → \033[1;33m$prec_h\033[0m)"
+    echo -e "  Sobra após  : \033[1;37m$sobra_h\033[0m"
+    echo -e "  Mínimo seguro do sistema: \033[1;31m$min_h\033[0m"
+    echo -e "\033[0;90m  Abaixo de $min_h a estabilidade do sistema fica COMPROMETIDA.\033[0m"
+
+    if [ -n "$detalhe" ]; then
+        echo -e "\n\033[1;37m  Por item:\033[0m"
+        local linha b p bh resto=0
+        while IFS= read -r linha; do
+            [ -z "$linha" ] && continue
+            b="${linha%%|*}"
+            p="${linha#*|}"
+            b=$(echo "$b" | tr -cd '0-9'); b=${b:-0}
+            bh=$(formatar_bytes_label "$b")
+            resto=$((livre - b))
+            [ "$resto" -lt 0 ] && resto=0
+            echo -e "    · \033[1;33m$bh\033[0m  $(basename -- "$p" 2>/dev/null || echo "$p")"
+            echo -e "      caminho: $p"
+            echo -e "      livre se só este: $(formatar_bytes_label "$resto")"
+        done <<< "$detalhe"
+    fi
+    echo -e "\033[1;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+
+    # Bloqueio absoluto: após a operação ficaria abaixo do mínimo seguro
+    # ou nem há espaço para o necessário
+    if [ "$livre" -lt "$necessario" ] || [ "$sobra_apos" -lt "$EAZY_MIN_LIVRE_SISTEMA" ]; then
+        echo -e "\033[1;31m✗ IMPOSSÍVEL CONTINUAR\033[0m"
+        echo -e "\033[1;31m  Espaço insuficiente para \"$op_nome\" com segurança.\033[0m"
+        if [ "$livre" -lt "$necessario" ]; then
+            echo -e "\033[1;31m  Falta: $(formatar_bytes_label "$((necessario - livre))")\033[0m"
+        fi
+        echo -e "\033[1;31m  A sobra ficaria abaixo de $min_h (estabilidade do sistema).\033[0m"
+        echo -e "\033[0;90m  Libere espaço ou escolha outro destino e tente de novo.\033[0m\n"
+        read -r -p "Enter para voltar..."
+        return 1
+    fi
+
+    # Espaço existe, mas sem a folga desejada — pergunta
+    if [ "$livre" -lt "$preciso" ]; then
+        echo -e "\033[1;33m⚠ Espaço justo (sem folga de segurança de 10% / 50MB).\033[0m"
+        echo -e "\033[1;33m  Livre: $livre_h  |  Ideal: $prec_h  |  Sobra prevista: $sobra_h\033[0m"
+        if ! whiptail --title "Espaço justo — $op_nome" --yesno \
+"Espaço livre está APERTADO.
+
+Necessário : $nec_h
+Ideal (+folga): $prec_h
+Livre agora: $livre_h
+Sobra após : $sobra_h
+
+Mínimo seguro do sistema: $min_h
+Abaixo disso a estabilidade fica COMPROMETIDA.
+
+Continuar mesmo assim?" 16 60; then
+            echo -e "\033[1;33mCancelado pelo usuário.\033[0m"
+            sleep 0.8
+            return 1
+        fi
+    else
+        echo -e "\033[1;32m✓ Espaço OK para $op_nome\033[0m\n"
+        sleep 0.4
+    fi
+    return 0
+}
+
+# Monta detalhe "bytes|caminho" e total a partir de lista de paths
+montar_detalhe_espaco() {
+    local p t
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        [[ "$p" =~ \.\.$ ]] && continue
+        t=$(tamanho_caminho "$p")
+        t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+        printf '%s|%s\n' "$t" "$p"
+    done
+}
+
+# Barra de progresso (0-100) — blocos coloridos
+barra_progresso() {
+    local pct="$1"
+    local largura="${2:-32}"
+    pct=$(echo "$pct" | tr -cd '0-9')
+    pct=${pct:-0}
+    [ "$pct" -gt 100 ] && pct=100
+    local preenchido=$((pct * largura / 100))
+    local i
+    local c_on=$'\033[1;32m'
+    local c_off=$'\033[0;90m'
+    local c_pct=$'\033[1;36m'
+    local c_rst=$'\033[0m'
+    local bar=""
+    for ((i=0; i<preenchido; i++)); do bar+="█"; done
+    for ((i=preenchido; i<largura; i++)); do bar+="░"; done
+    # [barra]  42%
+    printf "%s[%s%s%s]%s %s%3d%%%s" \
+        "$c_off" "$c_on" "$bar" "$c_off" "$c_rst" "$c_pct" "$pct" "$c_rst"
+}
+
+# Escreve progresso da busca no terminal (nunca no stdout do fzf)
+# args: pct letra hits_seg total_hits [status]
+eazy_busca_progresso() {
+    local pct="$1" letra="$2" hits="$3" total="$4" status="${5:-}"
+    local c_t=$'\033[1;33m'
+    local c_w=$'\033[1;37m'
+    local c_g=$'\033[1;32m'
+    local c_d=$'\033[0;90m'
+    local c_r=$'\033[0m'
+    local out
+    out=$(printf "\r\033[K%s  %sletra %s%-6s%s  %s+%s%s  %stotal: %s%s  %s%s%s" \
+        "$(barra_progresso "$pct")" \
+        "$c_t" "$c_w" "$letra" "$c_r" \
+        "$c_g" "$hits" "$c_r" \
+        "$c_d" "$total" "$c_r" \
+        "$c_d" "$status" "$c_r")
+    # Preferir /dev/tty; se falhar, stderr (nunca stdout — polui a lista)
+    { printf "%s" "$out" > /dev/tty; } 2>/dev/null || printf "%s" "$out" >&2
+}
+
+# Helper: mensagem de busca só no tty/stderr
+eazy_busca_msg() {
+    local msg="$1"
+    { printf "%s\n" "$msg" > /dev/tty; } 2>/dev/null || printf "%s\n" "$msg" >&2
+}
+
+# Linha de status: HD livre/total + seleção (para header do fzf)
+# Uso: eazy_status_header [caminho1 caminho2 ...]
+# Preserva atalhos em EAZY_HEADER_HINT (exportado antes do fzf)
+eazy_status_header() {
+    local livre total livre_h total_h sel_bytes sel_h
+    read -r livre total < <(info_disco)
+    livre=${livre:-0}; total=${total:-0}
+    livre_h=$(formatar_bytes_label "$livre")
+    total_h=$(formatar_bytes_label "$total")
+
+    sel_bytes=0
+    if [ "$#" -gt 0 ]; then
+        local p t
+        for p in "$@"; do
+            [ -z "$p" ] && continue
+            # fzf pode passar linha completa com tabs
+            p=$(printf '%s\n' "$p" | awk -F '\t' '{print $NF}')
+            [[ "$p" =~ \.\.$ ]] && continue
+            t=$(tamanho_caminho "$p")
+            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+            sel_bytes=$((sel_bytes + t))
+        done
+    fi
+    sel_h=$(formatar_bytes_label "$sel_bytes")
+    printf "HD livre: %s / %s  |  Sel: %s" "$livre_h" "$total_h" "$sel_h"
+    if [ -n "${EAZY_HEADER_HINT:-}" ]; then
+        printf "\n%s" "$EAZY_HEADER_HINT"
+    fi
+}
+
+# Pergunta filtro de tamanho para a busca recursiva
+selecionar_tamanho_busca() {
+    BUSCA_TAM_MIN=""
+    BUSCA_TAM_MAX=""
+    BUSCA_TAM_LABEL=""
+
+    local modo
+    modo=$(whiptail --title "Filtro de Tamanho" --radiolist \
+        "Filtrar arquivos por tamanho?\n(Exemplos: 10M, 1G, 500K, 1024)" 16 60 5 \
+        "nenhum" "Sem filtro de tamanho" "ON" \
+        "maior" "Maior que X  ( > X )" "OFF" \
+        "menor" "Menor que Y  ( < Y )" "OFF" \
+        "entre" "Entre X e Y  ( > X e < Y )" "OFF" \
+        "exato" "Aproximadamente X (±10%)" "OFF" \
+        3>&1 1>&2 2>&3)
+    [ -z "$modo" ] && modo="nenhum"
+
+    local min_in max_in
+    case "$modo" in
+        maior)
+            min_in=$(whiptail --title "Tamanho mínimo" \
+                --inputbox "Arquivos MAIORES que:\n(ex: 100M, 1G, 500K)" 11 55 "100M" \
+                3>&1 1>&2 2>&3)
+            [ -z "$min_in" ] && return 1
+            BUSCA_TAM_MIN=$(parse_tamanho_humano "$min_in")
+            if [ -z "$BUSCA_TAM_MIN" ]; then
+                whiptail --title "Erro" --msgbox "Tamanho inválido: $min_in" 8 40
+                return 1
+            fi
+            BUSCA_TAM_LABEL=">$(formatar_bytes_label "$BUSCA_TAM_MIN")"
+            ;;
+        menor)
+            max_in=$(whiptail --title "Tamanho máximo" \
+                --inputbox "Arquivos MENORES que:\n(ex: 50M, 1G)" 11 55 "50M" \
+                3>&1 1>&2 2>&3)
+            [ -z "$max_in" ] && return 1
+            BUSCA_TAM_MAX=$(parse_tamanho_humano "$max_in")
+            if [ -z "$BUSCA_TAM_MAX" ]; then
+                whiptail --title "Erro" --msgbox "Tamanho inválido: $max_in" 8 40
+                return 1
+            fi
+            BUSCA_TAM_LABEL="<$(formatar_bytes_label "$BUSCA_TAM_MAX")"
+            ;;
+        entre)
+            min_in=$(whiptail --title "Tamanho mínimo" \
+                --inputbox "Maior que (mínimo):\n(ex: 10M)" 11 55 "10M" \
+                3>&1 1>&2 2>&3)
+            [ -z "$min_in" ] && return 1
+            max_in=$(whiptail --title "Tamanho máximo" \
+                --inputbox "Menor que (máximo):\n(ex: 500M)" 11 55 "500M" \
+                3>&1 1>&2 2>&3)
+            [ -z "$max_in" ] && return 1
+            BUSCA_TAM_MIN=$(parse_tamanho_humano "$min_in")
+            BUSCA_TAM_MAX=$(parse_tamanho_humano "$max_in")
+            if [ -z "$BUSCA_TAM_MIN" ] || [ -z "$BUSCA_TAM_MAX" ]; then
+                whiptail --title "Erro" --msgbox "Tamanho inválido." 8 40
+                return 1
+            fi
+            if [ "$BUSCA_TAM_MIN" -ge "$BUSCA_TAM_MAX" ] 2>/dev/null; then
+                whiptail --title "Erro" --msgbox "O mínimo deve ser menor que o máximo." 8 45
+                return 1
+            fi
+            BUSCA_TAM_LABEL=">$(formatar_bytes_label "$BUSCA_TAM_MIN") <$(formatar_bytes_label "$BUSCA_TAM_MAX")"
+            ;;
+        exato)
+            min_in=$(whiptail --title "Tamanho aproximado" \
+                --inputbox "Tamanho aproximado (±10%):\n(ex: 700M)" 11 55 "700M" \
+                3>&1 1>&2 2>&3)
+            [ -z "$min_in" ] && return 1
+            local centro
+            centro=$(parse_tamanho_humano "$min_in")
+            if [ -z "$centro" ]; then
+                whiptail --title "Erro" --msgbox "Tamanho inválido: $min_in" 8 40
+                return 1
+            fi
+            BUSCA_TAM_MIN=$(awk -v c="$centro" 'BEGIN {printf "%.0f", c * 0.9}')
+            BUSCA_TAM_MAX=$(awk -v c="$centro" 'BEGIN {printf "%.0f", c * 1.1}')
+            BUSCA_TAM_LABEL="~$(formatar_bytes_label "$centro")"
+            ;;
+        *)
+            BUSCA_TAM_MIN=""
+            BUSCA_TAM_MAX=""
+            BUSCA_TAM_LABEL=""
+            ;;
+    esac
+    return 0
+}
+
+eh_url_video_online() {
+    echo "$1" | grep -qiE 'youtube\.com|youtu\.be|vimeo\.com|twitter\.com|x\.com/[^/]+/status|tiktok\.com|instagram\.com|facebook\.com|fb\.watch|twitch\.tv|dailymotion\.com|reddit\.com|bilibili\.com|youtu\.be'
+}
+
+# Localiza yt-dlp (prioriza binário em ~/.local/bin — atualizado sem pip)
+encontrar_ytdlp() {
+    local c
+    for c in \
+        "${HOME}/.local/bin/yt-dlp" \
+        "/usr/local/bin/yt-dlp" \
+        "/usr/bin/yt-dlp" \
+        "$(command -v yt-dlp 2>/dev/null)" \
+        "$(command -v youtube-dl 2>/dev/null)"
+    do
+        [ -n "$c" ] && [ -x "$c" ] && { printf '%s\n' "$c"; return 0; }
+    done
+    return 1
+}
+
+adicionar_download() {
+    local link
+    link=$(whiptail --title "Gerenciador de Downloads" --inputbox "Digite ou cole o Link para Download:" 10 70 3>&1 1>&2 2>&3)
+    [ -z "$link" ] && return
+
+    local gerenciador extra=""
+    local is_video=0
+    eh_url_video_online "$link" && is_video=1
+
+    if [ "$is_video" -eq 1 ]; then
+        # YouTube etc. SÓ funcionam com yt-dlp (aria/wget/axel baixam HTML e falham)
+        if ! encontrar_ytdlp &>/dev/null; then
+            whiptail --title "yt-dlp necessário" --msgbox \
+"Este link é de site de vídeo (YouTube etc.).
+
+aria2c / axel / wget NÃO baixam esses vídeos.
+
+Instale/atualize SEM pip:
+  eazy --update-ytdlp
+
+Ou manualmente:
+  mkdir -p ~/.local/bin
+  wget -O ~/.local/bin/yt-dlp \\
+    https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
+  chmod a+rx ~/.local/bin/yt-dlp" 18 62
+            return
+        fi
+        whiptail --title "Download de vídeo" --msgbox \
+"Link de vídeo detectado → yt-dlp.
+
+Se der erro 400/403, atualize SEM pip:
+  eazy --update-ytdlp" 11 55
+        gerenciador="ytdlp"
+        extra=$(whiptail --title "Qualidade yt-dlp" --radiolist "Qualidade / formato:" 16 65 6 \
+            "best" "Melhor qualidade disponível" "ON" \
+            "1080" "Até 1080p" "OFF" \
+            "720" "Até 720p" "OFF" \
+            "480" "Até 480p" "OFF" \
+            "audio" "Somente áudio (mp3)" "OFF" \
+            "mp4" "Melhor MP4 compatível" "OFF" \
+            3>&1 1>&2 2>&3)
+        [ -z "$extra" ] && return
+    else
+        # Arquivo direto: aria / axel / wget / yt-dlp
+        gerenciador=$(whiptail --title "Escolher Ferramenta" --radiolist "Motor de download:" 15 62 4 \
+            "aria" "Aria2c (multi-conexão, recomendado)" "ON" \
+            "axel" "Axel" "OFF" \
+            "wget" "Wget (simples)" "OFF" \
+            "ytdlp" "yt-dlp (se for página de vídeo)" "OFF" \
+            3>&1 1>&2 2>&3)
+        [ -z "$gerenciador" ] && return
+
+        if [ "$gerenciador" = "ytdlp" ]; then
+            if ! encontrar_ytdlp &>/dev/null; then
+                whiptail --title "yt-dlp ausente" --msgbox "yt-dlp não instalado.\n\nRode:  eazy --update-ytdlp" 9 50
+                return
+            fi
+            extra=$(whiptail --title "Qualidade yt-dlp" --radiolist "Qualidade:" 14 60 4 \
+                "best" "Melhor" "ON" "1080" "1080p" "OFF" "720" "720p" "OFF" "audio" "Só áudio" "OFF" \
+                3>&1 1>&2 2>&3)
+            [ -z "$extra" ] && return
+        else
+            # Verifica se o binário existe
+            local bin_ok=1
+            case "$gerenciador" in
+                aria) command -v aria2c &>/dev/null || bin_ok=0 ;;
+                axel) command -v axel &>/dev/null || bin_ok=0 ;;
+                wget) command -v wget &>/dev/null || bin_ok=0 ;;
+            esac
+            if [ "$bin_ok" -eq 0 ]; then
+                whiptail --title "Ferramenta ausente" --msgbox \
+"O motor '$gerenciador' não está instalado.
+
+Instale com:
+  sudo apt install aria2 axel wget
+
+Ou use eazy --install" 12 55
+                return
+            fi
+            extra=$(whiptail --title "Senha do Compactado (opcional)" \
+                --inputbox "Senha se for zip/rar protegido (ou deixe vazio):" 10 65 \
+                3>&1 1>&2 2>&3)
+            [ -n "$extra" ] && echo "$link|$extra" >> "$DOWNLOAD_PASSWORDS"
+        fi
+    fi
+
+    echo "$gerenciador|$link|$extra" >> "$DOWNLOAD_QUEUE"
+    whiptail --title "Sucesso" --msgbox "Adicionado à fila!\n\nMotor: $gerenciador" 9 45
+}
+
+extrair_com_senha() {
+    local arquivo="$1"
+    local senha="$2"
+    local sucesso=0
+
+    [ ! -f "$arquivo" ] && return 1
+
+    local ext
+    ext=$(echo "${arquivo##*.}" | tr '[:upper:]' '[:lower:]')
+    local nome_base
+    nome_base=$(basename "$arquivo")
+
+    echo -e "\n\033[1;36m📦 Tentando extrair: $nome_base\033[0m"
+
+    case "$ext" in
+        zip)
+            if command -v unzip &>/dev/null; then
+                if [ -n "$senha" ]; then
+                    unzip -o -P "$senha" "$arquivo" && sucesso=1
+                else
+                    unzip -o "$arquivo" && sucesso=1
+                fi
+            else
+                echo -e "\033[1;31mFerramenta 'unzip' não encontrada.\033[0m"
+            fi
+            ;;
+        rar)
+            # Preferir o RAR oficial (WinRAR/rarlab). unrar de terceiros não é confiável.
+            if command -v rar &>/dev/null; then
+                if [ -n "$senha" ]; then
+                    rar x -o+ -p"$senha" -- "$arquivo" && sucesso=1
+                else
+                    rar x -o+ -- "$arquivo" && sucesso=1
+                fi
+            elif command -v 7z &>/dev/null; then
+                echo -e "\033[0;90m'rar' não encontrado — tentando 7z…\033[0m"
+                if [ -n "$senha" ]; then
+                    7z x -y -p"$senha" -- "$arquivo" && sucesso=1
+                else
+                    7z x -y -- "$arquivo" && sucesso=1
+                fi
+            else
+                echo -e "\033[1;31mNenhuma ferramenta RAR encontrada.\033[0m"
+                echo -e "Instale o RAR oficial:  \033[1;37msudo apt install rar\033[0m"
+                echo -e "(pacote non-free; evite 'unrar' de fontes duvidosas)"
+            fi
+            ;;
+        7z)
+            if command -v 7z &>/dev/null; then
+                if [ -n "$senha" ]; then
+                    7z x -y -p"$senha" "$arquivo" && sucesso=1
+                else
+                    7z x -y "$arquivo" && sucesso=1
+                fi
+            else
+                echo -e "\033[1;31mFerramenta '7z' não encontrada.\033[0m"
+            fi
+            ;;
+        gz|bz2|xz|tar)
+            if [[ "$arquivo" == *.tar.gz ]] || [[ "$arquivo" == *.tgz ]]; then
+                tar -xzf "$arquivo" && sucesso=1
+            elif [[ "$arquivo" == *.tar.bz2 ]] || [[ "$arquivo" == *.tbz2 ]]; then
+                tar -xjf "$arquivo" && sucesso=1
+            elif [[ "$arquivo" == *.tar.xz ]]; then
+                tar -xJf "$arquivo" && sucesso=1
+            elif [ "$ext" = "gz" ]; then
+                gunzip -k "$arquivo" 2>/dev/null && sucesso=1
+            elif [ "$ext" = "bz2" ]; then
+                bunzip2 -k "$arquivo" 2>/dev/null && sucesso=1
+            elif [ "$ext" = "xz" ]; then
+                unxz -k "$arquivo" 2>/dev/null && sucesso=1
+            else
+                tar -xf "$arquivo" && sucesso=1
+            fi
+            ;;
+        *)
+            echo -e "\033[1;33mExtensão .$ext não suportada para extração automática.\033[0m"
+            return 1
+            ;;
+    esac
+
+    if [ "$sucesso" -eq 1 ]; then
+        echo -e "\033[1;32m✓ Extração concluída com sucesso!\033[0m"
+        read -p "Deseja apagar o arquivo compactado original? (s/N): " apagar
+        if [[ "$apagar" =~ ^[Ss]$ ]]; then
+            rm -f -- "$arquivo"
+            echo -e "\033[1;32mArquivo compactado removido.\033[0m"
+        fi
+        return 0
+    else
+        echo -e "\033[1;31m✗ Falha na extração (senha incorreta ou arquivo corrompido?).\033[0m"
+        return 1
+    fi
+}
+
+obter_nome_do_link() {
+    local url="$1"
+    local nome
+
+    nome="${url%%\?*}"
+    nome="${nome%%\#*}"
+    nome=$(basename "$nome")
+
+    if [ -z "$nome" ] || [ "$nome" = "/" ] || [ "$nome" = "." ]; then
+        nome="download_$$"
+    fi
+
+    nome=$(printf '%b' "${nome//%/\\x}" 2>/dev/null || echo "$nome")
+    echo "$nome"
+}
+
+encontrar_duplicados() {
+    local saida="$1"
+    local extensoes="$2"
+    local tmp_all="/tmp/dup_all_$$"
+    local tmp_sizes="/tmp/dup_sizes_$$"
+    local tmp_hashes="/tmp/dup_hashes_$$"
+    local tmp_hashdup="/tmp/dup_hashdup_$$"
+
+    local -a ext_arr
+    construir_iname_array ext_arr "$extensoes"
+
+    local -a find_dup=("." "-type" "f" "(" "${ext_arr[@]}" ")")
+
+    : > "$saida"
+    find "${find_dup[@]}" -printf "%s\t%p\n" 2>/dev/null > "$tmp_all"
+
+    awk -F'\t' '{print $1}' "$tmp_all" | sort -n | uniq -d > "$tmp_sizes"
+
+    : > "$tmp_hashes"
+    if [ -s "$tmp_sizes" ]; then
+        while IFS= read -r tam; do
+            [ -z "$tam" ] && continue
+            awk -F'\t' -v t="$tam" '$1 == t {print $2}' "$tmp_all" | while IFS= read -r caminho; do
+                [ -f "$caminho" ] || continue
+                local h
+                h=$(md5sum "$caminho" 2>/dev/null | awk '{print $1}')
+                [ -z "$h" ] && continue
+                printf "%s\t%s\t%s\n" "$h" "$tam" "$caminho" >> "$tmp_hashes"
+            done
+        done < "$tmp_sizes"
+    fi
+
+    awk -F'\t' '{print $1}' "$tmp_hashes" | sort | uniq -d > "$tmp_hashdup"
+
+    if [ -s "$tmp_hashdup" ]; then
+        while IFS= read -r hsh; do
+            [ -z "$hsh" ] && continue
+            awk -F'\t' -v h="$hsh" '$1 == h' "$tmp_hashes" >> "$saida"
+        done < "$tmp_hashdup"
+    fi
+
+    sort -t $'\t' -k1,1 -o "$saida" "$saida" 2>/dev/null
+
+    rm -f "$tmp_all" "$tmp_sizes" "$tmp_hashes" "$tmp_hashdup"
+}
+
+registrar_status() {
+    printf "%s|%s|%s|%s|%s\n" "${TMP:-1}" "${ALVO:-}" "${ULTIMO_ARQUIVO:-}" "${ULTIMO_DIR:-}" "${MODO_PLAYLIST:-0}" > "$TMP_FILE"
+}
+
+obter_lista_rapida() {
+    local C_DIR='\033[1;34m'
+    local C_VID='\033[1;36m'
+    local C_AUD='\033[1;33m'
+    local C_IMG='\033[1;35m'
+    local C_ZIP='\033[1;31m'
+    local C_SIZE='\033[0;32m'
+    local C_RESET='\033[0m'
+
+    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
+            "$C_DIR" "◀ Voltar aos Arquivos" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+
+        if [ -s "$DOWNLOAD_QUEUE" ]; then
+            while IFS='|' read -r engine link pass; do
+                [ -z "$link" ] && continue
+                local exib_link="$link"
+                [ ${#exib_link} -gt 35 ] && exib_link="${exib_link:0:35}.."
+                local exib_pass="Nenhuma"
+                if [ -n "$pass" ]; then
+                    exib_pass="••••••"
+                fi
+                printf "000000000000001\t%b📥 [%s] %-30s%b\t%b[Senha: %s]%b\t%s\n" \
+                    "$C_VID" "$engine" "$exib_link" "$C_RESET" "$C_AUD" "$exib_pass" "$C_RESET" "$link"
+            done < "$DOWNLOAD_QUEUE"
+        fi
+        return
+    fi
+
+    if [ "$MODO_PLAYLIST" -eq 1 ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
+        printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
+            "$C_DIR" "◀ Voltar aos Arquivos" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+
+        # Diretório base da playlist (para resolver caminhos relativos)
+        local pl_dir
+        pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
+
+        while IFS= read -r item || [ -n "$item" ]; do
+            [ -z "$item" ] && continue
+            [[ "$item" =~ ^# ]] && continue
+            # Remove \r de arquivos Windows
+            item="${item%$'\r'}"
+
+            # Resolve caminho: absoluto fica, relativo resolve a partir da pasta do .m3u
+            local item_res="$item"
+            if [[ "$item" != /* ]]; then
+                item_res="$pl_dir/$item"
+            fi
+            # Normaliza ./
+            item_res="${item_res//\/\.\//\/}"
+
+            local tamanho=0
+            local mb="-- MB"
+            local tipo_icone="🎬"
+            local existe=0
+
+            if [ -e "$item_res" ]; then
+                existe=1
+                tamanho=$(stat -c%s "$item_res" 2>/dev/null || echo 0)
+                mb=$(awk -v b="$tamanho" 'BEGIN {printf "%.1f", b / 1048576}')
+            else
+                mb="?"
+            fi
+
+            local nome_exib
+            nome_exib=$(basename "$item_res")
+            if [ ${#nome_exib} -gt 38 ]; then
+                nome_exib="${nome_exib:0:38}.."
+            fi
+            # Indica arquivo ausente
+            if [ "$existe" -eq 0 ]; then
+                nome_exib="⚠ $nome_exib"
+            fi
+
+            local ext="${item_res##*.}"
+            ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+
+            if [[ "$ext" =~ ^(mp3|m4a|wav|flac)$ ]]; then
+                tipo_icone="🎵"
+            elif [[ "$ext" =~ ^(webp|jpg|jpeg|png|gif)$ ]]; then
+                tipo_icone="🖼️"
+            elif [[ "$ext" =~ ^(zip|tar|gz|bz2|xz|rar|7z)$ ]]; then
+                tipo_icone="📦"
+            fi
+
+            # Guarda o caminho resolvido (absoluto) no campo final para play/delete
+            printf "%015d\t%b%s %-40s%b\t%b[%s MB]%b\t%s\n" \
+                "$tamanho" "$C_VID" "$tipo_icone" "$nome_exib" "$C_RESET" "$C_SIZE" "$mb" "$C_RESET" "$item_res"
+        done < "$ARQUIVO_PLAYLIST_ABERTO"
+        return
+    fi
+
+    if [ "${MODO_DUP:-0}" -eq 1 ]; then
+        printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
+            "$C_DIR" "◀ Voltar (Sair de Duplicados)" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+
+        if [ -s "$DUP_FILE" ]; then
+            awk -F'\t' -v c_zip="$C_ZIP" -v c_size="$C_SIZE" -v c_reset="$C_RESET" '
+            BEGIN { grupo = 0; anterior = "" }
+            {
+                hash = $1; tam = $2; caminho = $3
+                if (hash != anterior) { grupo++; anterior = hash }
+
+                nome_exib = caminho
+                if (length(nome_exib) > 40) {
+                    nome_exib = "..." substr(nome_exib, length(nome_exib) - 37)
+                }
+                mb = sprintf("%.1f", tam / 1048576)
+
+                printf "%015d\t%s🔁 G%02d %-36s%s\t%s[%s MB]%s\t%s\n",
+                    tam, c_zip, grupo, nome_exib, c_reset, c_size, mb, c_reset, caminho
+            }' "$DUP_FILE"
+        fi
+        return
+    fi
+
+    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
+            "$C_DIR" "◀ Voltar (Sair da Busca)" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+
+        local -a ext_arr_busca
+        construir_iname_array ext_arr_busca "$EXT_BUSCA"
+
+        local tmp_busca cache_key cache_file
+        cache_key=$(chave_cache_busca)
+        cache_file="${BUSCA_CACHE_DIR}/${cache_key}.tsv"
+        tmp_busca="/tmp/eazy_busca_raw_$$"
+
+        # Buffer de busca: reutiliza resultado enquanto o eazy estiver aberto
+        if [ -s "$cache_file" ]; then
+            local n_cache
+            n_cache=$(wc -l < "$cache_file" 2>/dev/null | tr -cd '0-9')
+            n_cache=${n_cache:-0}
+            eazy_busca_msg ""
+            eazy_busca_msg $'\033[1;32m'"⚡ Cache de busca — $n_cache arquivo(s) (instantâneo)"$'\033[0m'
+            eazy_busca_msg ""
+            cp -f "$cache_file" "$tmp_busca" 2>/dev/null || cat "$cache_file" > "$tmp_busca"
+        else
+            : > "$tmp_busca"
+
+            # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
+            local letras=({0..9} {A..Z})
+            local total_seg=$((${#letras[@]} + 1))
+            local idx=0 total_achados=0
+            local let seg_tmp n_seg pct
+            local size_args=()
+            [ -n "${BUSCA_TAM_MIN:-}" ] && size_args+=("-size" "+${BUSCA_TAM_MIN}c")
+            [ -n "${BUSCA_TAM_MAX:-}" ] && size_args+=("-size" "-${BUSCA_TAM_MAX}c")
+
+            local titulo="🔍 Busca segmentada [${EXT_BUSCA:-todas}]"
+            [ -n "${BUSCA_TAM_LABEL:-}" ] && titulo="$titulo  tam:$BUSCA_TAM_LABEL"
+            [ -n "${BUSCA_CONTEUDO:-}" ] && titulo="$titulo  txt:«${BUSCA_CONTEUDO:0:16}»"
+            eazy_busca_msg ""
+            eazy_busca_msg $'\033[1;36m'"$titulo"$'\033[0m'
+            eazy_busca_msg $'\033[0;90m'"   segmentos: 0-9 → A-Z → outros"$'\033[0m'
+
+            for let in "${letras[@]}"; do
+                pct=$((idx * 100 / total_seg))
+                eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
+                seg_tmp="/tmp/eazy_busca_seg_$$"
+                find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+                    -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+                n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
+                n_seg=${n_seg:-0}
+                cat "$seg_tmp" >> "$tmp_busca"
+                rm -f "$seg_tmp"
+                total_achados=$((total_achados + n_seg))
+                idx=$((idx + 1))
+                pct=$((idx * 100 / total_seg))
+                eazy_busca_progresso "$pct" "$let" "$n_seg" "$total_achados" "ok"
+            done
+
+            pct=$((idx * 100 / total_seg))
+            eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..."
+            seg_tmp="/tmp/eazy_busca_seg_$$"
+            find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+                ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
+                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+            n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
+            n_seg=${n_seg:-0}
+            cat "$seg_tmp" >> "$tmp_busca"
+            rm -f "$seg_tmp"
+            total_achados=$((total_achados + n_seg))
+            eazy_busca_progresso 100 "outros" "$n_seg" "$total_achados" "ok"
+            eazy_busca_msg ""
+            eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
+            eazy_busca_msg ""
+
+            # Filtro por conteúdo (grep) com barra própria
+            if [ -n "${BUSCA_CONTEUDO:-}" ]; then
+                local tmp_filtro="/tmp/eazy_busca_grep_$$"
+                : > "$tmp_filtro"
+                local n_grep=0 n_total gi=0
+                n_total=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
+                n_total=${n_total:-1}
+                [ "$n_total" -lt 1 ] && n_total=1
+                while IFS=$'\t' read -r bytes mtime tipo nome caminho; do
+                    gi=$((gi + 1))
+                    [ -z "$caminho" ] && continue
+                    if grep -ilFq -- "$BUSCA_CONTEUDO" "$caminho" 2>/dev/null; then
+                        printf "%s\t%s\t%s\t%s\t%s\n" "$bytes" "$mtime" "$tipo" "$nome" "$caminho" >> "$tmp_filtro"
+                        n_grep=$((n_grep + 1))
+                    fi
+                    if [ $((gi % 15)) -eq 0 ] || [ "$gi" -eq "$n_total" ]; then
+                        eazy_busca_progresso "$((gi * 100 / n_total))" "grep" "$n_grep" "$gi" "/$n_total"
+                    fi
+                done < "$tmp_busca"
+                mv "$tmp_filtro" "$tmp_busca"
+                eazy_busca_msg ""
+                eazy_busca_msg $'\033[1;32m'"✓ Conteúdo — $n_grep hit(s)"$'\033[0m'
+                eazy_busca_msg ""
+            fi
+
+            # Grava no buffer da sessão
+            mkdir -p "$BUSCA_CACHE_DIR" 2>/dev/null || true
+            cp -f "$tmp_busca" "$cache_file" 2>/dev/null || cat "$tmp_busca" > "$cache_file"
+        fi
+
+        awk -F'\t' \
+            -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
+            -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" \
+            -v tmin="${BUSCA_TAM_MIN:-0}" -v tmax="${BUSCA_TAM_MAX:-0}" '
+        {
+            bytes = $1 + 0
+            if (tmin > 0 && bytes <= tmin) next
+            if (tmax > 0 && bytes >= tmax) next
+
+            mtime = $2
+            nome = $4
+            caminho = $5
+            sub(/^\.\//, "", caminho)
+
+            nome_exib = caminho
+            if (length(nome_exib) > 45) {
+                nome_exib = "..." substr(nome_exib, length(nome_exib) - 41)
+            }
+            mb = sprintf("%.1f", bytes / 1048576)
+            chave = (modo == "data") ? int(mtime) : bytes
+            info = (modo == "data") ? strftime("%d/%m/%y %H:%M", int(mtime)) : mb " MB"
+
+            n = split(nome, ext_arr, ".")
+            ext = tolower(ext_arr[n])
+
+            if (ext ~ /^(m3u|pls)$/) {
+                printf "%015d\t%s📜 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+            } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
+                printf "%015d\t%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+            } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
+                printf "%015d\t%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
+            } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
+                printf "%015d\t%s📦 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
+            } else {
+                printf "%015d\t%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
+            }
+        }' "$tmp_busca"
+        rm -f "$tmp_busca"
+        return
+    fi
+
+    if [ "$(pwd)" != "/" ]; then
+        printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
+            "$C_DIR" ".." "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+    fi
+
+    local -a find_args=("." "-maxdepth" "1" "-mindepth" "1" "(" "-type" "d")
+
+    case "$FILTRO_ATUAL" in
+        videos)
+            find_args+=("-o" "-type" "f" "(" \
+                "-iname" "*.mp4" "-o" "-iname" "*.mp3" "-o" "-iname" "*.wmv" "-o" "-iname" "*.flv" "-o" "-iname" "*.mkv" "-o" \
+                "-iname" "*.avi" "-o" "-iname" "*.mov" "-o" "-iname" "*.webm" "-o" "-iname" "*.m4v" ")")
+            ;;
+        audios)
+            find_args+=("-o" "-type" "f" "(" \
+                "-iname" "*.mp3" "-o" "-iname" "*.m4a" "-o" "-iname" "*.wav" "-o" \
+                "-iname" "*.flac" ")")
+            ;;
+        imgs)
+            find_args+=("-o" "-type" "f" "(" \
+                "-iname" "*.webp" "-o" "-iname" "*.jpg" "-o" "-iname" "*.jpeg" "-o" \
+                "-iname" "*.png" "-o" "-iname" "*.gif" ")")
+            ;;
+        compactados)
+            find_args+=("-o" "-type" "f" "(" \
+                "-iname" "*.zip" "-o" "-iname" "*.tar" "-o" "-iname" "*.gz" "-o" \
+                "-iname" "*.bz2" "-o" "-iname" "*.xz" "-o" "-iname" "*.rar" "-o" \
+                "-iname" "*.7z" ")")
+            ;;
+        todos)
+            find_args+=("-o" "-type" "f")
+            ;;
+        ambos|*)
+            find_args+=("-o" "-type" "f" "(" \
+                "-iname" "*.mp4" "-o" "-iname" "*.mp3" "-o" "-iname" "*.wmv" "-o" "-iname" "*.flv" "-o" \
+                "-iname" "*.mkv" "-o" "-iname" "*.mov" "-o" \
+                "-iname" "*.m4v" "-o" "-iname" "*.m4a" "-o" "-iname" "*.avi" "-o" "-iname" "*.wav" "-o" \
+                "-iname" "*.flac" "-o" "-iname" "*.webm" "-o" "-iname" "*.webp" "-o" \
+                "-iname" "*.jpg" "-o" "-iname" "*.jpeg" "-o" "-iname" "*.png" "-o" \
+                "-iname" "*.gif" "-o" "-iname" "*.zip" "-o" "-iname" "*.tar" "-o" \
+                "-iname" "*.gz" "-o" "-iname" "*.bz2" "-o" "-iname" "*.xz" "-o" \
+                "-iname" "*.rar" "-o" "-iname" "*.7z" "-o" "-iname" "*.m3u" "-o" \
+                "-iname" "*.pls" "-o" "-iname" "*.txt" ")")
+            ;;
+    esac
+    find_args+=(")")
+
+    find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null | awk -F'\t' \
+        -v c_dir="$C_DIR" -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
+        -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" '
+    {
+        bytes = $1
+        mtime = $2
+        tipo = $3
+        nome = $4
+        caminho = $5
+
+        sub(/^\.\//, "", caminho)
+        nome_exib = (length(nome) > 38) ? substr(nome, 1, 38) ".." : nome
+        mb = sprintf("%.1f", bytes / 1048576)
+
+        chave = (modo == "data") ? int(mtime) : bytes
+        info = (modo == "data") ? strftime("%d/%m/%y %H:%M", int(mtime)) : mb " MB"
+
+        n = split(nome, ext_arr, ".")
+        ext = tolower(ext_arr[n])
+
+        if (tipo == "d") {
+            printf "%015d\t%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
+                chave, c_dir, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
+        } else if (ext ~ /^(m3u|pls)$/) {
+            printf "%015d\t%s📜 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
+            printf "%015d\t%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
+            printf "%015d\t%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
+            printf "%015d\t%s📦 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else {
+            printf "%015d\t%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
+        }
+    }'
+}
+
+# Converte caminho relativo para absoluto (robusto)
+caminho_absoluto() {
+    local p="$1"
+    [ -z "$p" ] && return
+    # Já é absoluto?
+    if [[ "$p" == /* ]]; then
+        printf '%s\n' "$p"
+        return
+    fi
+    # realpath se existir, senão fallback
+    if command -v realpath &>/dev/null; then
+        realpath -m -- "$p" 2>/dev/null || printf '%s/%s\n' "$(pwd)" "${p#./}"
+    else
+        local base
+        base=$(pwd)
+        p="${p#./}"
+        printf '%s/%s\n' "$base" "$p"
+    fi
+}
+
+# --- Detecta se arquivo é texto (para visualização read-only) ---
+eh_arquivo_texto() {
+    local f="$1"
+    [ ! -f "$f" ] && return 1
+    local ext
+    ext=$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')
+    case "$ext" in
+        txt|md|log|conf|cfg|ini|json|xml|csv|sh|bash|py|c|h|cpp|hpp|js|ts|html|htm|css|yaml|yml|toml|nfo|srt|ass|ssa|cue|m3u|pls|lst|org|rst|tex|sql|r|rb|go|rs|java|kt|swift|php|pl|lua|vim|diff|patch|gitignore|dockerfile|makefile|readme|license|changelog)
+            return 0
+            ;;
+    esac
+    # Fallback: MIME text/*
+    if command -v file &>/dev/null; then
+        local mime
+        mime=$(file -b --mime-type -- "$f" 2>/dev/null)
+        [[ "$mime" == text/* ]] && return 0
+        [[ "$mime" == application/json ]] && return 0
+        [[ "$mime" == application/xml ]] && return 0
+        [[ "$mime" == application/javascript ]] && return 0
+    fi
+    return 1
+}
+
+mostrar_texto() {
+    local f="$1"
+    [ ! -f "$f" ] && return 1
+    clear
+    echo -e "\033[1;36m═══ $(basename "$f") ═══\033[0m  (somente leitura — q para sair)\n"
+    if command -v less &>/dev/null; then
+        less -R -FX -- "$f"
+    elif command -v more &>/dev/null; then
+        more -- "$f"
+    else
+        cat -- "$f"
+        echo ""
+        read -p "Pressione Enter para voltar..."
+    fi
+}
+
+# Preview do fzf (caminho = último campo da linha TAB)
+eazy_preview() {
+    local linha="$1"
+    local path
+    path=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+    path="${path#./}"
+
+    # Linha de voltar / vazia
+    if [ -z "$path" ] || [[ "$path" =~ \.\.$ ]] || [[ "$path" == ".." ]]; then
+        printf "📁 Diretório pai / voltar\n"
+        return
+    fi
+
+    # URL (fila de download)
+    if [[ "$path" =~ ^https?:// ]]; then
+        printf "🔗 LINK\n\n%s\n" "$path"
+        return
+    fi
+
+    if [ -d "$path" ]; then
+        printf "📁 PASTA\n%s\n\n" "$path"
+        printf "Conteúdo (até 20 itens):\n"
+        ls -lah -- "$path" 2>/dev/null | head -n 21
+        return
+    fi
+
+    if [ ! -e "$path" ]; then
+        printf "⚠ Arquivo não encontrado:\n%s\n" "$path"
+        return
+    fi
+
+    if [ ! -f "$path" ]; then
+        printf "❓ %s\n" "$path"
+        return
+    fi
+
+    local nome tamanho human tipo ext
+    nome=$(basename -- "$path")
+    tamanho=$(stat -c%s -- "$path" 2>/dev/null || echo 0)
+    human=$(awk -v b="$tamanho" 'BEGIN {
+        if (b>=1073741824) printf "%.2f GB", b/1073741824
+        else if (b>=1048576) printf "%.2f MB", b/1048576
+        else if (b>=1024) printf "%.1f KB", b/1024
+        else printf "%d B", b
+    }')
+    tipo=$(file -b -- "$path" 2>/dev/null | head -c 80)
+    ext=$(echo "${nome##*.}" | tr '[:upper:]' '[:lower:]')
+
+    printf "📄 %s\n" "$nome"
+    printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+    printf "Caminho : %s\n" "$path"
+    printf "Tamanho : %s (%s bytes)\n" "$human" "$tamanho"
+    printf "Tipo    : %s\n" "$tipo"
+
+    # Mídia: duração, resolução, codec
+    if command -v ffprobe &>/dev/null; then
+        if [[ "$ext" =~ ^(mp4|mkv|avi|webm|mov|m4v|wmv|flv|mp3|m4a|wav|flac|ogg|opus|aac)$ ]]; then
+            local dur w h vcodec acodec br
+            dur=$(ffprobe -v quiet -show_entries format=duration -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            br=$(ffprobe -v quiet -show_entries format=bit_rate -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            w=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            h=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=height -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            vcodec=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=codec_name -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            acodec=$(ffprobe -v quiet -select_streams a:0 -show_entries stream=codec_name -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+
+            printf "\n🎬 MÍDIA\n"
+            if [ -n "$dur" ] && [ "$dur" != "N/A" ]; then
+                awk -v d="$dur" 'BEGIN {
+                    s=int(d); h=int(s/3600); m=int((s%3600)/60); sec=s%60
+                    if (h>0) printf "Duração : %d:%02d:%02d\n", h, m, sec
+                    else printf "Duração : %d:%02d\n", m, sec
+                }'
+            fi
+            [ -n "$w" ] && [ -n "$h" ] && [ "$w" != "N/A" ] && printf "Res     : %sx%s\n" "$w" "$h"
+            [ -n "$vcodec" ] && [ "$vcodec" != "N/A" ] && printf "Vídeo   : %s\n" "$vcodec"
+            [ -n "$acodec" ] && [ "$acodec" != "N/A" ] && printf "Áudio   : %s\n" "$acodec"
+            if [ -n "$br" ] && [ "$br" != "N/A" ]; then
+                awk -v b="$br" 'BEGIN {printf "Bitrate : %.0f kbps\n", b/1000}'
+            fi
+        fi
+    fi
+
+    # Texto: primeiras linhas
+    if [[ "$ext" =~ ^(txt|md|log|json|xml|csv|sh|py|c|h|js|html|css|yml|yaml|toml|conf|cfg|ini|nfo|srt|ass)$ ]]; then
+        printf "\n📝 PRÉVIA\n"
+        head -n 25 -- "$path" 2>/dev/null
+    elif [[ "$ext" =~ ^(jpg|jpeg|png|gif|webp|bmp|tiff|tif|svg)$ ]]; then
+        printf "\n🖼  IMAGEM\n"
+        if command -v identify &>/dev/null; then
+            identify -format "Res: %wx%h  |  %m  |  %b\n" -- "$path" 2>/dev/null
+        elif command -v ffprobe &>/dev/null; then
+            w=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            h=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=height -of default=nk=1:nw=1 -- "$path" 2>/dev/null)
+            [ -n "$w" ] && printf "Res: %sx%s\n" "$w" "$h"
+        fi
+        # Miniatura no terminal (chafa > viu > catimg > convert)
+        local cols="${FZF_PREVIEW_COLUMNS:-40}"
+        local lines="${FZF_PREVIEW_LINES:-20}"
+        if command -v chafa &>/dev/null; then
+            chafa -f symbols --symbols vhalf --size "${cols}x${lines}" -- "$path" 2>/dev/null
+        elif command -v viu &>/dev/null; then
+            viu -w "$cols" -h "$lines" -- "$path" 2>/dev/null
+        elif command -v catimg &>/dev/null; then
+            catimg -w "$cols" -- "$path" 2>/dev/null
+        elif command -v convert &>/dev/null; then
+            convert -- "$path" -resize "${cols}x${lines}" -colors 16 sixel:- 2>/dev/null \
+                || printf "(instale 'chafa' para miniatura: sudo apt install chafa)\n"
+        else
+            printf "(instale 'chafa' para miniatura no preview)\n"
+        fi
+    fi
+}
+
+# Script Lua do mpv: marcar / apagar durante a reprodução
+preparar_script_mpv_exclusao() {
+    mkdir -p "$MPV_SCRIPT_DIR" 2>/dev/null || true
+    local script="$MPV_SCRIPT_DIR/eazy_mark_delete.lua"
+    cat > "$script" <<'LUA'
+-- eazy: marcar / excluir durante a reprodução (mpv)
+local mark_file = os.getenv("EAZY_MARK_DELETE") or ""
+
+local function append_mark(path)
+    if not path or path == "" or mark_file == "" then return false end
+    -- evita duplicata
+    local exists = false
+    local rf = io.open(mark_file, "r")
+    if rf then
+        for line in rf:lines() do
+            if line == path then exists = true; break end
+        end
+        rf:close()
+    end
+    if exists then
+        mp.osd_message("EAZY: já marcado para exclusão", 1.5)
+        return true
+    end
+    local f = io.open(mark_file, "a")
+    if not f then
+        mp.osd_message("EAZY: falha ao marcar", 2)
+        return false
+    end
+    f:write(path .. "\n")
+    f:close()
+    return true
+end
+
+local function current_path()
+    return mp.get_property("path")
+end
+
+-- d = marcar para exclusão (apaga depois, ao sair do player)
+mp.add_key_binding("d", "eazy-mark-delete", function()
+    local path = current_path()
+    if append_mark(path) then
+        mp.osd_message("EAZY: marcado para exclusão\n" .. (path or ""), 2)
+    end
+end)
+
+-- D (Shift+d) = marcar e ir para o próximo da playlist
+mp.add_key_binding("D", "eazy-mark-and-next", function()
+    local path = current_path()
+    if append_mark(path) then
+        mp.osd_message("EAZY: marcado → próximo", 1.5)
+        mp.command("playlist-next")
+    end
+end)
+
+-- Ctrl+DEL = marcar (mesmo que d)
+mp.add_key_binding("Ctrl+DEL", "eazy-mark-delete-ctrl", function()
+    local path = current_path()
+    if append_mark(path) then
+        mp.osd_message("EAZY: marcado para exclusão", 2)
+    end
+end)
+
+mp.osd_message("EAZY: [d] marcar exclusão  [D] marcar+próximo", 3)
+LUA
+    echo "$script"
+}
+
+# Após o player: processa arquivos marcados para exclusão
+processar_marcados_exclusao() {
+    [ ! -s "$MARK_DELETE_FILE" ] && return 0
+    # dedup
+    local tmpm="/tmp/eazy_mark_uniq_$$"
+    sort -u "$MARK_DELETE_FILE" > "$tmpm" 2>/dev/null
+    mv "$tmpm" "$MARK_DELETE_FILE"
+
+    local n
+    n=$(grep -c '^' "$MARK_DELETE_FILE" 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9'); n=${n:-0}
+    [ "$n" -eq 0 ] && return 0
+
+    local lista_msg="" i=0
+    while IFS= read -r linha && [ "$i" -lt 8 ]; do
+        [ -z "$linha" ] && continue
+        lista_msg="${lista_msg}\n• $(basename -- "$linha")"
+        i=$((i + 1))
+    done < "$MARK_DELETE_FILE"
+    [ "$n" -gt 8 ] && lista_msg="${lista_msg}\n… e mais $((n - 8))"
+
+    if whiptail --title "Marcados para exclusão ($n)" --yesno \
+"Arquivos marcados durante o player:$lista_msg
+
+Apagar do disco agora?
+(Não = mantém a lista para depois)" 16 65; then
+        local ok=0 falha=0
+        while IFS= read -r arq; do
+            [ -z "$arq" ] && continue
+            if [ -e "$arq" ]; then
+                if rm -rf -- "$arq" 2>/dev/null; then
+                    ok=$((ok + 1))
+                else
+                    falha=$((falha + 1))
+                fi
+            fi
+        done < "$MARK_DELETE_FILE"
+        : > "$MARK_DELETE_FILE"
+        whiptail --title "Exclusão" --msgbox "Apagados: $ok\nFalhas: $falha" 9 40
+    else
+        # pergunta se limpa a lista
+        if whiptail --title "Lista" --yesno "Manter os $n itens na lista de exclusão?" 9 50 --defaultno; then
+            : # mantém
+        else
+            : > "$MARK_DELETE_FILE"
+        fi
+    fi
+}
+
+# Monta parâmetros do player conforme PLAYER_PADRAO e TELA_ATUAL
+montar_param_player() {
+    local mute_extra=""
+    case "${PLAYER_PADRAO:-mpv}" in
+        mplayer)
+            if [ "$TELA_ATUAL" = "fs" ]; then
+                PARAM_PLAYER="-fs -volume $VOL_PADRAO"
+            else
+                PARAM_PLAYER="-volume $VOL_PADRAO"
+            fi
+            [ "${SEM_AUDIO:-0}" = "1" ] && PARAM_PLAYER="$PARAM_PLAYER -nosound"
+            ;;
+        cvlc)
+            # VLC CLI — volume 0-256 aprox; fullscreen via --fullscreen
+            local vol_vlc
+            vol_vlc=$(awk -v v="${VOL_PADRAO:-100}" 'BEGIN {printf "%d", v * 2.56}')
+            if [ "$TELA_ATUAL" = "fs" ]; then
+                PARAM_PLAYER="--fullscreen --play-and-exit --no-video-title-show --volume=$vol_vlc"
+            else
+                PARAM_PLAYER="--play-and-exit --no-video-title-show --volume=$vol_vlc"
+            fi
+            [ "${SEM_AUDIO:-0}" = "1" ] && PARAM_PLAYER="$PARAM_PLAYER --no-audio"
+            ;;
+        ffplay)
+            # ffplay — volume 0.0-1.0; -autoexit
+            local vol_ff
+            vol_ff=$(awk -v v="${VOL_PADRAO:-100}" 'BEGIN {printf "%.2f", v/100}')
+            if [ "$TELA_ATUAL" = "fs" ]; then
+                PARAM_PLAYER="-fs -autoexit -volume $vol_ff -loglevel error"
+            else
+                PARAM_PLAYER="-autoexit -volume $vol_ff -loglevel error"
+            fi
+            [ "${SEM_AUDIO:-0}" = "1" ] && PARAM_PLAYER="$PARAM_PLAYER -an"
+            ;;
+        *)
+            # mpv + legendas + script de marcação para exclusão
+            if [ "$TELA_ATUAL" = "fs" ]; then
+                PARAM_PLAYER="--fullscreen --osd-level=$OSD_PADRAO --volume=$VOL_PADRAO --sub-auto=fuzzy --sub-visibility=yes"
+            else
+                PARAM_PLAYER="--autofit=70% --force-window=immediate --osd-level=$OSD_PADRAO --volume=$VOL_PADRAO --sub-auto=fuzzy --sub-visibility=yes"
+            fi
+            [ "${SEM_AUDIO:-0}" = "1" ] && PARAM_PLAYER="$PARAM_PLAYER --mute=yes --volume=0"
+            local mpv_script
+            mpv_script=$(preparar_script_mpv_exclusao)
+            if [ -f "$mpv_script" ]; then
+                PARAM_PLAYER="$PARAM_PLAYER --script=$mpv_script"
+            fi
+            export EAZY_MARK_DELETE="$MARK_DELETE_FILE"
+            mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+            touch "$MARK_DELETE_FILE"
+            ;;
+    esac
+}
+
+# Registra arquivo no histórico (máx. 200 entradas, mais recente no topo)
+registrar_historico() {
+    local arq="$1"
+    [ -z "$arq" ] || [ ! -e "$arq" ] && return
+    local abs
+    abs=$(caminho_absoluto "$arq")
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    touch "$HISTORY_FILE"
+    # Remove duplicata anterior e coloca no topo
+    grep -vxF -- "$abs" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" 2>/dev/null || true
+    { printf '%s\n' "$abs"; cat "${HISTORY_FILE}.tmp" 2>/dev/null; } > "$HISTORY_FILE"
+    rm -f "${HISTORY_FILE}.tmp"
+    # Limita a 200
+    if [ "$(wc -l < "$HISTORY_FILE" 2>/dev/null | tr -cd '0-9')" -gt 200 ] 2>/dev/null; then
+        head -n 200 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
+    fi
+}
+
+# Toca um único arquivo
+tocar_arquivo() {
+    local arq="$1"
+    [ -z "$arq" ] && return 1
+    registrar_historico "$arq"
+    montar_param_player
+    case "${PLAYER_PADRAO:-mpv}" in
+        mplayer)
+            if command -v mplayer &>/dev/null; then
+                # shellcheck disable=SC2086
+                mplayer $PARAM_PLAYER -- "$arq"
+            else
+                whiptail --title "Player" --msgbox "mplayer não encontrado.\nInstale: sudo apt install mplayer\nOu mude em F9 / --config." 9 55
+            fi
+            ;;
+        cvlc)
+            if command -v cvlc &>/dev/null; then
+                # shellcheck disable=SC2086
+                cvlc $PARAM_PLAYER -- "$arq"
+            else
+                whiptail --title "Player" --msgbox "cvlc não encontrado.\nInstale: sudo apt install vlc\nOu mude em F9 / --config." 9 55
+            fi
+            ;;
+        ffplay)
+            if command -v ffplay &>/dev/null; then
+                # shellcheck disable=SC2086
+                ffplay $PARAM_PLAYER -- "$arq"
+            else
+                whiptail --title "Player" --msgbox "ffplay não encontrado.\nInstale: sudo apt install ffmpeg\nOu mude em F9 / --config." 9 55
+            fi
+            ;;
+        *)
+            if command -v mpv &>/dev/null; then
+                # shellcheck disable=SC2086
+                mpv $PARAM_PLAYER -- "$arq"
+                processar_marcados_exclusao
+            else
+                whiptail --title "Player" --msgbox "mpv não encontrado.\nInstale: sudo apt install mpv\nOu mude em F9 / --config." 9 55
+            fi
+            ;;
+    esac
+}
+
+# Toca uma playlist (arquivo com lista de caminhos)
+# $2 = "shuffle" para ordem aleatória
+tocar_lista() {
+    local lista="$1"
+    local modo="${2:-}"
+    [ ! -s "$lista" ] && return 1
+
+    local lista_play="$lista"
+    if [ "$modo" = "shuffle" ]; then
+        lista_play="/tmp/eazy_shuffle_$$"
+        grep -v '^#' "$lista" | grep -v '^[[:space:]]*$' | shuf > "$lista_play"
+        [ ! -s "$lista_play" ] && { rm -f "$lista_play"; return 1; }
+    fi
+
+    # Histórico: primeiro item da lista
+    local primeiro
+    primeiro=$(grep -v '^#' "$lista_play" | grep -v '^[[:space:]]*$' | head -n1)
+    [ -n "$primeiro" ] && registrar_historico "$primeiro"
+
+    montar_param_player
+    case "${PLAYER_PADRAO:-mpv}" in
+        mplayer)
+            if command -v mplayer &>/dev/null; then
+                # shellcheck disable=SC2086
+                mplayer $PARAM_PLAYER -playlist "$lista_play"
+            else
+                whiptail --title "Player" --msgbox "mplayer não encontrado." 8 50
+            fi
+            ;;
+        cvlc)
+            if command -v cvlc &>/dev/null; then
+                # shellcheck disable=SC2086
+                cvlc $PARAM_PLAYER --playlist "$lista_play"
+            else
+                whiptail --title "Player" --msgbox "cvlc não encontrado.\nInstale: sudo apt install vlc" 8 50
+            fi
+            ;;
+        ffplay)
+            # ffplay não tem playlist nativa — toca item a item
+            if command -v ffplay &>/dev/null; then
+                while IFS= read -r item || [ -n "$item" ]; do
+                    [ -z "$item" ] && continue
+                    [[ "$item" =~ ^# ]] && continue
+                    [ ! -e "$item" ] && continue
+                    # shellcheck disable=SC2086
+                    ffplay $PARAM_PLAYER -- "$item" || break
+                done < "$lista_play"
+            else
+                whiptail --title "Player" --msgbox "ffplay não encontrado.\nInstale: sudo apt install ffmpeg" 8 50
+            fi
+            ;;
+        *)
+            if command -v mpv &>/dev/null; then
+                # shellcheck disable=SC2086
+                mpv --playlist="$lista_play" $PARAM_PLAYER
+                processar_marcados_exclusao
+            else
+                whiptail --title "Player" --msgbox "mpv não encontrado." 8 50
+            fi
+            ;;
+    esac
+    [ "$lista_play" != "$lista" ] && rm -f "$lista_play"
+}
+
+salvar_playlist() {
+    local destino nome_tmp dir_destino
+    if [ ! -s "$PLAYLIST_FILE" ]; then
+        whiptail --title "Salvar Playlist" --msgbox "A playlist temporária está vazia.\nUse INSERT para adicionar arquivos antes de salvar." 8 60
+        return
+    fi
+
+    # Garante que a pasta padrão existe
+    mkdir -p "$PLAYLIST_DIR_PADRAO" 2>/dev/null || true
+
+    # 1) Pasta de destino (padrão = PLAYLIST_DIR_PADRAO)
+    dir_destino=$(whiptail --title "Salvar Playlist — Pasta" \
+        --inputbox "Pasta onde salvar a playlist:\n(Enter = pasta padrão de playlists)" 11 70 "$PLAYLIST_DIR_PADRAO" \
+        3>&1 1>&2 2>&3)
+    [ -z "$dir_destino" ] && return
+
+    # Expande ~ se o usuário digitar
+    dir_destino="${dir_destino/#\~/$HOME}"
+
+    if [ ! -d "$dir_destino" ]; then
+        if whiptail --title "Pasta não existe" --yesno "A pasta não existe:\n$dir_destino\n\nCriar agora?" 10 60; then
+            mkdir -p "$dir_destino" || {
+                whiptail --title "Erro" --msgbox "Não foi possível criar a pasta." 8 50
+                return
+            }
+        else
+            return
+        fi
+    fi
+
+    # 2) Nome do arquivo
+    nome_tmp=$(whiptail --title "Salvar Playlist — Nome" \
+        --inputbox "Nome da playlist:" 9 60 "playlist.m3u" \
+        3>&1 1>&2 2>&3)
+    [ -z "$nome_tmp" ] && return
+
+    [[ "$nome_tmp" != *.* ]] && nome_tmp="${nome_tmp}.m3u"
+    destino="$dir_destino/$nome_tmp"
+
+    # 3) Grava com caminhos ABSOLUTOS
+    if [ -e "$destino" ]; then
+        while IFS= read -r item; do
+            [ -z "$item" ] && continue
+            [[ "$item" =~ ^# ]] && continue
+            item_abs=$(caminho_absoluto "$item")
+            if ! grep -Fxq -- "$item_abs" "$destino" 2>/dev/null; then
+                printf '%s\n' "$item_abs" >> "$destino"
+            fi
+        done < "$PLAYLIST_FILE"
+    else
+        {
+            printf '%s\n' '#EXTM3U'
+            while IFS= read -r item; do
+                [ -z "$item" ] && continue
+                [[ "$item" =~ ^# ]] && continue
+                caminho_absoluto "$item"
+            done < "$PLAYLIST_FILE"
+        } > "$destino"
+    fi
+
+    whiptail --title "Playlist salva" --msgbox "Playlist salva com sucesso:\n$destino\n\n(Todos os caminhos estão em formato absoluto)" 11 70
+}
+
+confirmar_e_excluir() {
+    local selecao="$1"
+    local modo_extra="${2:-}"   # "disco" = CTRL+DEL → apaga do HD também
+    local total_itens
+    total_itens=$(echo "$selecao" | grep -v '^[[:space:]]*$' | wc -l)
+    total_itens=$(echo "$total_itens" | LC_ALL=C tr -cd '0-9')
+    total_itens=${total_itens:-0}
+
+    [ "$total_itens" -eq 0 ] && return
+
+    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        echo -e "\n\033[1;33m--------------------------------------------------\033[0m"
+        echo -e "\033[1;33m⚠️ REMOVER DA FILA DE DOWNLOADS\033[0m"
+        echo -e "Deseja remover os itens selecionados da fila?"
+        read -p "Digite (s/N) para confirmar: " resp
+
+        if [[ "$resp" =~ ^[Ss]$ ]]; then
+            echo "$selecao" | awk -F '\t' '{print $NF}' | while read -r item_link; do
+                [ -z "$item_link" ] && continue
+                grep -v "|$item_link|" "$DOWNLOAD_QUEUE" > "${DOWNLOAD_QUEUE}.tmp" && mv "${DOWNLOAD_QUEUE}.tmp" "$DOWNLOAD_QUEUE"
+            done
+            echo -e "\033[1;32mRemovido(s) da fila de downloads com sucesso!\033[0m"
+            sleep 1
+        fi
+        return
+    fi
+
+    # Playlist / fila temp: DEL = só da lista | CTRL+DEL = lista + disco
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$modo_extra" != "disco" ]; then
+        echo -e "\n\033[1;33m--------------------------------------------------\033[0m"
+        if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
+            echo -e "\033[1;33m⚠️ REMOVER DA FILA TEMPORÁRIA\033[0m"
+            echo -e "Os arquivos NÃO serão apagados do disco — só saem desta fila."
+            echo -e "\033[0;90mPara apagar do disco: ALT+D\033[0m"
+        else
+            echo -e "\033[1;33m⚠️ REMOVER DA PLAYLIST\033[0m"
+            echo -e "Os arquivos NÃO serão apagados do disco — só saem desta playlist."
+            echo -e "\033[0;90mPara apagar do disco: ALT+D\033[0m"
+        fi
+        read -p "Confirma remover da lista? (s/N): " resp
+
+        if [[ "$resp" =~ ^[Ss]$ ]]; then
+            pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
+            tmp_pl="${ARQUIVO_PLAYLIST_ABERTO}.tmp"
+            sel_tmp="/tmp/eazy_pl_del_$$"
+            echo "$selecao" | awk -F '\t' 'NF {print $NF}' > "$sel_tmp"
+
+            : > "$tmp_pl"
+            while IFS= read -r linha || [ -n "$linha" ]; do
+                linha="${linha%$'\r'}"
+                if [ -z "$linha" ] || [[ "$linha" =~ ^# ]]; then
+                    printf '%s\n' "$linha" >> "$tmp_pl"
+                    continue
+                fi
+                linha_res="$linha"
+                if [[ "$linha" != /* ]]; then
+                    linha_res="$pl_dir/$linha"
+                fi
+                linha_res="${linha_res//\/\.\//\/}"
+                if grep -Fxq -- "$linha_res" "$sel_tmp" 2>/dev/null || \
+                   grep -Fxq -- "$linha" "$sel_tmp" 2>/dev/null; then
+                    continue
+                fi
+                printf '%s\n' "$linha" >> "$tmp_pl"
+            done < "$ARQUIVO_PLAYLIST_ABERTO"
+
+            mv "$tmp_pl" "$ARQUIVO_PLAYLIST_ABERTO"
+            rm -f "$sel_tmp"
+            echo -e "\033[1;32mRemovido(s) da playlist/fila com sucesso!\033[0m"
+            sleep 1
+        fi
+        return
+    fi
+
+    # ALT+D em playlist: remove da lista E apaga do disco (confirmação clara)
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$modo_extra" = "disco" ]; then
+        local sel_tmp="/tmp/eazy_pl_del_disk_$$"
+        echo "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$' > "$sel_tmp"
+        local n bytes_sel=0 p t n_dirs=0 n_files=0
+        n=$(grep -c '^' "$sel_tmp" 2>/dev/null | tr -cd '0-9')
+        n=${n:-0}
+        [ "$n" -eq 0 ] && { rm -f "$sel_tmp"; return; }
+
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            if [ -d "$p" ]; then n_dirs=$((n_dirs + 1))
+            elif [ -f "$p" ]; then n_files=$((n_files + 1)); fi
+            t=$(tamanho_caminho "$p")
+            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+            bytes_sel=$((bytes_sel + t))
+        done < "$sel_tmp"
+        local tam_h
+        tam_h=$(formatar_bytes_label "$bytes_sel")
+
+        echo -e "\n\033[1;31m--------------------------------------------------\033[0m"
+        echo -e "\033[1;31m⚠️ APAGAR DO DISCO (permanente)\033[0m"
+        echo -e "\033[1;33mIsso VAI:\033[0m"
+        echo -e "  1) Apagar os arquivos/pastas do HD (não vai para a lixeira)"
+        echo -e "  2) Remover as entradas desta playlist/fila"
+        echo -e "\033[1;33mItens: $n  (arquivos: $n_files | pastas: $n_dirs)\033[0m"
+        echo -e "\033[1;33mEspaço a liberar: $tam_h\033[0m"
+        if [ "$n" -eq 1 ]; then
+            echo -e "Apagar permanentemente:\n  \033[1;37m$(head -n1 "$sel_tmp")\033[0m"
+        else
+            echo -e "Apagar permanentemente \033[1;33m$n\033[0m item(ns):"
+            head -n 8 "$sel_tmp" | while read -r l; do echo "  - $l"; done
+            [ "$n" -gt 8 ] && echo "  ... e mais $((n - 8))"
+        fi
+        read -p "Confirma? (s/N): " resp
+        if [[ ! "$resp" =~ ^[Ss]$ ]]; then
+            rm -f "$sel_tmp"
+            echo -e "\033[1;33mCancelado.\033[0m"
+            sleep 0.5
+            return
+        fi
+
+        while IFS= read -r arq; do
+            [ -z "$arq" ] && continue
+            rm -rf -- "$arq" 2>/dev/null && echo -e "  \033[1;32m✓\033[0m $arq" || echo -e "  \033[1;31m✗\033[0m $arq"
+        done < "$sel_tmp"
+
+        # Remove da playlist também
+        pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
+        tmp_pl="${ARQUIVO_PLAYLIST_ABERTO}.tmp"
+        : > "$tmp_pl"
+        while IFS= read -r linha || [ -n "$linha" ]; do
+            linha="${linha%$'\r'}"
+            if [ -z "$linha" ] || [[ "$linha" =~ ^# ]]; then
+                printf '%s\n' "$linha" >> "$tmp_pl"
+                continue
+            fi
+            linha_res="$linha"
+            if [[ "$linha" != /* ]]; then
+                linha_res="$pl_dir/$linha"
+            fi
+            if grep -Fxq -- "$linha_res" "$sel_tmp" 2>/dev/null || \
+               grep -Fxq -- "$linha" "$sel_tmp" 2>/dev/null; then
+                continue
+            fi
+            printf '%s\n' "$linha" >> "$tmp_pl"
+        done < "$ARQUIVO_PLAYLIST_ABERTO"
+        mv "$tmp_pl" "$ARQUIVO_PLAYLIST_ABERTO"
+        rm -f "$sel_tmp"
+        echo -e "\033[1;32mConcluído (disco + lista).\033[0m"
+        sleep 1
+        return
+    fi
+
+    # --- Exclusão do disco (tela principal, busca ou duplicados) ---
+    # Uma única confirmação + tamanho total (pastas via du)
+    local alvos_tmp="/tmp/eazy_del_$$"
+    echo "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$' > "$alvos_tmp"
+    total_itens=$(grep -c '^' "$alvos_tmp" 2>/dev/null || echo 0)
+    total_itens=$(echo "$total_itens" | tr -cd '0-9')
+    total_itens=${total_itens:-0}
+    [ "$total_itens" -eq 0 ] && { rm -f "$alvos_tmp"; return; }
+
+    local bytes_sel=0 p t n_dirs=0 n_files=0
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        if [ -d "$p" ]; then
+            n_dirs=$((n_dirs + 1))
+        elif [ -f "$p" ]; then
+            n_files=$((n_files + 1))
+        fi
+        t=$(tamanho_caminho "$p")
+        t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+        bytes_sel=$((bytes_sel + t))
+    done < "$alvos_tmp"
+    local tam_h
+    tam_h=$(formatar_bytes_label "$bytes_sel")
+
+    echo -e "\n\033[1;31m--------------------------------------------------\033[0m"
+    if [ "${MODO_DUP:-0}" -eq 1 ]; then
+        echo -e "\033[1;31m⚠️ DUPLICADOS — APAGAR DO DISCO (permanente)\033[0m"
+    else
+        echo -e "\033[1;31m⚠️ APAGAR DO DISCO (permanente)\033[0m"
+    fi
+    echo -e "\033[1;33mIsso VAI apagar os itens do HD (não vai para a lixeira).\033[0m"
+    echo -e "\033[1;33mItens: $total_itens  (arquivos: $n_files | pastas: $n_dirs)\033[0m"
+    echo -e "\033[1;33mEspaço a liberar: $tam_h\033[0m"
+
+    if [ "$total_itens" -eq 1 ]; then
+        local alvo_del
+        alvo_del=$(head -n1 "$alvos_tmp")
+        echo -e "Apagar permanentemente:\n  \033[1;37m$alvo_del\033[0m"
+    else
+        echo -e "Apagar permanentemente \033[1;33m$total_itens\033[0m item(ns):"
+        head -n 8 "$alvos_tmp" | while read -r l; do echo "  - $l"; done
+        [ "$total_itens" -gt 8 ] && echo "  ... e mais $((total_itens - 8))"
+    fi
+    read -p "Confirma? (s/N): " resp
+
+    if [[ "$resp" =~ ^[Ss]$ ]]; then
+        while IFS= read -r item; do
+            [ -z "$item" ] && continue
+            rm -rf -- "$item" 2>/dev/null && echo -e "  \033[1;32m✓\033[0m $item" || echo -e "  \033[1;31m✗\033[0m $item"
+            # Se estiver em modo duplicados, remove também da lista de dups
+            if [ "${MODO_DUP:-0}" -eq 1 ] && [ -f "$DUP_FILE" ]; then
+                grep -vF "$item" "$DUP_FILE" > "${DUP_FILE}.tmp" 2>/dev/null && mv "${DUP_FILE}.tmp" "$DUP_FILE"
+            fi
+        done < "$alvos_tmp"
+        echo -e "\033[1;32mConcluído.\033[0m"
+        sleep 1
+    else
+        echo -e "\033[1;33mCancelado.\033[0m"
+        sleep 0.5
+    fi
+    rm -f "$alvos_tmp"
+}
+
+# --- Compactar seleção (zip/7z, senha opcional) ---
+compactar_selecao() {
+    local selecao="$1"
+    local itens n
+    itens=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$')
+    n=$(printf '%s\n' "$itens" | grep -c '^' 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9'); n=${n:-0}
+    [ "$n" -eq 0 ] && {
+        whiptail --title "Compactar" --msgbox "Nenhum item selecionado.\nUse TAB/ESPAÇO para marcar." 8 50
+        return
+    }
+
+    local formato
+    formato=$(whiptail --title "Formato" --radiolist "Formato do arquivo:" 12 50 3 \
+        "zip" "ZIP (compatível)" "ON" \
+        "7z"  "7-Zip (melhor compressão)" "OFF" \
+        "tar.gz" "tar.gz (sem senha)" "OFF" \
+        3>&1 1>&2 2>&3)
+    [ -z "$formato" ] && return
+
+    local nome_out
+    nome_out=$(whiptail --title "Nome do arquivo" \
+        --inputbox "Nome do arquivo de saída (sem extensão):" 10 60 "arquivo_$(date +%Y%m%d_%H%M)" \
+        3>&1 1>&2 2>&3)
+    [ -z "$nome_out" ] && return
+    nome_out="${nome_out%.*}"
+
+    local senha=""
+    if [ "$formato" != "tar.gz" ]; then
+        senha=$(whiptail --title "Senha (opcional)" \
+            --passwordbox "Senha para proteger o arquivo\n(deixe vazio = sem senha):" 10 55 \
+            3>&1 1>&2 2>&3)
+    fi
+
+    local out_file
+    case "$formato" in
+        zip)    out_file="${nome_out}.zip" ;;
+        7z)     out_file="${nome_out}.7z" ;;
+        tar.gz) out_file="${nome_out}.tar.gz" ;;
+    esac
+
+    if [ -e "$out_file" ]; then
+        if ! whiptail --title "Sobrescrever?" --yesno "Já existe:\n$out_file\n\nSobrescrever?" 10 55; then
+            return
+        fi
+        rm -f -- "$out_file"
+    fi
+
+    # Estimativa: tamanho dos itens (pior caso, pouca compressão) + folga
+    local detalhe necessario
+    detalhe=$(printf '%s\n' "$itens" | montar_detalhe_espaco)
+    necessario=$(printf '%s\n' "$itens" | somar_selecao_bytes)
+    verificar_espaco_disco "$necessario" "." "Compactar → $out_file" "$detalhe" || return
+
+    echo -e "\n\033[1;36m📦 Compactando $n item(ns) → $out_file\033[0m"
+    local lista_tmp="/tmp/eazy_zip_$$"
+    : > "$lista_tmp"
+    while IFS= read -r p; do
+        [ -z "$p" ] && continue
+        # caminhos relativos ao cwd para o zip
+        printf '%s\n' "${p#./}" >> "$lista_tmp"
+    done <<< "$itens"
+
+    local ok=0
+    case "$formato" in
+        zip)
+            if command -v zip &>/dev/null; then
+                if [ -n "$senha" ]; then
+                    zip -r -P "$senha" "$out_file" -@ < "$lista_tmp" && ok=1
+                else
+                    zip -r "$out_file" -@ < "$lista_tmp" && ok=1
+                fi
+            else
+                echo -e "\033[1;31m'zip' não instalado. sudo apt install zip\033[0m"
+            fi
+            ;;
+        7z)
+            if command -v 7z &>/dev/null; then
+                if [ -n "$senha" ]; then
+                    7z a -y -p"$senha" -mhe=on "$out_file" $(cat "$lista_tmp") && ok=1
+                else
+                    7z a -y "$out_file" $(cat "$lista_tmp") && ok=1
+                fi
+            else
+                echo -e "\033[1;31m'7z' não instalado. sudo apt install p7zip-full\033[0m"
+            fi
+            ;;
+        tar.gz)
+            tar -czf "$out_file" -T "$lista_tmp" && ok=1
+            ;;
+    esac
+    rm -f "$lista_tmp"
+
+    if [ "$ok" -eq 1 ]; then
+        echo -e "\033[1;32m✓ Criado: $out_file\033[0m"
+        whiptail --title "Sucesso" --msgbox "Arquivo criado:\n$(pwd)/$out_file" 9 60
+    else
+        echo -e "\033[1;31m✗ Falha na compactação.\033[0m"
+        read -p "Enter para continuar..."
+    fi
+}
+
+# Extrair seleção (com senha opcional)
+descompactar_selecao() {
+    local selecao="$1"
+    local itens
+    itens=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$')
+    [ -z "$itens" ] && {
+        whiptail --title "Extrair" --msgbox "Nenhum arquivo selecionado." 7 45
+        return
+    }
+
+    local senha
+    senha=$(whiptail --title "Senha (opcional)" \
+        --passwordbox "Senha se o arquivo estiver protegido\n(deixe vazio se não houver):" 10 55 \
+        3>&1 1>&2 2>&3)
+
+    # Estimativa de extração: ~2,5× o tamanho do arquivo (conteúdo expandido)
+    local detalhe="" necessario=0 arq t est
+    while IFS= read -r arq; do
+        [ -z "$arq" ] || [ ! -f "$arq" ] && continue
+        t=$(tamanho_caminho "$arq")
+        t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+        est=$((t * 5 / 2))
+        [ "$est" -lt "$t" ] && est=$t
+        necessario=$((necessario + est))
+        detalhe="${detalhe}${est}|${arq} (estim. extraído)"$'\n'
+    done <<< "$itens"
+    verificar_espaco_disco "$necessario" "." "Descompactar" "$detalhe" || return
+
+    while IFS= read -r arq; do
+        [ -z "$arq" ] || [ ! -f "$arq" ] && continue
+        # Recheca por arquivo (vários arquivos grandes em sequência)
+        t=$(tamanho_caminho "$arq")
+        t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+        est=$((t * 5 / 2))
+        verificar_espaco_disco "$est" "." "Extrair $(basename -- "$arq")" "${est}|${arq}" || {
+            echo -e "\033[1;33mPulando restante por falta de espaço.\033[0m"
+            break
+        }
+        extrair_com_senha "$arq" "$senha"
+    done <<< "$itens"
+    read -r -p "Pressione Enter para continuar..."
+}
+
+# Editar arquivo (\$EDITOR ou nano)
+editar_selecao() {
+    local selecao="$1"
+    local arq
+    arq=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$' | head -n1)
+    [ -z "$arq" ] || [ ! -f "$arq" ] && {
+        whiptail --title "Editar" --msgbox "Selecione um arquivo válido." 7 45
+        return
+    }
+    local editor="${EDITOR:-${VISUAL:-}}"
+    if [ -z "$editor" ]; then
+        if command -v nano &>/dev/null; then editor="nano"
+        elif command -v vim &>/dev/null; then editor="vim"
+        elif command -v vi &>/dev/null; then editor="vi"
+        else
+            whiptail --title "Erro" --msgbox "Nenhum editor encontrado (nano/vim).\nDefina \$EDITOR." 8 50
+            return
+        fi
+    fi
+    $editor -- "$arq"
+}
+
+# Renomear arquivo(s) ou pasta(s)
+renomear_selecao() {
+    local selecao="$1"
+    local itens n
+    itens=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$')
+    n=$(printf '%s\n' "$itens" | grep -c '^' 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9'); n=${n:-0}
+    [ "$n" -eq 0 ] && {
+        whiptail --title "Renomear" --msgbox "Nenhum item selecionado.\nUse TAB/ESPAÇO para marcar." 8 50
+        return
+    }
+
+    # Um único item: renomear direto
+    if [ "$n" -eq 1 ]; then
+        local origem nome_atual dir_base novo_nome destino
+        origem=$(printf '%s\n' "$itens" | head -n1)
+        origem=$(caminho_absoluto "$origem")
+        [ ! -e "$origem" ] && {
+            whiptail --title "Erro" --msgbox "Item não encontrado:\n$origem" 8 55
+            return
+        }
+        nome_atual=$(basename -- "$origem")
+        dir_base=$(dirname -- "$origem")
+        novo_nome=$(whiptail --title "Renomear" \
+            --inputbox "Nome atual:\n$nome_atual\n\nNovo nome:" 12 70 "$nome_atual" \
+            3>&1 1>&2 2>&3)
+        [ -z "$novo_nome" ] && return
+        # impede path traversal no nome
+        novo_nome=$(basename -- "$novo_nome")
+        [ "$novo_nome" = "$nome_atual" ] && return
+        destino="$dir_base/$novo_nome"
+        if [ -e "$destino" ]; then
+            whiptail --title "Erro" --msgbox "Já existe um item com esse nome:\n$destino" 9 55
+            return
+        fi
+        if mv -- "$origem" "$destino" 2>/dev/null; then
+            ULTIMO_ARQUIVO="$destino"
+            registrar_status
+            whiptail --title "Renomeado" --msgbox "✓ $nome_atual\n→ $novo_nome" 9 55
+        else
+            whiptail --title "Erro" --msgbox "Falha ao renomear (permissão?)." 8 45
+        fi
+        return
+    fi
+
+    # Vários itens: prefixo / sufixo / numerar
+    local modo
+    modo=$(whiptail --title "Renomear $n itens" --menu \
+        "Vários itens selecionados. Escolha o modo:" 14 60 4 \
+        "1" "Adicionar PREFIXO a todos" \
+        "2" "Adicionar SUFIXO (antes da extensão)" \
+        "3" "Numerar em sequência (001, 002...)" \
+        "0" "Cancelar" \
+        3>&1 1>&2 2>&3)
+    [ -z "$modo" ] || [ "$modo" = "0" ] && return
+
+    local texto=""
+    if [ "$modo" = "1" ] || [ "$modo" = "2" ]; then
+        texto=$(whiptail --title "Texto" --inputbox "Digite o texto a aplicar:" 10 55 \
+            3>&1 1>&2 2>&3)
+        [ -z "$texto" ] && return
+    fi
+
+    local ok=0 falha=0
+    local i=1
+    while IFS= read -r origem; do
+        [ -z "$origem" ] && continue
+        origem=$(caminho_absoluto "$origem")
+        [ ! -e "$origem" ] && { falha=$((falha+1)); continue; }
+        local dir_base nome_atual base ext destino novo
+        dir_base=$(dirname -- "$origem")
+        nome_atual=$(basename -- "$origem")
+        if [[ "$nome_atual" == *.* ]] && [ -f "$origem" ]; then
+            ext=".${nome_atual##*.}"
+            base="${nome_atual%.*}"
+        else
+            ext=""
+            base="$nome_atual"
+        fi
+        case "$modo" in
+            1) novo="${texto}${nome_atual}" ;;
+            2) novo="${base}${texto}${ext}" ;;
+            3) novo=$(printf "%03d_%s" "$i" "$nome_atual") ;;
+        esac
+        destino="$dir_base/$novo"
+        if [ -e "$destino" ]; then
+            echo -e "\033[1;33mPulado (já existe): $novo\033[0m"
+            falha=$((falha+1))
+        elif mv -- "$origem" "$destino" 2>/dev/null; then
+            ok=$((ok+1))
+            ULTIMO_ARQUIVO="$destino"
+        else
+            falha=$((falha+1))
+        fi
+        i=$((i+1))
+    done <<< "$itens"
+    registrar_status
+    whiptail --title "Renomear" --msgbox "Concluído.\n\n✓ Renomeados: $ok\n✗ Falhas/pulados: $falha" 10 45
+}
+
+# Executar script
+executar_selecao() {
+    local selecao="$1"
+    local arq
+    arq=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$' | head -n1)
+    [ -z "$arq" ] || [ ! -f "$arq" ] && {
+        whiptail --title "Executar" --msgbox "Selecione um arquivo." 7 40
+        return
+    }
+    local ext nome
+    nome=$(basename -- "$arq")
+    ext=$(echo "${nome##*.}" | tr '[:upper:]' '[:lower:]')
+
+    if ! whiptail --title "Executar?" --yesno "Executar:\n$arq\n\nContinuar?" 10 60; then
+        return
+    fi
+
+    echo -e "\n\033[1;36m▶ Executando: $nome\033[0m\n"
+    case "$ext" in
+        sh|bash)  bash -- "$arq" ;;
+        py|py3)   python3 -- "$arq" 2>/dev/null || python -- "$arq" ;;
+        pl)       perl -- "$arq" ;;
+        rb)       ruby -- "$arq" ;;
+        js)       node -- "$arq" 2>/dev/null || js -- "$arq" ;;
+        *)
+            if [ -x "$arq" ]; then
+                "$arq"
+            else
+                bash -- "$arq"
+            fi
+            ;;
+    esac
+    local rc=$?
+    echo ""
+    echo -e "\033[1;33mCódigo de saída: $rc\033[0m"
+    read -p "Pressione Enter para continuar..."
+}
+
+# Menu de ações sobre a seleção (como INSERT, mas escolhe o que fazer)
+menu_acoes_selecao() {
+    local selecao="$1"
+    local n
+    n=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$' | grep -c '^' 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9'); n=${n:-0}
+    if [ "$n" -eq 0 ]; then
+        whiptail --title "Ações" --msgbox "Nada selecionado.\nUse TAB/ESPAÇO para marcar arquivos." 8 50
+        return
+    fi
+
+    local acao
+    acao=$(whiptail --title "Ações ($n item(ns))" --menu \
+        "O que fazer com a seleção?" 19 58 10 \
+        "1" "▶  Tocar / Abrir" \
+        "2" "📦 Compactar (zip/7z + senha)" \
+        "3" "📂 Extrair / Descompactar" \
+        "4" "✏️  Editar (editor de texto)" \
+        "5" "⚡ Executar script" \
+        "6" "🏷  Renomear" \
+        "7" "📋 Copiar para pasta..." \
+        "8" "📁 Mover para pasta..." \
+        "9" "➕ Adicionar à Fila (INSERT)" \
+        "0" "Cancelar" \
+        3>&1 1>&2 2>&3)
+    [ -z "$acao" ] || [ "$acao" = "0" ] && return
+
+    case "$acao" in
+        1)
+            # Tocar: reutiliza lógica de multi-seleção
+            local playlist_sel="/tmp/eazy_sel_play_$$"
+            : > "$playlist_sel"
+            while IFS= read -r linha; do
+                [ -z "$linha" ] && continue
+                p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+                [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
+                p_abs=$(caminho_absoluto "$p")
+                [ -f "$p_abs" ] && printf '%s\n' "$p_abs" >> "$playlist_sel"
+            done <<< "$selecao"
+            if [ -s "$playlist_sel" ]; then
+                total=$(grep -c '^' "$playlist_sel")
+                if [ "$total" -gt 1 ]; then
+                    ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
+                    registrar_status
+                    tocar_lista "$playlist_sel"
+                else
+                    tocado=$(head -n1 "$playlist_sel")
+                    ULTIMO_ARQUIVO="$tocado"
+                    registrar_status
+                    if eh_arquivo_texto "$tocado"; then
+                        mostrar_texto "$tocado"
+                    else
+                        tocar_arquivo "$tocado"
+                    fi
+                fi
+            fi
+            rm -f "$playlist_sel"
+            ;;
+        2) compactar_selecao "$selecao" ;;
+        3) descompactar_selecao "$selecao" ;;
+        4) editar_selecao "$selecao" ;;
+        5) executar_selecao "$selecao" ;;
+        6) renomear_selecao "$selecao" ;;
+        7) copiar_arquivos "$selecao" ;;
+        8) mover_arquivos "$selecao" ;;
+        9)
+            # INSERT
+            quantidade_adicionada=0
+            while IFS= read -r linha; do
+                [ -z "$linha" ] && continue
+                item=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+                [ -z "$item" ] || [[ "$item" =~ \.\.$ ]] && continue
+                item_abs=$(caminho_absoluto "$item")
+                if ! grep -Fxq -- "$item_abs" "$PLAYLIST_FILE" 2>/dev/null; then
+                    printf '%s\n' "$item_abs" >> "$PLAYLIST_FILE"
+                    quantidade_adicionada=$((quantidade_adicionada + 1))
+                fi
+            done <<< "$selecao"
+            total_fila=$(grep -c '^' "$PLAYLIST_FILE" 2>/dev/null || echo 0)
+            whiptail --title "Fila" --msgbox "Adicionados: $quantidade_adicionada\nTotal na fila: $total_fila" 9 45
+            ;;
+    esac
+}
+
+# Copia arquivos selecionados para um destino
+# Navegador de destino: lista pastas + "aqui" + "criar pasta" + digitar caminho
+# $1 = título da ação (Copiar / Mover)  $2 = qtd itens
+# Imprime o caminho escolhido em stdout; vazio = cancelou
+escolher_destino() {
+    local titulo="${1:-Destino}"
+    local nitens="${2:-0}"
+    local cursor dir escolha nome nova dig
+    cursor="$(pwd)"
+
+    while true; do
+        dir="$cursor"
+        # Monta lista: ações especiais + subpastas
+        escolha=$(
+            {
+                printf '%s\n' "✅  ${titulo} AQUI  →  $dir"
+                printf '%s\n' "📁  Criar nova pasta aqui…"
+                printf '%s\n' "⌨️   Digitar caminho…"
+                if [ "$dir" != "/" ]; then
+                    printf '%s\n' "⬆   ..  (subir)"
+                fi
+                # Subdiretórios (não ocultos primeiro, depois todos legíveis)
+                find "$dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%f\n' 2>/dev/null | LC_ALL=C sort
+                find "$dir" -mindepth 1 -maxdepth 1 -type d -name '.*' -printf '%f\n' 2>/dev/null | LC_ALL=C sort
+            } | fzf --prompt="$titulo ($nitens)  $dir ❯ " \
+                    --header="Enter: abrir pasta | ações no topo | Esc: cancelar" \
+                    --layout=reverse --border=rounded --height=80% \
+                    --info=inline --no-multi
+        ) || return 1
+
+        [ -z "$escolha" ] && return 1
+
+        case "$escolha" in
+            "✅"*)
+                printf '%s\n' "$dir"
+                return 0
+                ;;
+            "📁"*)
+                nova=$(whiptail --title "Nova pasta" \
+                    --inputbox "Nome da pasta em:\n$dir" 10 60 \
+                    3>&1 1>&2 2>&3) || continue
+                [ -z "$nova" ] && continue
+                # Remove barras do nome
+                nova=$(printf '%s' "$nova" | tr -d '/')
+                if mkdir -p -- "$dir/$nova" 2>/dev/null; then
+                    cursor="$dir/$nova"
+                else
+                    whiptail --title "Erro" --msgbox "Não foi possível criar:\n$dir/$nova" 9 55
+                fi
+                ;;
+            "⌨️"*)
+                dig=$(whiptail --title "Caminho de destino" \
+                    --inputbox "Digite o caminho completo:" 10 70 "$dir" \
+                    3>&1 1>&2 2>&3) || continue
+                [ -z "$dig" ] && continue
+                dig="${dig/#\~/$HOME}"
+                if [ -d "$dig" ]; then
+                    cursor=$(cd -- "$dig" && pwd -P)
+                else
+                    if whiptail --title "Pasta não existe" --yesno "Criar e usar?\n$dig" 9 60; then
+                        mkdir -p -- "$dig" 2>/dev/null || {
+                            whiptail --title "Erro" --msgbox "Falha ao criar pasta." 8 40
+                            continue
+                        }
+                        cursor=$(cd -- "$dig" && pwd -P)
+                    fi
+                fi
+                ;;
+            "⬆"*|..)
+                cursor=$(cd -- "$dir/.." && pwd -P)
+                ;;
+            *)
+                # Nome de subpasta
+                nome="$escolha"
+                if [ -d "$dir/$nome" ]; then
+                    cursor=$(cd -- "$dir/$nome" && pwd -P)
+                fi
+                ;;
+        esac
+    done
+}
+
+copiar_arquivos() {
+    local selecao="$1"
+    local dest itens n
+    itens=$(echo "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$')
+    n=$(echo "$itens" | grep -c '^' 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9')
+    n=${n:-0}
+    [ "$n" -eq 0 ] && {
+        whiptail --title "Copiar" --msgbox "Nenhum arquivo selecionado.\nUse TAB/ESPAÇO para marcar." 8 50
+        return
+    }
+
+    dest=$(escolher_destino "Copiar" "$n") || return
+    [ -z "$dest" ] || [ ! -d "$dest" ] && return
+
+    local detalhe necessario
+    detalhe=$(printf '%s\n' "$itens" | montar_detalhe_espaco)
+    necessario=$(printf '%s\n' "$itens" | somar_selecao_bytes)
+    verificar_espaco_disco "$necessario" "$dest" "Copiar" "$detalhe" || return
+
+    echo -e "\n\033[1;36m📋 Copiando $n item(ns) → $dest\033[0m"
+    local ok=0 falha=0
+    while IFS= read -r item; do
+        [ -z "$item" ] && continue
+        item_abs=$(caminho_absoluto "$item")
+        if cp -a -- "$item_abs" "$dest/" 2>/dev/null; then
+            echo -e "  \033[1;32m✓\033[0m $(basename "$item_abs")"
+            ok=$((ok + 1))
+        else
+            echo -e "  \033[1;31m✗\033[0m $(basename "$item_abs")"
+            falha=$((falha + 1))
+        fi
+    done <<< "$itens"
+    echo -e "\033[1;32mCopiados: $ok\033[0m | \033[1;31mFalhas: $falha\033[0m"
+    sleep 1.5
+}
+
+# Move arquivos selecionados para um destino
+mover_arquivos() {
+    local selecao="$1"
+    local dest itens n
+    itens=$(echo "$selecao" | awk -F '\t' 'NF {print $NF}' | grep -v '\.\.$')
+    n=$(echo "$itens" | grep -c '^' 2>/dev/null || echo 0)
+    n=$(echo "$n" | tr -cd '0-9')
+    n=${n:-0}
+    [ "$n" -eq 0 ] && {
+        whiptail --title "Mover" --msgbox "Nenhum arquivo selecionado.\nUse TAB/ESPAÇO para marcar." 8 50
+        return
+    }
+
+    dest=$(escolher_destino "Mover" "$n") || return
+    [ -z "$dest" ] || [ ! -d "$dest" ] && return
+
+    # Move entre filesystems diferentes precisa do mesmo espaço que cópia
+    local src_dev dst_dev
+    src_dev=$(df -P . 2>/dev/null | tail -1 | awk '{print $1}')
+    dst_dev=$(df -P "$dest" 2>/dev/null | tail -1 | awk '{print $1}')
+    if [ -n "$src_dev" ] && [ -n "$dst_dev" ] && [ "$src_dev" != "$dst_dev" ]; then
+        local detalhe necessario
+        detalhe=$(printf '%s\n' "$itens" | montar_detalhe_espaco)
+        necessario=$(printf '%s\n' "$itens" | somar_selecao_bytes)
+        verificar_espaco_disco "$necessario" "$dest" "Mover (outro disco)" "$detalhe" || return
+    fi
+
+    echo -e "\n\033[1;33m📦 Movendo $n item(ns) → $dest\033[0m"
+    local ok=0 falha=0
+    while IFS= read -r item; do
+        [ -z "$item" ] && continue
+        item_abs=$(caminho_absoluto "$item")
+        if mv -- "$item_abs" "$dest/" 2>/dev/null; then
+            echo -e "  \033[1;32m✓\033[0m $(basename "$item_abs")"
+            ok=$((ok + 1))
+            if [ "${MODO_DUP:-0}" -eq 1 ] && [ -f "$DUP_FILE" ]; then
+                grep -vF "$item_abs" "$DUP_FILE" > "${DUP_FILE}.tmp" 2>/dev/null && mv "${DUP_FILE}.tmp" "$DUP_FILE"
+            fi
+        else
+            echo -e "  \033[1;31m✗\033[0m $(basename "$item_abs")"
+            falha=$((falha + 1))
+        fi
+    done <<< "$itens"
+    echo -e "\033[1;32mMovidos: $ok\033[0m | \033[1;31mFalhas: $falha\033[0m"
+    sleep 1.5
+}
+
+registrar_status
+
+# Preview precisa estar exportado para o subprocess do fzf
+export -f eazy_preview eazy_status_header formatar_bytes_label tamanho_caminho info_disco 2>/dev/null || true
+
+while true; do
+    PASTA_ATUAL=$(pwd)
+
+    # Recarrega preview (pode ter sido alternado com CTRL-/ na rodada anterior)
+    if [ -f "$CONFIG_FILE" ]; then
+        _pv=$(grep '^PREVIEW_ATIVO=' "$CONFIG_FILE" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"')
+        [ -n "$_pv" ] && PREVIEW_ATIVO="$_pv"
+    fi
+
+    if [ "$TELA_ATUAL" = "fs" ]; then
+        TEXTO_TELA="TELA CHEIA"
+    else
+        TEXTO_TELA="JANELA"
+    fi
+    montar_param_player
+
+    dados_brutos=$(obter_lista_rapida)
+
+    linha_voltar=$(echo "$dados_brutos" | awk -F '\t' '$2 ~ /📁 \.\./ || $2 ~ /📁 ◀ Voltar/')
+    restante_itens=$(echo "$dados_brutos" | awk -F '\t' '$2 !~ /📁 \.\. / && $2 !~ /📁 ◀ Voltar/')
+
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] || [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        lista_preparada="$dados_brutos"
+        ORDEM_TEXTO="ESPECIAL"
+    else
+        if [ "$MODO_ATUAL" = "nome" ]; then
+            itens_ordenados=$(echo "$restante_itens" | sort -t$'\t' -k2,2f)
+            ORDEM_TEXTO="NOME"
+        elif [ "$MODO_ATUAL" = "data" ]; then
+            itens_ordenados=$(echo "$restante_itens" | sort -rn)
+            ORDEM_TEXTO="DATA"
+        else
+            itens_ordenados=$(echo "$restante_itens" | sort -rn)
+            ORDEM_TEXTO="TAMANHO"
+        fi
+
+        if [ -n "$linha_voltar" ]; then
+            lista_preparada=$(printf "%s\n%s" "$linha_voltar" "$itens_ordenados")
+        else
+            lista_preparada="$itens_ordenados"
+        fi
+    fi
+
+    TOTAL_PLAYLIST=$(grep -c '^' "$PLAYLIST_FILE" 2>/dev/null || echo 0)
+    TOTAL_PLAYLIST=$(echo "$TOTAL_PLAYLIST" | LC_ALL=C tr -cd '0-9')
+    TOTAL_PLAYLIST=${TOTAL_PLAYLIST:-0}
+
+    # Status permanente: HD livre/total + Sel (atualiza ao marcar)
+    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        TOTAL_DL=$(grep -c '^' "$DOWNLOAD_QUEUE" 2>/dev/null || echo 0)
+        TOTAL_DL=$(echo "$TOTAL_DL" | LC_ALL=C tr -cd '0-9')
+        TOTAL_DL=${TOTAL_DL:-0}
+        TEXTO_PROMPT=" 📥 FILA DE DOWNLOADS ($TOTAL_DL itens) ❯ "
+        EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Remover | [F10]: Ajuda "
+    elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
+        if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
+            TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
+            TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9')
+            TOTAL_FILA=${TOTAL_FILA:-0}
+            # detecta número da fila pelo nome do arquivo
+            case "$ARQUIVO_PLAYLIST_ABERTO" in
+                *temp_playlist_2) FILA_ATUAL=2 ;;
+                *temp_playlist_3) FILA_ATUAL=3 ;;
+                *) FILA_ATUAL=1 ;;
+            esac
+            TEXTO_PROMPT=" 📋 FILA $FILA_ATUAL ($TOTAL_FILA)  [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
+        elif [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
+            TOTAL_HIST=$(grep -c '^' "$HISTORY_FILE" 2>/dev/null || echo 0)
+            TOTAL_HIST=$(echo "$TOTAL_HIST" | tr -cd '0-9')
+            TOTAL_HIST=${TOTAL_HIST:-0}
+            TEXTO_PROMPT=" 🕐 HISTÓRICO ($TOTAL_HIST) ❯ "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [TAB]: Marcar | [CTRL-E]: Shuffle | [DEL]: Remover hist | [CTRL-G]: Fechar "
+        else
+            TEXTO_PROMPT=" 📜 PLAYLIST: $(basename "$ARQUIVO_PLAYLIST_ABERTO") ❯ "
+            EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [CTRL-E]: Shuffle | [DEL]: Remover | [INSERT]: Fila | [CTRL-O]: Fechar "
+        fi
+    elif [ "${MODO_DUP:-0}" -eq 1 ]; then
+        TOTAL_DUP=$(grep -c '^' "$DUP_FILE" 2>/dev/null || echo 0)
+        TOTAL_DUP=$(echo "$TOTAL_DUP" | LC_ALL=C tr -cd '0-9')
+        TOTAL_DUP=${TOTAL_DUP:-0}
+        TEXTO_PROMPT=" 🔁 DUPLICADOS [${EXT_DUP:-todas}] — $TOTAL_DUP arquivo(s) ❯ "
+        EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
+    elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        extra_lbl=""
+        [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
+        [ -n "${BUSCA_CONTEUDO:-}" ] && extra_lbl="$extra_lbl txt:«${BUSCA_CONTEUDO:0:20}»"
+        TEXTO_PROMPT=" 🔎 BUSCA [${EXT_BUSCA:-todas}]$extra_lbl ❯ "
+        EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta do arquivo | [INSERT]: Fila | [DEL]: HD | [CTRL-F]: Sair "
+    else
+        TEXTO_PROMPT=" 📂 [$FILTRO_ATUAL] $PASTA_ATUAL ❯ "
+        EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD | [F10]: Ajuda "
+    fi
+    export EAZY_HEADER_HINT
+    TEXTO_HEADER=$(eazy_status_header)
+
+    TOTAL_LINHAS=$(echo "$lista_preparada" | grep -c '^')
+    TOTAL_LINHAS=$(echo "$TOTAL_LINHAS" | LC_ALL=C tr -cd '0-9')
+    TOTAL_LINHAS=${TOTAL_LINHAS:-1}
+
+    if [ -f "$TMP_FILE" ]; then
+        IFS='|' read -r TMP_READ ALVO_READ ULTIMO_ARQUIVO_READ ULTIMO_DIR_READ MODO_PL_READ < "$TMP_FILE"
+
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ] || [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+            TMP="${TMP_READ:-2}"
+        else
+            if [ "$ULTIMO_DIR_READ" != "$PASTA_ATUAL" ] && [ -n "$ULTIMO_DIR_READ" ]; then
+                TMP=1
+                ALVO="$PASTA_ATUAL"
+            else
+                TMP="${TMP_READ:-1}"
+                ALVO="${ALVO_READ:-$PASTA_ATUAL}"
+                ULTIMO_ARQUIVO="${ULTIMO_ARQUIVO_READ:-}"
+            fi
+        fi
+
+        TMP=$(echo "$TMP" | LC_ALL=C tr -cd '0-9')
+        TMP=${TMP:-1}
+        [ "$TMP" -lt 1 ] && TMP=1
+        [ "$TOTAL_LINHAS" -gt 0 ] && [ "$TMP" -gt "$TOTAL_LINHAS" ] && TMP="$TOTAL_LINHAS"
+    fi
+
+    # Se temos um último arquivo tocado, força o ponteiro nele (seleção/posição persiste após sair do player)
+    if [ -n "${ULTIMO_ARQUIVO:-}" ] && [ -n "$lista_preparada" ]; then
+        pos_ultimo=$(encontrar_posicao "$ULTIMO_ARQUIVO" "$lista_preparada")
+        if [ -n "$pos_ultimo" ] && [ "$pos_ultimo" -ge 1 ]; then
+            TMP="$pos_ultimo"
+        fi
+    fi
+
+    [ "$TMP" -lt 1 ] && TMP=1
+    [ "$TOTAL_LINHAS" -gt 0 ] && [ "$TMP" -gt "$TOTAL_LINHAS" ] && TMP="$TOTAL_LINHAS"
+
+    registrar_status
+
+    # Preview: estado persistente (desligado por padrão)
+    if [ "${PREVIEW_ATIVO:-0}" = "1" ]; then
+        PREVIEW_WIN="right:40%:wrap:border-left"
+    else
+        PREVIEW_WIN="right:40%:wrap:border-left:hidden"
+    fi
+
+    # Lista em arquivo p/ reload: .. / Voltar sempre visíveis; filtro só no resto
+    printf '%s\n' "$lista_preparada" > "$LISTA_FZF_FILE"
+
+    # Filtro digitado persiste; navegação nunca some e nunca entra nas ações
+    # --disabled: o fzf NÃO filtra de novo (senão esconde o ..); quem filtra é eazy_lista_filtrada
+    saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
+        --disabled \
+        --print-query \
+        --query="$FZF_QUERY" \
+        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,ctrl-/,q,X \
+        --delimiter='\t' \
+        --with-nth=2,3 \
+        --layout=reverse \
+        --border=rounded \
+        --margin=1,2 \
+        --padding=1 \
+        --info=inline \
+        --pointer="▶" \
+        --marker="✓" \
+        --color="bg+:#2b2b2b,border:#5eacd3,header:#85c1dc,prompt:#98c379,pointer:#ffd700,marker:#ffd700,hl:#000000:reverse,hl+:#000000:reverse,info:#5eacd3,preview-fg:#d4d4d4,preview-bg:#1e1e1e" \
+        --header="$TEXTO_HEADER" \
+        --prompt="$TEXTO_PROMPT" \
+        --no-sort \
+        --preview='bash -c "eazy_preview \"\$1\"" -- {}' \
+        --preview-window="${PREVIEW_WIN}" \
+        --bind="change:reload:eazy_lista_filtrada '{q}'" \
+        --bind="tab:toggle+down+transform-header(eazy_status_header {+})" \
+        --bind="shift-tab:toggle+up+transform-header(eazy_status_header {+})" \
+        --bind="space:toggle+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-a:select-all+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-x:deselect-all+transform-header(eazy_status_header)" \
+        --bind="ctrl-r:toggle-all+transform-header(eazy_status_header {+})" \
+        --bind="load:pos($TMP)" \
+        --bind="down:down+execute-silent(bash -c '
+            IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
+            TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")
+            [ -z \"\$TMP\" ] && TMP=0
+            TMP=\$((TMP + 1))
+            printf \"%s|%s|%s|%s|%s\n\" \"\$TMP\" \"\$ALVO\" \"\$ULTIMO_ARQUIVO\" \"\$ULTIMO_DIR\" \"\$MODO_PL\" > \"$TMP_FILE\"
+        ')" \
+        --bind="up:up+execute-silent(bash -c '
+            IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
+            TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")
+            [ -z \"\$TMP\" ] && TMP=1
+            [ \$TMP -gt 1 ] && TMP=\$((TMP - 1))
+            printf \"%s|%s|%s|%s|%s\n\" \"\$TMP\" \"\$ALVO\" \"\$ULTIMO_ARQUIVO\" \"\$ULTIMO_DIR\" \"\$MODO_PL\" > \"$TMP_FILE\"
+        ')")
+
+    # --print-query + --expect: linha1=query, linha2=tecla, resto=seleção
+    FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p')
+    tecla=$(printf '%s\n' "$saida_fzf" | sed -n '2p')
+    escolha_raw=$(printf '%s\n' "$saida_fzf" | tail -n +3)
+    # Remove .. / Voltar de seleções múltiplas (Ctrl-A, TAB, espaço…)
+    # Mas preserva se for SÓ navegação (Enter em ".." / Voltar deve funcionar)
+    escolha=$(printf '%s\n' "$escolha_raw" | eazy_sem_navegacao)
+    if [ -z "$escolha" ] && [ -n "$escolha_raw" ]; then
+        n_raw=$(printf '%s\n' "$escolha_raw" | grep -c '^' 2>/dev/null || echo 0)
+        n_raw=$(echo "$n_raw" | tr -cd '0-9'); n_raw=${n_raw:-0}
+        if [ "$n_raw" -ge 1 ]; then
+            so_nav=1
+            while IFS= read -r _ln; do
+                [ -z "$_ln" ] && continue
+                eazy_eh_navegacao "$_ln" || { so_nav=0; break; }
+            done <<< "$escolha_raw"
+            [ "$so_nav" -eq 1 ] && escolha=$(printf '%s\n' "$escolha_raw" | head -n1)
+        fi
+    fi
+
+    if [ -f "$TMP_FILE" ]; then
+        IFS='|' read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PLAYLIST < "$TMP_FILE"
+        TMP=$(echo "$TMP" | LC_ALL=C tr -cd '0-9')
+        TMP=${TMP:-1}
+    fi
+
+    if [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
+        # X / Q / CTRL-Q = sair — salva sessão completa
+        salvar_sessao
+        rm -f "$TMP_FILE" "$DUP_FILE" "$SELECTED_FILE" 2>/dev/null
+        clear
+        echo -e "\033[1;32m${EAZY_NAME} ${EAZY_VERSION}\033[0m — sessão salva."
+        echo -e "Filas: 1=$(contar_fila 1) · 2=$(contar_fila 2) · 3=$(contar_fila 3)"
+        exit 0
+    elif [ "$tecla" = "ctrl-/" ] || [ "$tecla" = "ctrl-_" ]; then
+        # CTRL-/ (alguns terminais enviam ctrl-_) — liga/desliga preview e persiste
+        toggle_preview_persistente
+        salvar_sessao
+        continue
+    elif [ "$tecla" = "ctrl-l" ]; then
+        # Vai para a pasta do arquivo sob o cursor / seleção
+        alvo_l=$(printf '%s\n' "$escolha" | head -n1 | awk -F '\t' '{print $NF}')
+        [ -z "$alvo_l" ] && continue
+        alvo_l=$(caminho_absoluto "$alvo_l")
+        if [ -d "$alvo_l" ]; then
+            dest_dir="$alvo_l"
+            dest_item=""
+        elif [ -e "$alvo_l" ]; then
+            dest_dir=$(dirname -- "$alvo_l")
+            dest_item=$(basename -- "$alvo_l")
+        else
+            whiptail --title "Ir para pasta" --msgbox "Caminho não encontrado:\n$alvo_l" 9 60
+            continue
+        fi
+        # Sai de modos especiais
+        MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+        MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
+        BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
+        salvar_posicao_dir "$(pwd)" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+        cd "$dest_dir" || true
+        ULTIMO_ARQUIVO="$dest_item"
+        carregar_posicao_dir "$(pwd)"
+        [ -n "$dest_item" ] && ULTIMO_ARQUIVO="$dest_item"
+        ALVO="$(pwd)"
+        ULTIMO_DIR="$(pwd)"
+        TMP=1
+        registrar_status
+        salvar_sessao
+        continue
+    elif [ "$tecla" = "f1" ]; then
+        MODO_ATUAL="tamanho"; continue
+    elif [ "$tecla" = "f2" ]; then
+        MODO_ATUAL="nome"; continue
+    elif [ "$tecla" = "ctrl-t" ]; then
+        MODO_ATUAL="data"; continue
+    elif [ "$tecla" = "f3" ]; then
+        [ "$TELA_ATUAL" = "fs" ] && TELA_ATUAL="janela" || TELA_ATUAL="fs"; continue
+    elif [ "$tecla" = "f4" ]; then
+        FILTRO_ATUAL="audios"; TMP=1; continue
+    elif [ "$tecla" = "f5" ]; then
+        FILTRO_ATUAL="videos"; TMP=1; continue
+    elif [ "$tecla" = "f6" ]; then
+        FILTRO_ATUAL="imgs"; TMP=1; continue
+    elif [ "$tecla" = "f7" ]; then
+        FILTRO_ATUAL="compactados"; TMP=1; continue
+    elif [ "$tecla" = "f8" ]; then
+        if [ "$FILTRO_ATUAL" = "todos" ]; then
+            FILTRO_ATUAL="${FILTRO_ANTERIOR:-ambos}"
+        else
+            FILTRO_ANTERIOR="$FILTRO_ATUAL"
+            FILTRO_ATUAL="todos"
+        fi
+        TMP=1; continue
+    elif [ "$tecla" = "f9" ]; then
+        configurar_defaults; continue
+    elif [ "$tecla" = "f10" ] || [ "$tecla" = "ctrl-h" ]; then
+        exibir_help; continue
+    elif [ "$tecla" = "del" ]; then
+        # DEL: na playlist = só da lista; na tela principal = do disco
+        confirmar_e_excluir "$escolha"; continue
+    elif [ "$tecla" = "alt-d" ]; then
+        # ALT+D: apaga do DISCO (e da playlist, se estiver nela)
+        # (fzf não suporta ctrl-del de forma confiável)
+        confirmar_e_excluir "$escolha" "disco"; continue
+    elif [ "$tecla" = "ctrl-k" ]; then
+        menu_acoes_selecao "$escolha"; continue
+    elif [ "$tecla" = "ctrl-y" ]; then
+        copiar_arquivos "$escolha"; continue
+    elif [ "$tecla" = "ctrl-u" ]; then
+        mover_arquivos "$escolha"; continue
+    elif [ "$tecla" = "ctrl-g" ]; then
+        # Histórico de arquivos tocados
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1
+            ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+        elif [ ! -s "$HISTORY_FILE" ]; then
+            whiptail --title "Histórico" --msgbox "Histórico vazio.\nToque arquivos para ir preenchendo." 9 50
+        else
+            MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+            MODO_PLAYLIST=1
+            ARQUIVO_PLAYLIST_ABERTO="$HISTORY_FILE"
+            TMP=2
+            registrar_status
+        fi
+        continue
+    elif [ "$tecla" = "ctrl-e" ]; then
+        # Shuffle: toca seleção atual (ou fila temp) em ordem aleatória
+        shuf_list="/tmp/eazy_shuf_play_$$"
+        : > "$shuf_list"
+        if [ -n "$escolha" ]; then
+            while IFS= read -r linha; do
+                [ -z "$linha" ] && continue
+                p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+                [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
+                caminho_absoluto "$p" >> "$shuf_list"
+            done <<< "$escolha"
+        fi
+        if [ ! -s "$shuf_list" ] && [ -s "$PLAYLIST_FILE" ]; then
+            grep -v '^#' "$PLAYLIST_FILE" | grep -v '^[[:space:]]*$' > "$shuf_list"
+        fi
+        if [ -s "$shuf_list" ]; then
+            tocar_lista "$shuf_list" shuffle
+        else
+            whiptail --title "Shuffle" --msgbox "Nada para tocar.\nMarque arquivos ou encha a fila (INSERT)." 9 50
+        fi
+        rm -f "$shuf_list"
+        continue
+    elif [ "$tecla" = "ctrl-b" ]; then
+        if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+            MODO_DOWNLOAD=0; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1; registrar_status
+        else
+            escolha_dl=$(whiptail --title "Gerenciador de Downloads" --menu "Escolha a ação:" 12 50 2 \
+                "1" "Ver Fila de Downloads" \
+                "2" "Adicionar Link com Senha" \
+                3>&1 1>&2 2>&3)
+            if [ "$escolha_dl" = "2" ]; then
+                adicionar_download
+            elif [ "$escolha_dl" = "1" ]; then
+                MODO_DOWNLOAD=1; TMP=2; registrar_status
+            fi
+        fi
+        continue
+    elif [ "$tecla" = "ctrl-o" ]; then
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1; registrar_status
+        else
+            # Lista playlists da pasta atual + pasta padrão de playlists
+            mkdir -p "$PLAYLIST_DIR_PADRAO" 2>/dev/null || true
+            playlist_escolhida=$(
+                {
+                    find . -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
+                    if [ -d "$PLAYLIST_DIR_PADRAO" ]; then
+                        find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
+                    fi
+                } | sed 's|^\./||' | sort -u | fzf --prompt="Selecionar Playlist ❯ " --preview='head -20 {}' --preview-window=down:40%
+            )
+            if [ -n "$playlist_escolhida" ]; then
+                # Guarda caminho absoluto do arquivo .m3u
+                if [[ "$playlist_escolhida" == /* ]]; then
+                    ARQUIVO_PLAYLIST_ABERTO="$playlist_escolhida"
+                else
+                    ARQUIVO_PLAYLIST_ABERTO="$(pwd)/$playlist_escolhida"
+                fi
+                if [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
+                    MODO_PLAYLIST=1; TMP=2; registrar_status
+                else
+                    whiptail --title "Erro" --msgbox "Playlist não encontrada:\n$ARQUIVO_PLAYLIST_ABERTO" 9 60
+                fi
+            fi
+        fi
+        continue
+    elif [ "$tecla" = "ctrl-f" ]; then
+        if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+            if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+                MODO_BUSCA=0
+                BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""
+                BUSCA_CONTEUDO=""
+                TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+            else
+                EXT_BUSCA=$(selecionar_extensoes)
+                if [ -n "$EXT_BUSCA" ]; then
+                    if selecionar_tamanho_busca; then
+                        MODO_BUSCA=1; TMP=2; registrar_status
+                    fi
+                fi
+            fi
+        fi
+        continue
+    elif [ "$tecla" = "ctrl-d" ]; then
+        if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_BUSCA:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+            if [ "${MODO_DUP:-0}" -eq 1 ]; then
+                MODO_DUP=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+            else
+                EXT_DUP=$(selecionar_extensoes)
+                if [ -n "$EXT_DUP" ]; then
+                    encontrar_duplicados "$DUP_FILE" "$EXT_DUP"
+                    MODO_DUP=1; TMP=2; registrar_status
+                fi
+            fi
+        fi
+        continue
+    elif [ "$tecla" = "ctrl-s" ]; then
+        salvar_playlist
+        continue
+    elif [ "$tecla" = "insert" ]; then
+        itens_para_fila=$(printf '%s\n' "$escolha" | awk -F '\t' 'NF {print $NF}')
+        if [ -z "$itens_para_fila" ]; then
+            whiptail --title "⚠ NENHUM ARQUIVO SELECIONADO" \
+                --msgbox "Nenhum arquivo selecionado.\nUse TAB ou ESPAÇO para marcar." 8 50
+            continue
+        fi
+        # Pergunta em qual das 3 filas colocar
+        n1=$(contar_fila 1); n2=$(contar_fila 2); n3=$(contar_fila 3)
+        dest_fila=""; dest_file=""
+        dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
+            "Para qual fila enviar os itens?\n(Espaço marca, Enter confirma)" 14 55 3 \
+            "1" "Fila 1  ($n1 itens)" $( [ "$FILA_ATUAL" = "1" ] && echo ON || echo OFF ) \
+            "2" "Fila 2  ($n2 itens)" $( [ "$FILA_ATUAL" = "2" ] && echo ON || echo OFF ) \
+            "3" "Fila 3  ($n3 itens)" $( [ "$FILA_ATUAL" = "3" ] && echo ON || echo OFF ) \
+            3>&1 1>&2 2>&3)
+        [ -z "$dest_fila" ] && continue
+        dest_file="$CONFIG_DIR/temp_playlist_${dest_fila}"
+        touch "$dest_file"
+        quantidade_adicionada=0
+        while IFS= read -r item; do
+            [ -z "$item" ] && continue
+            [[ "$item" =~ \.\.$ ]] && continue
+            item_abs=$(caminho_absoluto "$item")
+            if ! grep -Fxq -- "$item_abs" "$dest_file" 2>/dev/null; then
+                printf '%s\n' "$item_abs" >> "$dest_file"
+                quantidade_adicionada=$((quantidade_adicionada + 1))
+            fi
+        done <<< "$itens_para_fila"
+        total_fila=$(contar_fila "$dest_fila")
+        FILA_ATUAL="$dest_fila"
+        atualizar_fila_atual
+        whiptail --title "✓ Fila $dest_fila" \
+            --msgbox "Adicionados: $quantidade_adicionada\nTotal na Fila $dest_fila: $total_fila" 10 45
+        continue
+    elif [ "$tecla" = "ctrl-p" ]; then
+        # CTRL-P: diretório → Fila1 → Fila2 → Fila3 → diretório
+        MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+        touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
+
+        # Detecta em qual fila está agora (pelo arquivo aberto)
+        local_onde="dir"
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
+            case "$ARQUIVO_PLAYLIST_ABERTO" in
+                *temp_playlist_1) local_onde="1" ;;
+                *temp_playlist_2) local_onde="2" ;;
+                *temp_playlist_3) local_onde="3" ;;
+                *) local_onde="outra" ;;  # histórico / .m3u externo
+            esac
+        fi
+
+        case "$local_onde" in
+            dir|outra)
+                # Pasta (ou outra lista) → Fila 1
+                FILA_ATUAL=1
+                atualizar_fila_atual
+                MODO_PLAYLIST=1
+                ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_1"
+                TMP=1
+                ;;
+            1)
+                FILA_ATUAL=2
+                atualizar_fila_atual
+                MODO_PLAYLIST=1
+                ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_2"
+                TMP=1
+                ;;
+            2)
+                FILA_ATUAL=3
+                atualizar_fila_atual
+                MODO_PLAYLIST=1
+                ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_3"
+                TMP=1
+                ;;
+            3)
+                # Fila 3 → volta ao diretório
+                MODO_PLAYLIST=0
+                ARQUIVO_PLAYLIST_ABERTO=""
+                FILA_ATUAL=1
+                atualizar_fila_atual
+                TMP=1
+                ALVO="$(pwd)"
+                ULTIMO_DIR="$(pwd)"
+                ;;
+        esac
+        registrar_status
+        continue
+    fi
+
+    if [ -z "$escolha" ]; then
+        continue
+    fi
+
+    primeiro_caminho=$(echo "$escolha" | head -n 1 | awk -F '\t' '{print $NF}')
+
+    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
+            MODO_DOWNLOAD=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+        fi
+        link_alvo=$(echo "$escolha" | head -n 1 | awk -F '\t' '{print $NF}')
+        linha_fila=$(grep "|$link_alvo|" "$DOWNLOAD_QUEUE" | head -n 1)
+        engine=$(echo "$linha_fila" | cut -d'|' -f1)
+        pass=$(echo "$linha_fila" | cut -d'|' -f3)
+
+        if [ -z "$pass" ] && [ -f "$DOWNLOAD_PASSWORDS" ]; then
+            pass=$(grep -F "$link_alvo|" "$DOWNLOAD_PASSWORDS" | tail -n1 | cut -d'|' -f2-)
+        fi
+
+        nome_esperado=$(obter_nome_do_link "$link_alvo")
+        dir_antes=$(pwd)
+
+        # Downloads: tamanho remoto costuma ser desconhecido — exige folga mínima no disco
+        {
+            read -r _livre_dl _tot_dl < <(info_disco ".")
+            _livre_dl=$(echo "${_livre_dl:-0}" | tr -cd '0-9'); _livre_dl=${_livre_dl:-0}
+            # Reserva “virtual” de 1 GB para avisar; bloqueio se < mínimo seguro
+            if ! verificar_espaco_disco "$((1024*1024*1024))" "." "Download" \
+                "$((1024*1024*1024))|${link_alvo} (estimativa mínima de reserva)"; then
+                continue
+            fi
+        }
+
+        echo -e "\n\033[1;32m⬇ Iniciando download com [$engine]\033[0m"
+        echo -e "   URL : $link_alvo"
+        if [ "$engine" = "ytdlp" ]; then
+            echo -e "   Formato: ${pass:-best}"
+        elif [ -n "$pass" ]; then
+            echo -e "   Senha: (definida — será usada na extração)"
+        fi
+        echo ""
+
+        status_dl=1
+        case "$engine" in
+            ytdlp)
+                YTDLP_BIN=$(encontrar_ytdlp 2>/dev/null || true)
+                if [ -z "$YTDLP_BIN" ]; then
+                    echo -e "\033[1;31myt-dlp não encontrado.\033[0m"
+                    echo -e "Atualize SEM pip:  eazy --update-ytdlp"
+                    status_dl=1
+                else
+                    # Limpa tracking (?si=...)
+                    link_limpo="${link_alvo%%\?*}"
+                    export PATH="$(dirname "$YTDLP_BIN"):$PATH"
+
+                    fmt="${pass:-best}"
+                    case "$fmt" in
+                        best)  fmt_arg="bv*+ba/b" ;;
+                        1080)  fmt_arg="bv*[height<=1080]+ba/b[height<=1080]/b" ;;
+                        720)   fmt_arg="bv*[height<=720]+ba/b[height<=720]/b" ;;
+                        480)   fmt_arg="bv*[height<=480]+ba/b[height<=480]/b" ;;
+                        audio) fmt_arg="ba/b" ;;
+                        mp4)   fmt_arg="bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv*+ba/b" ;;
+                        *)     fmt_arg="$fmt" ;;
+                    esac
+
+                    out_tpl="%(title).200B [%(id)s].%(ext)s"
+                    echo -e "   Binário: $YTDLP_BIN"
+                    echo -e "   Versão:  $($YTDLP_BIN --version 2>/dev/null || echo '?')"
+                    echo -e "   Se 403/400 →  eazy --update-ytdlp"
+
+                    # aria2c como acelerador (não substitui o yt-dlp)
+                    ARIA_ARGS=()
+                    if command -v aria2c &>/dev/null && [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
+                        ARIA_ARGS=(--downloader aria2c --downloader-args "aria2c:-x 16 -s 16 -k 1M -j 16")
+                        echo -e "   Acelerador: aria2c (multi-conexão)"
+                    fi
+                    echo ""
+
+                    ytdlp_ok=0
+                    if [ "$fmt" = "audio" ]; then
+                        if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
+                            $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 --audio-quality 0 \
+                                --extractor-args "youtube:player_client=android,web" \
+                                --no-playlist --newline --retries 5 \
+                                "${ARIA_ARGS[@]}" \
+                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                        else
+                            $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 \
+                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                        fi
+                    else
+                        if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
+                            $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
+                                --extractor-args "youtube:player_client=android,web" \
+                                --no-playlist --newline --retries 5 --fragment-retries 5 \
+                                "${ARIA_ARGS[@]}" \
+                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                        else
+                            $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
+                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                        fi
+                    fi
+
+                    # Fallback se a 1ª tentativa falhar
+                    if [ "$ytdlp_ok" -eq 0 ] && [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
+                        echo -e "\n\033[1;33mTentando fallback (client web + formato livre)...\033[0m"
+                        if $YTDLP_BIN -f "b/bv+ba" --merge-output-format mp4 \
+                            --extractor-args "youtube:player_client=web" \
+                            --no-playlist --newline --retries 5 \
+                            "${ARIA_ARGS[@]}" \
+                            -o "$out_tpl" "$link_limpo"; then
+                            ytdlp_ok=1
+                        fi
+                    fi
+
+                    if [ "$ytdlp_ok" -eq 1 ]; then
+                        status_dl=0
+                    else
+                        echo -e "\n\033[1;33mAtualize o yt-dlp SEM pip:\033[0m"
+                        echo -e "  eazy --update-ytdlp"
+                        echo -e "  # ou wget o binário do GitHub (ver --help)"
+                        status_dl=1
+                    fi
+                fi
+                ;;
+            aria|axel|wget|*)
+                if eh_url_video_online "$link_alvo"; then
+                    echo -e "\033[1;31mEste link é de vídeo online (YouTube etc.).\033[0m"
+                    echo -e "aria2c sozinho NÃO resolve a URL do YouTube."
+                    echo -e "O eazy usa:  yt-dlp + aria2c (acelerador)."
+                    echo -e "Remova este item e adicione de novo (força yt-dlp)."
+                    echo -e "Atualize:  eazy --update-ytdlp"
+                    status_dl=1
+                elif [ "$engine" = "aria" ]; then
+                    if ! command -v aria2c &>/dev/null; then
+                        echo -e "\033[1;31maria2c não instalado.  sudo apt install aria2\033[0m"
+                    elif aria2c --console-log-level=notice -x 4 -s 4 --auto-file-renaming=false \
+                        --allow-overwrite=true "$link_alvo"; then
+                        status_dl=0
+                    fi
+                elif [ "$engine" = "axel" ]; then
+                    if ! command -v axel &>/dev/null; then
+                        echo -e "\033[1;31maxel não instalado.  sudo apt install axel\033[0m"
+                    elif axel --insecure -n 4 -o "$nome_esperado" "$link_alvo"; then
+                        status_dl=0
+                    fi
+                else
+                    if ! command -v wget &>/dev/null; then
+                        echo -e "\033[1;31mwget não instalado.  sudo apt install wget\033[0m"
+                    elif wget --no-check-certificate -O "$nome_esperado" "$link_alvo"; then
+                        status_dl=0
+                    fi
+                fi
+                ;;
+        esac
+
+        if [ "$status_dl" -ne 0 ]; then
+            echo -e "\n\033[1;31m✗ Download falhou.\033[0m"
+            read -p "Pressione Enter para continuar..."
+            continue
+        fi
+
+        echo -e "\n\033[1;32m✓ Download concluído.\033[0m"
+
+        arquivo_baixado=""
+        if [ "$engine" = "ytdlp" ]; then
+            # Pega o arquivo mais recente da pasta (yt-dlp define o nome)
+            arquivo_baixado=$(find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.opus" \) -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
+        elif [ -f "$nome_esperado" ]; then
+            arquivo_baixado="$nome_esperado"
+        else
+            arquivo_baixado=$(find . -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
+        fi
+
+        if [ -n "$arquivo_baixado" ] && [ -f "$arquivo_baixado" ]; then
+            echo -e "   Arquivo: $arquivo_baixado"
+
+            # Oferece tocar o vídeo baixado com yt-dlp
+            if [ "$engine" = "ytdlp" ]; then
+                read -p "Tocar o arquivo agora? (s/N): " quer_tocar
+                if [[ "$quer_tocar" =~ ^[Ss]$ ]]; then
+                    tocar_arquivo "$arquivo_baixado"
+                fi
+            fi
+
+            ext_baixado=$(echo "${arquivo_baixado##*.}" | tr '[:upper:]' '[:lower:]')
+            if [[ "$ext_baixado" =~ ^(zip|rar|7z|gz|bz2|xz|tar)$ ]] || \
+               [[ "$arquivo_baixado" == *.tar.gz ]] || [[ "$arquivo_baixado" == *.tgz ]] || \
+               [[ "$arquivo_baixado" == *.tar.bz2 ]] || [[ "$arquivo_baixado" == *.tar.xz ]]; then
+
+                if [ -n "$pass" ] && [ "$engine" != "ytdlp" ]; then
+                    echo -e "\033[1;33mArquivo compactado detectado + senha disponível → extraindo...\033[0m"
+                    extrair_com_senha "$arquivo_baixado" "$pass"
+                else
+                    read -p "Arquivo compactado detectado. Deseja extrair agora? (s/N): " quer_extrair
+                    if [[ "$quer_extrair" =~ ^[Ss]$ ]]; then
+                        extrair_com_senha "$arquivo_baixado" ""
+                    fi
+                fi
+            fi
+        else
+            echo -e "\033[1;33mNão foi possível identificar o arquivo baixado automaticamente.\033[0m"
+        fi
+
+        read -p "Remover este item da fila de downloads? (S/n): " remover_fila
+        if [[ ! "$remover_fila" =~ ^[Nn]$ ]]; then
+            grep -v "|$link_alvo|" "$DOWNLOAD_QUEUE" > "${DOWNLOAD_QUEUE}.tmp" && mv "${DOWNLOAD_QUEUE}.tmp" "$DOWNLOAD_QUEUE"
+            echo -e "\033[1;32mItem removido da fila.\033[0m"
+        fi
+
+        read -p "Pressione Enter para continuar..."
+        continue
+    fi
+
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
+        if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+        fi
+
+        # Seleção normal: toca só o que foi marcado / o item sob o cursor
+        playlist_sel="/tmp/eazy_sel_play_$$"
+        : > "$playlist_sel"
+        : > "$SELECTED_FILE"
+        while IFS= read -r linha; do
+            [ -z "$linha" ] && continue
+            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+            [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
+            # Já vem resolvido (absoluto) da listagem
+            printf '%s\n' "$p" >> "$playlist_sel"
+            printf '%s\n' "$p" >> "$SELECTED_FILE"
+        done <<< "$escolha"
+        total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
+        total_sel=$(echo "$total_sel" | tr -cd '0-9')
+        total_sel=${total_sel:-0}
+
+        if [ "$total_sel" -gt 1 ]; then
+            ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
+            registrar_status
+            tocar_lista "$playlist_sel"
+        elif [ "$total_sel" -eq 1 ]; then
+            tocado=$(head -n1 "$playlist_sel")
+            ULTIMO_ARQUIVO="$tocado"
+            registrar_status
+            if [ -f "$tocado" ]; then
+                if eh_arquivo_texto "$tocado"; then
+                    mostrar_texto "$tocado"
+                else
+                    ext="${tocado##*.}"
+                    ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+                    if [[ "$ext" =~ ^(m3u|pls)$ ]]; then
+                        tocar_lista "$tocado"
+                    else
+                        tocar_arquivo "$tocado"
+                    fi
+                fi
+            else
+                whiptail --title "Arquivo ausente" --msgbox "Arquivo não encontrado:\n$tocado" 9 60
+            fi
+        fi
+        rm -f "$playlist_sel"
+        continue
+    fi
+
+    if [ "${MODO_DUP:-0}" -eq 1 ]; then
+        if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
+            MODO_DUP=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+        fi
+        # Extrai caminhos absolutos da seleção atual
+        playlist_sel="/tmp/eazy_sel_play_$$"
+        : > "$playlist_sel"
+        : > "$SELECTED_FILE"
+        while IFS= read -r linha; do
+            [ -z "$linha" ] && continue
+            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+            [ -z "$p" ] && continue
+            p_abs=$(caminho_absoluto "$p")
+            printf '%s\n' "$p_abs" >> "$playlist_sel"
+            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+        done <<< "$escolha"
+        total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
+        total_sel=$(echo "$total_sel" | tr -cd '0-9')
+        total_sel=${total_sel:-0}
+
+        if [ "$total_sel" -gt 1 ]; then
+            ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
+            registrar_status
+            tocar_lista "$playlist_sel"
+        elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
+            ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
+            registrar_status
+            if eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
+                mostrar_texto "$ULTIMO_ARQUIVO"
+            else
+                tocar_arquivo "$ULTIMO_ARQUIVO"
+            fi
+        fi
+        rm -f "$playlist_sel"
+        continue
+    fi
+
+    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
+            MODO_BUSCA=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+        fi
+        playlist_sel="/tmp/eazy_sel_play_$$"
+        : > "$playlist_sel"
+        : > "$SELECTED_FILE"
+        while IFS= read -r linha; do
+            [ -z "$linha" ] && continue
+            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+            [ -z "$p" ] && continue
+            p_abs=$(caminho_absoluto "$p")
+            printf '%s\n' "$p_abs" >> "$playlist_sel"
+            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+        done <<< "$escolha"
+        total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
+        total_sel=$(echo "$total_sel" | tr -cd '0-9')
+        total_sel=${total_sel:-0}
+
+        if [ "$total_sel" -gt 1 ]; then
+            ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
+            registrar_status
+            tocar_lista "$playlist_sel"
+        elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
+            ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
+            registrar_status
+            if eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
+                mostrar_texto "$ULTIMO_ARQUIVO"
+            else
+                tocar_arquivo "$ULTIMO_ARQUIVO"
+            fi
+        fi
+        rm -f "$playlist_sel"
+        continue
+    fi
+
+    if [[ "$primeiro_caminho" =~ \.\.$ ]]; then
+        # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)
+        local_dir_antes=$(pwd)
+        local_nome=$(basename -- "$local_dir_antes")
+        salvar_posicao_dir "$local_dir_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+        cd .. || true
+        carregar_posicao_dir "$(pwd)"
+        # Preferência: cursor no diretório filho de onde viemos
+        ULTIMO_ARQUIVO="$local_nome"
+        ALVO="$(pwd)"
+        ULTIMO_DIR="$(pwd)"
+        registrar_status
+        salvar_sessao
+        continue
+    fi
+
+    if [ -d "$primeiro_caminho" ]; then
+        # Salva posição atual; entra; restaura posição salva da pasta destino
+        salvar_posicao_dir "$(pwd)" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
+        cd "$primeiro_caminho" || true
+        ULTIMO_ARQUIVO=""
+        carregar_posicao_dir "$(pwd)"
+        ALVO="$(pwd)"
+        ULTIMO_DIR="$(pwd)"
+        registrar_status
+        salvar_sessao
+        continue
+    fi
+
+    if [ -f "$primeiro_caminho" ]; then
+        # Extrai caminhos absolutos da seleção (TAB/ESPAÇO)
+        playlist_sel="/tmp/eazy_sel_play_$$"
+        : > "$playlist_sel"
+        : > "$SELECTED_FILE"
+        while IFS= read -r linha; do
+            [ -z "$linha" ] && continue
+            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+            [ -z "$p" ] && continue
+            p_abs=$(caminho_absoluto "$p")
+            printf '%s\n' "$p_abs" >> "$playlist_sel"
+            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+        done <<< "$escolha"
+        total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
+        total_sel=$(echo "$total_sel" | tr -cd '0-9')
+        total_sel=${total_sel:-0}
+
+        if [ "$total_sel" -gt 1 ]; then
+            # Várias marcas → toca todas em sequência
+            ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
+            registrar_status
+            tocar_lista "$playlist_sel"
+        elif [ "$total_sel" -eq 1 ]; then
+            tocado=$(head -n1 "$playlist_sel")
+            ULTIMO_ARQUIVO="$tocado"
+            registrar_status
+            if eh_arquivo_texto "$tocado"; then
+                mostrar_texto "$tocado"
+            else
+                ext="${tocado##*.}"
+                ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
+                if [[ "$ext" =~ ^(m3u|pls)$ ]]; then
+                    tocar_lista "$tocado"
+                else
+                    tocar_arquivo "$tocado"
+                fi
+            fi
+        fi
+        rm -f "$playlist_sel"
+    fi
+done
