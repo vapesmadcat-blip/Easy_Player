@@ -4,11 +4,11 @@ Este diretório contém o empacotamento Debian do **eazy 3.0 (professional)**, u
 
 ## Instalação pelo GitHub Release
 
-Depois que a release `eazy-v3.0-2` estiver publicada, em Debian ou Ubuntu execute:
+Depois que a release `eazy-v3.0-3` estiver publicada, em Debian ou Ubuntu execute:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-2/eazy_3.0-2_all.deb
-sudo apt install ./eazy_3.0-2_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-3/eazy_3.0-3_all.deb
+sudo apt install ./eazy_3.0-3_all.deb
 ```
 
 O `apt` instala automaticamente as dependências declaradas pelo pacote. O comando fica disponível como `eazy`, e o launcher gráfico é instalado em `/usr/share/applications/eazy.desktop`. Ao selecionar um arquivo `.m3u` e pressionar Enter, o eazy abre a playlist no navegador interno.
@@ -42,11 +42,11 @@ chmod +x packaging/build-deb.sh packaging/eazy/build-deb.sh
 ./packaging/build-deb.sh
 ```
 
-O resultado será gerado em `packaging/eazy/dist/eazy_3.0-2_all.deb`. Para inspecionar o pacote sem instalá-lo:
+O resultado será gerado em `packaging/eazy/dist/eazy_3.0-3_all.deb`. Para inspecionar o pacote sem instalá-lo:
 
 ```bash
-dpkg-deb --info packaging/eazy/dist/eazy_3.0-2_all.deb
-dpkg-deb --contents packaging/eazy/dist/eazy_3.0-2_all.deb
+dpkg-deb --info packaging/eazy/dist/eazy_3.0-3_all.deb
+dpkg-deb --contents packaging/eazy/dist/eazy_3.0-3_all.deb
 ```
 
 ## Origem dos arquivos

@@ -146,7 +146,7 @@ Opções:
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
 
 Atalhos principais (dentro do eazy):
-  Enter              Tocar / entrar na pasta
+  Enter              Tocar / entrar na pasta / abrir playlist .m3u
   Tab · Espaço       Marcar itens
   Ctrl-A / X / R     Marcar todos / limpar / inverter
   Insert             Enviar para uma das 3 filas temporárias
@@ -158,6 +158,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações
   Ctrl-L             Ir à pasta do arquivo
+  Ctrl-Backspace     Voltar ao último diretório (Ctrl-H em fzf antigo)
   Ctrl-/             Preview on/off (persiste)
   Del                Apagar (contexto: lista ou disco)
   Alt-D              Apagar do disco (em playlists/filas)
@@ -421,6 +422,7 @@ ARQUIVO_PLAYLIST_ABERTO=""
 ALVO=""
 ULTIMO_ARQUIVO=""
 ULTIMO_DIR=""
+DIRETORIO_ANTERIOR=""
 
 # --- Persistência: posição por diretório ---
 salvar_posicao_dir() {
@@ -459,8 +461,12 @@ salvar_sessao() {
     mkdir -p "$CONFIG_DIR" 2>/dev/null || true
     local cwd
     cwd=$(pwd)
-    # posição atual
-    salvar_posicao_dir "$cwd" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+    # Posição atual: cada playlist tem seu próprio cursor persistente.
+    local posicao_chave="$cwd"
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
+        posicao_chave="$(readlink -f -- "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo "$ARQUIVO_PLAYLIST_ABERTO")"
+    fi
+    salvar_posicao_dir "$posicao_chave" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
     cat > "$SESSION_FILE" <<EOF
 EAZY_CWD=$(printf '%q' "$cwd")
 MODO_ATUAL=$(printf '%q' "${MODO_ATUAL:-tamanho}")
@@ -469,6 +475,7 @@ FILTRO_ANTERIOR=$(printf '%q' "${FILTRO_ANTERIOR:-ambos}")
 TELA_ATUAL=$(printf '%q' "${TELA_ATUAL:-fs}")
 PREVIEW_ATIVO=$(printf '%q' "${PREVIEW_ATIVO:-0}")
 ULTIMO_ARQUIVO=$(printf '%q' "${ULTIMO_ARQUIVO:-}")
+DIRETORIO_ANTERIOR=$(printf '%q' "${DIRETORIO_ANTERIOR:-}")
 TMP=$(printf '%q' "${TMP:-1}")
 EOF
     # preview também no config permanente
@@ -496,6 +503,8 @@ carregar_sessao() {
     TELA_ATUAL="${TELA_ATUAL:-$TELA_PADRAO}"
     PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
     TMP="${TMP:-1}"
+    DIRETORIO_ANTERIOR="${DIRETORIO_ANTERIOR:-}"
+    [ -n "$DIRETORIO_ANTERIOR" ] && [ ! -d "$DIRETORIO_ANTERIOR" ] && DIRETORIO_ANTERIOR=""
     # posição salva da pasta
     carregar_posicao_dir "$(pwd)"
     return 0
@@ -732,7 +741,13 @@ trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null |
 encontrar_posicao() {
     local alvo="$1"
     local lista="$2"
-    echo "$lista" | awk -F'\t' -v a="$alvo" '$NF == a {print NR; exit}'
+    local alvo_abs="" alvo_rel=""
+    alvo_abs=$(readlink -f -- "$alvo" 2>/dev/null || true)
+    if [ -n "$alvo_abs" ]; then
+        alvo_rel="${alvo_abs#"$(pwd -P)/"}"
+    fi
+    printf '%s\n' "$lista" | awk -F '\t' -v a="$alvo" -v aa="$alvo_abs" -v ar="$alvo_rel" \
+        '$NF == a || (aa != "" && $NF == aa) || (ar != "" && $NF == ar) {print NR; exit}'
 }
 
 construir_iname_array() {
@@ -1461,6 +1476,20 @@ registrar_status() {
     printf "%s|%s|%s|%s|%s\n" "${TMP:-1}" "${ALVO:-}" "${ULTIMO_ARQUIVO:-}" "${ULTIMO_DIR:-}" "${MODO_PLAYLIST:-0}" > "$TMP_FILE"
 }
 
+# Sincroniza a posição real do fzf, inclusive Page Down/Page Up/Home/End.
+# {n} é o índice zero-based do item atualmente focado; {2} é a linha inteira.
+eazy_sync_cursor() {
+    local idx="${1:-}" linha="${2:-}" item=""
+    idx=$(printf '%s' "$idx" | LC_ALL=C tr -cd '0-9')
+    [ -n "$idx" ] || return 0
+    TMP=$((idx + 1))
+    if ! eazy_eh_navegacao "$linha"; then
+        item=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+    fi
+    IFS='|' read -r _old_tmp _old_alvo _old_item _old_dir _old_modo < "$TMP_FILE" 2>/dev/null || true
+    printf "%s|%s|%s|%s|%s\n" "$TMP" "${_old_alvo:-$ALVO}" "$item" "${_old_dir:-$ULTIMO_DIR}" "${_old_modo:-${MODO_PLAYLIST:-0}}" > "$TMP_FILE"
+}
+
 obter_lista_rapida() {
     local C_DIR='\033[1;34m'
     local C_VID='\033[1;36m'
@@ -2184,14 +2213,18 @@ eh_playlist_m3u() {
 
 # Abre uma playlist no navegador interno, sem iniciar o player imediatamente.
 abrir_playlist_no_navegador() {
-    local lista="$1"
+    local lista="$1" dir_atual
     [ -f "$lista" ] || return 1
+    dir_atual="$(pwd -P)"
+    salvar_posicao_dir "$dir_atual" "${TMP:-1}" "$(readlink -f -- "$lista" 2>/dev/null || echo "$lista")"
     ARQUIVO_PLAYLIST_ABERTO="$(readlink -f -- "$lista" 2>/dev/null || echo "$lista")"
     MODO_PLAYLIST=1
     MODO_BUSCA=0
     MODO_DUP=0
     MODO_DOWNLOAD=0
-    TMP=2
+    TMP=1
+    ULTIMO_ARQUIVO=""
+    carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
     registrar_status
 }
 
@@ -3134,7 +3167,13 @@ mover_arquivos() {
 registrar_status
 
 # Preview precisa estar exportado para o subprocess do fzf
-export -f eazy_preview eazy_status_header formatar_bytes_label tamanho_caminho info_disco 2>/dev/null || true
+export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco 2>/dev/null || true
+
+# fzf mais novo diferencia Ctrl+Backspace; versões antigas o reportam como Ctrl+H.
+EAZY_FZF_BACKSPACE_EXPECT=""
+if printf '\n' | fzf --filter='' --expect=ctrl-backspace >/dev/null 2>&1; then
+    EAZY_FZF_BACKSPACE_EXPECT="ctrl-backspace,"
+fi
 
 while true; do
     PASTA_ATUAL=$(pwd)
@@ -3287,7 +3326,7 @@ while true; do
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
-        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,ctrl-/,q,X \
+        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
         --delimiter='\t' \
         --with-nth=2,3 \
         --layout=reverse \
@@ -3311,6 +3350,7 @@ while true; do
         --bind="ctrl-x:deselect-all+transform-header(eazy_status_header)" \
         --bind="ctrl-r:toggle-all+transform-header(eazy_status_header {+})" \
         --bind="load:pos($TMP)" \
+        --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
             IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
             TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")
@@ -3365,6 +3405,29 @@ while true; do
         toggle_preview_persistente
         salvar_sessao
         continue
+    elif [ "$tecla" = "ctrl-backspace" ] || [ "$tecla" = "ctrl-bs" ] || [ "$tecla" = "ctrl-h" ]; then
+        # Alterna para o último diretório visitado e preserva os dois cursores.
+        dir_atual="$(pwd -P)"
+        destino_anterior="${DIRETORIO_ANTERIOR:-}"
+        if [ -n "$destino_anterior" ] && [ -d "$destino_anterior" ] && [ "$destino_anterior" != "$dir_atual" ]; then
+            posicao_origem="$dir_atual"
+            if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
+                posicao_origem="$ARQUIVO_PLAYLIST_ABERTO"
+            fi
+            salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+            DIRETORIO_ANTERIOR="$dir_atual"
+            MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
+            BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
+            cd -- "$destino_anterior" || continue
+            ULTIMO_ARQUIVO=""
+            carregar_posicao_dir "$(pwd -P)"
+            ALVO="$(pwd -P)"
+            ULTIMO_DIR="$(pwd -P)"
+            registrar_status
+            salvar_sessao
+        fi
+        continue
     elif [ "$tecla" = "ctrl-l" ]; then
         # Vai para a pasta do arquivo sob o cursor / seleção
         alvo_l=$(printf '%s\n' "$escolha" | head -n1 | awk -F '\t' '{print $NF}')
@@ -3380,11 +3443,17 @@ while true; do
             whiptail --title "Ir para pasta" --msgbox "Caminho não encontrado:\n$alvo_l" 9 60
             continue
         fi
+        dir_atual_antes="$(pwd -P)"
+        origem_posicao="$dir_atual_antes"
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
+            origem_posicao="$ARQUIVO_PLAYLIST_ABERTO"
+        fi
+        salvar_posicao_dir "$origem_posicao" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+        [ "$dest_dir" != "$dir_atual_antes" ] && DIRETORIO_ANTERIOR="$dir_atual_antes"
         # Sai de modos especiais
         MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
         MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
         BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
-        salvar_posicao_dir "$(pwd)" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
         cd "$dest_dir" || true
         ULTIMO_ARQUIVO="$dest_item"
         carregar_posicao_dir "$(pwd)"
@@ -3421,7 +3490,7 @@ while true; do
         TMP=1; continue
     elif [ "$tecla" = "f9" ]; then
         configurar_defaults; continue
-    elif [ "$tecla" = "f10" ] || [ "$tecla" = "ctrl-h" ]; then
+    elif [ "$tecla" = "f10" ]; then
         exibir_help; continue
     elif [ "$tecla" = "del" ]; then
         # DEL: na playlist = só da lista; na tela principal = do disco
@@ -3439,8 +3508,11 @@ while true; do
     elif [ "$tecla" = "ctrl-g" ]; then
         # Histórico de arquivos tocados
         if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
+            salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1
-            ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+            ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"
+            carregar_posicao_dir "$(pwd -P)"
+            registrar_status
         elif [ ! -s "$HISTORY_FILE" ]; then
             whiptail --title "Histórico" --msgbox "Histórico vazio.\nToque arquivos para ir preenchendo." 9 50
         else
@@ -3490,7 +3562,10 @@ while true; do
         continue
     elif [ "$tecla" = "ctrl-o" ]; then
         if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
-            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1; registrar_status
+            salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1
+            carregar_posicao_dir "$(pwd -P)"
+            registrar_status
         else
             # Lista playlists da pasta atual + pasta padrão de playlists
             mkdir -p "$PLAYLIST_DIR_PADRAO" 2>/dev/null || true
@@ -3587,6 +3662,11 @@ while true; do
         continue
     elif [ "$tecla" = "ctrl-p" ]; then
         # CTRL-P: diretório → Fila1 → Fila2 → Fila3 → diretório
+        posicao_origem="$(pwd -P)"
+        if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
+            posicao_origem="$ARQUIVO_PLAYLIST_ABERTO"
+        fi
+        salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
         MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
         touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
 
@@ -3608,21 +3688,24 @@ while true; do
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
                 ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_1"
-                TMP=1
+                TMP=1; ULTIMO_ARQUIVO=""
+                carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             1)
                 FILA_ATUAL=2
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
                 ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_2"
-                TMP=1
+                TMP=1; ULTIMO_ARQUIVO=""
+                carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             2)
                 FILA_ATUAL=3
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
                 ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_3"
-                TMP=1
+                TMP=1; ULTIMO_ARQUIVO=""
+                carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             3)
                 # Fila 3 → volta ao diretório
@@ -3630,7 +3713,8 @@ while true; do
                 ARQUIVO_PLAYLIST_ABERTO=""
                 FILA_ATUAL=1
                 atualizar_fila_atual
-                TMP=1
+                TMP=1; ULTIMO_ARQUIVO=""
+                carregar_posicao_dir "$(pwd -P)"
                 ALVO="$(pwd)"
                 ULTIMO_DIR="$(pwd)"
                 ;;
@@ -3858,7 +3942,11 @@ while true; do
 
     if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
         if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
-            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+            salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"
+            ULTIMO_ARQUIVO=""
+            carregar_posicao_dir "$(pwd -P)"
+            registrar_status; continue
         fi
 
         # Seleção normal: toca só o que foi marcado / o item sob o cursor
@@ -3983,6 +4071,7 @@ while true; do
         local_dir_antes=$(pwd)
         local_nome=$(basename -- "$local_dir_antes")
         salvar_posicao_dir "$local_dir_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+        DIRETORIO_ANTERIOR="$local_dir_antes"
         cd .. || true
         carregar_posicao_dir "$(pwd)"
         # Preferência: cursor no diretório filho de onde viemos
@@ -3996,7 +4085,9 @@ while true; do
 
     if [ -d "$primeiro_caminho" ]; then
         # Salva posição atual; entra; restaura posição salva da pasta destino
-        salvar_posicao_dir "$(pwd)" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
+        dir_atual_antes="$(pwd -P)"
+        salvar_posicao_dir "$dir_atual_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
+        DIRETORIO_ANTERIOR="$dir_atual_antes"
         cd "$primeiro_caminho" || true
         ULTIMO_ARQUIVO=""
         carregar_posicao_dir "$(pwd)"

@@ -1,3 +1,12 @@
+eazy (3.0-3) unstable; urgency=medium
+
+  * Add Ctrl+Backspace navigation to return to the last directory.
+  * Persist actual fzf focus positions, including Page Down and Page Up.
+  * Preserve independent cursor positions for folders and playlists.
+  * Use Ctrl+H as a compatibility fallback on older fzf releases.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-2) unstable; urgency=medium
 
   * Open `.m3u` files in the internal playlist browser when selected with Enter.

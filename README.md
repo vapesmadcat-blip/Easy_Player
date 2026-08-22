@@ -62,6 +62,7 @@ eazy --config
 | Tecla | Ação |
 |-------|------|
 | `Enter` | Tocar / entrar na pasta / abrir playlist `.m3u` |
+| `Ctrl-Backspace` | Voltar ao último diretório |
 | `Tab` / `Espaço` | Marcar |
 | `Insert` | Enviar para fila 1, 2 ou 3 |
 | `Ctrl-P` | Alternar filas 1→2→3→diretório |
