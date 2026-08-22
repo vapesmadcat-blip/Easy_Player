@@ -1,3 +1,12 @@
+eazy (3.0-9) unstable; urgency=medium
+
+  * Keep duplicate selections in a dedicated temporary list across fzf redraws.
+  * Make Ctrl-R invert the current duplicate selection instead of selecting all.
+  * Preserve F12 one-per-group selection, Tab/Space toggling, Ctrl-A, and Ctrl-X
+    through the same persistent selection state.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-8) unstable; urgency=medium
 
   * Mark automatically selected duplicate representatives with a visible checkmark.

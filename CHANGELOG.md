@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0-9
+
+- Lista temporária dedicada para preservar seleções no modo Duplicados durante redesenhos
+- Ctrl-R inverte a seleção atual; Ctrl-A seleciona todos e Ctrl-X limpa todos
+- F12 mantém a seleção de um representante existente por grupo
+- Enter, Insert, apagar, copiar, mover e embaralhar usam a seleção persistente
+
 ## 3.0 — professional
 
 - Identidade de versão e codinome

@@ -4,14 +4,14 @@ Este diretório contém o empacotamento Debian do **eazy 3.0 (professional)**, u
 
 ## Instalação pelo GitHub Release
 
-Depois que a release `eazy-v3.0-8` estiver publicada, em Debian ou Ubuntu execute:
+Depois que a release `eazy-v3.0-9` estiver publicada, em Debian ou Ubuntu execute:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-8/eazy_3.0-8_all.deb
-sudo apt install ./eazy_3.0-8_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-9/eazy_3.0-9_all.deb
+sudo apt install ./eazy_3.0-9_all.deb
 ```
 
-O `apt` instala automaticamente as dependências declaradas pelo pacote. O comando fica disponível como `eazy`, e o launcher gráfico é instalado em `/usr/share/applications/eazy.desktop`. Ao selecionar um arquivo `.m3u` e pressionar Enter, o eazy abre a playlist no navegador interno. O menu F9 também oferece um overview do sistema (OS, RAM, discos, drives, áudio e vídeo) e um teste de som. No modo Duplicados, F12 seleciona automaticamente um arquivo de cada grupo e marca esses itens com ✓. O cabeçalho mostra a quantidade e o total de bytes selecionados. Ctrl-R marca todos os duplicados e atualiza os mesmos totais, enquanto Tab continua disponível para seleção manual.
+O `apt` instala automaticamente as dependências declaradas pelo pacote. O comando fica disponível como `eazy`, e o launcher gráfico é instalado em `/usr/share/applications/eazy.desktop`. Ao selecionar um arquivo `.m3u` e pressionar Enter, o eazy abre a playlist no navegador interno. O menu F9 também oferece um overview do sistema (OS, RAM, discos, drives, áudio e vídeo) e um teste de som. No modo Duplicados, a seleção fica em uma lista temporária persistente: F12 seleciona um arquivo por grupo e marca esses itens com ✓; Tab/Espaço alternam a seleção manual; Ctrl-A seleciona todos; Ctrl-X limpa todos; e Ctrl-R inverte a seleção atual. O cabeçalho mostra continuamente a quantidade e o total de bytes selecionados, mesmo após redesenhos da lista.
 
 Para testar:
 
@@ -42,11 +42,11 @@ chmod +x packaging/build-deb.sh packaging/eazy/build-deb.sh
 ./packaging/build-deb.sh
 ```
 
-O resultado será gerado em `packaging/eazy/dist/eazy_3.0-8_all.deb`. Para inspecionar o pacote sem instalá-lo:
+O resultado será gerado em `packaging/eazy/dist/eazy_3.0-9_all.deb`. Para inspecionar o pacote sem instalá-lo:
 
 ```bash
-dpkg-deb --info packaging/eazy/dist/eazy_3.0-8_all.deb
-dpkg-deb --contents packaging/eazy/dist/eazy_3.0-8_all.deb
+dpkg-deb --info packaging/eazy/dist/eazy_3.0-9_all.deb
+dpkg-deb --contents packaging/eazy/dist/eazy_3.0-9_all.deb
 ```
 
 ## Origem dos arquivos

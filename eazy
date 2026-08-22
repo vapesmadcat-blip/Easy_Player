@@ -533,7 +533,8 @@ Opções:
 Atalhos principais (dentro do eazy):
   Enter              Tocar / entrar na pasta / abrir playlist .m3u
   Tab · Espaço       Marcar itens
-  Ctrl-A / X / R     Marcar todos / limpar / inverter
+  Ctrl-A / Ctrl-X / Ctrl-R
+                      Duplicados: todos / limpar / inverter seleção
   Insert             Enviar para uma das 3 filas temporárias
   Ctrl-P             Alternar Filas 1 → 2 → 3 → diretório
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
@@ -774,6 +775,7 @@ FZF_QUERY=""          # filtro digitado no fzf — persiste até o usuário apag
 TMP=1
 TMP_FILE="/tmp/fzf_tmp_$$"
 DUP_FILE="/tmp/fzf_dup_$$"
+DUP_SELECTED_FILE="/tmp/fzf_dup_selected_$$"
 SELECTED_FILE="/tmp/fzf_selected_$$"
 DUP_MANUAL_FILE="/tmp/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" 2>/dev/null || true
@@ -805,7 +807,6 @@ MODO_PLAYLIST=0
 MODO_BUSCA=0
 MODO_DUP=0
 MODO_DOWNLOAD=0
-DUP_AUTO_SELECTED=0
 ARQUIVO_PLAYLIST_ABERTO=""
 ALVO=""
 ULTIMO_ARQUIVO=""
@@ -1012,7 +1013,7 @@ touch "$DOWNLOAD_QUEUE"
 touch "$DOWNLOAD_PASSWORDS"
 touch "$SELECTED_FILE"
 touch "$HISTORY_FILE"
-export TMP_FILE PLAYLIST_FILE DOWNLOAD_QUEUE DOWNLOAD_PASSWORDS SELECTED_FILE CONFIG_DIR
+export TMP_FILE PLAYLIST_FILE DOWNLOAD_QUEUE DOWNLOAD_PASSWORDS SELECTED_FILE DUP_FILE DUP_SELECTED_FILE DUP_MANUAL_FILE CONFIG_DIR
 LISTA_FZF_FILE="/tmp/eazy_lista_fzf_$$"
 export LISTA_FZF_FILE
 
@@ -1124,7 +1125,7 @@ eazy_lista_filtrada() {
 export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao 2>/dev/null || true
 
 # Salva sessão + limpa cache de busca ao sair
-trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null || true; rm -f "$LISTA_FZF_FILE" 2>/dev/null || true' EXIT INT TERM
+trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null || true; rm -f "$LISTA_FZF_FILE" "$DUP_SELECTED_FILE" "$DUP_SELECTED_FILE.tmp" "$DUP_MANUAL_FILE" 2>/dev/null || true' EXIT INT TERM
 
 encontrar_posicao() {
     local alvo="$1"
@@ -1487,7 +1488,16 @@ eazy_status_header() {
     total_h=$(formatar_bytes_label "$total")
 
     sel_bytes=0
-    if [ "$#" -gt 0 ]; then
+    if [ "${MODO_DUP:-0}" -eq 1 ] && [ -f "${DUP_SELECTED_FILE:-}" ]; then
+        local p t
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            t=$(tamanho_caminho "$p")
+            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
+            sel_bytes=$((sel_bytes + t))
+            sel_count=$((sel_count + 1))
+        done < "$DUP_SELECTED_FILE"
+    elif [ "$#" -gt 0 ]; then
         local p t
         for p in "$@"; do
             [ -z "$p" ] && continue
@@ -1499,15 +1509,6 @@ eazy_status_header() {
             sel_bytes=$((sel_bytes + t))
             sel_count=$((sel_count + 1))
         done
-    elif [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "${SELECTED_FILE:-}" ]; then
-        local p t
-        while IFS= read -r p; do
-            [ -z "$p" ] && continue
-            t=$(tamanho_caminho "$p")
-            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
-            sel_bytes=$((sel_bytes + t))
-            sel_count=$((sel_count + 1))
-        done < "$SELECTED_FILE"
     fi
     sel_h=$(formatar_bytes_label "$sel_bytes")
     printf "HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$livre_h" "$total_h" "$sel_h" "$sel_count"
@@ -1873,7 +1874,7 @@ encontrar_duplicados() {
 selecionar_um_duplicado_por_grupo() {
     local destino="$1" hash tamanho caminho ultimo_hash="" caminho_abs total=0
     : > "$destino"
-    [ -s "${DUP_FILE:-}" ] || return 0
+    [ -s "${DUP_FILE:-}" ] || { printf '%s\n' 0; return 0; }
     while IFS=$'\t' read -r hash tamanho caminho; do
         [ -n "$hash" ] || continue
         [ "$hash" = "$ultimo_hash" ] && continue
@@ -1885,6 +1886,87 @@ selecionar_um_duplicado_por_grupo() {
         fi
     done < "$DUP_FILE"
     printf '%s\n' "$total"
+}
+
+# Estado da lista temporária de seleção do modo Duplicados.
+eazy_dup_path() {
+    local linha="$1" p
+    p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+    [ -n "$p" ] || return 1
+    eazy_eh_navegacao "$linha" && return 1
+    caminho_absoluto "$p"
+}
+
+eazy_dup_normalize_selection() {
+    [ "${MODO_DUP:-0}" -eq 1 ] || return 0
+    local valid="${DUP_SELECTED_FILE}.valid.tmp" normalized="${DUP_SELECTED_FILE}.normalize.tmp"
+    local hash tamanho caminho caminho_abs selecionado
+    : > "$valid"
+    while IFS=$'\t' read -r hash tamanho caminho; do
+        [ -n "${caminho:-}" ] || continue
+        caminho_abs=$(caminho_absoluto "$caminho")
+        [ -f "$caminho_abs" ] && printf '%s\n' "$caminho_abs" >> "$valid"
+    done < "$DUP_FILE"
+    sort -u "$valid" > "$valid.sorted" 2>/dev/null || : > "$valid.sorted"
+    : > "$normalized"
+    while IFS= read -r selecionado; do
+        [ -n "$selecionado" ] || continue
+        if grep -Fxq -- "$selecionado" "$valid.sorted" 2>/dev/null; then
+            printf '%s\n' "$selecionado" >> "$normalized"
+        fi
+    done < "$DUP_SELECTED_FILE" 2>/dev/null || true
+    mv -f -- "$normalized" "$DUP_SELECTED_FILE"
+    rm -f "$valid" "$valid.sorted"
+}
+
+eazy_dup_toggle_path() {
+    [ "${MODO_DUP:-0}" -eq 1 ] || return 0
+    local linha="$1" p tmp
+    eazy_dup_normalize_selection
+    p=$(eazy_dup_path "$linha") || return 0
+    tmp="${DUP_SELECTED_FILE}.tmp"
+    if grep -Fxq -- "$p" "$DUP_SELECTED_FILE" 2>/dev/null; then
+        grep -Fxv -- "$p" "$DUP_SELECTED_FILE" > "$tmp" 2>/dev/null || true
+    else
+        cat "$DUP_SELECTED_FILE" 2>/dev/null > "$tmp" || true
+        printf '%s\n' "$p" >> "$tmp"
+    fi
+    mv -f -- "$tmp" "$DUP_SELECTED_FILE"
+    touch "$DUP_MANUAL_FILE"
+}
+
+eazy_dup_select_all() {
+    [ "${MODO_DUP:-0}" -eq 1 ] || return 0
+    : > "$DUP_SELECTED_FILE"
+    while IFS=$'\t' read -r _hash _size _path; do
+        [ -n "${_path:-}" ] || continue
+        _abs=$(caminho_absoluto "$_path")
+        [ -f "$_abs" ] && printf '%s\n' "$_abs" >> "$DUP_SELECTED_FILE"
+    done < "$DUP_FILE"
+    touch "$DUP_MANUAL_FILE"
+}
+
+eazy_dup_clear_all() {
+    [ "${MODO_DUP:-0}" -eq 1 ] || return 0
+    : > "$DUP_SELECTED_FILE"
+    touch "$DUP_MANUAL_FILE"
+}
+
+eazy_dup_invert() {
+    [ "${MODO_DUP:-0}" -eq 1 ] || return 0
+    eazy_dup_normalize_selection
+    local tmp="${DUP_SELECTED_FILE}.tmp" hash tamanho caminho caminho_abs
+    : > "$tmp"
+    while IFS=$'\t' read -r hash tamanho caminho; do
+        [ -n "${caminho:-}" ] || continue
+        caminho_abs=$(caminho_absoluto "$caminho")
+        [ -f "$caminho_abs" ] || continue
+        if ! grep -Fxq -- "$caminho_abs" "$DUP_SELECTED_FILE" 2>/dev/null; then
+            printf '%s\n' "$caminho_abs" >> "$tmp"
+        fi
+    done < "$DUP_FILE"
+    mv -f -- "$tmp" "$DUP_SELECTED_FILE"
+    touch "$DUP_MANUAL_FILE"
 }
 
 registrar_status() {
@@ -2002,7 +2084,7 @@ obter_lista_rapida() {
             "$C_DIR" "◀ Voltar (Sair de Duplicados)" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
 
         if [ -s "$DUP_FILE" ]; then
-            awk -F'\t' -v c_zip="$C_ZIP" -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v selected_file="$SELECTED_FILE" '
+            awk -F'\t' -v c_zip="$C_ZIP" -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v selected_file="$DUP_SELECTED_FILE" '
             BEGIN {
                 grupo = 0; anterior = ""
                 if (selected_file != "") {
@@ -3589,7 +3671,7 @@ mover_arquivos() {
 registrar_status
 
 # Preview precisa estar exportado para o subprocess do fzf
-export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco 2>/dev/null || true
+export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert 2>/dev/null || true
 
 # fzf mais novo diferencia Ctrl+Backspace; versões antigas o reportam como Ctrl+H.
 EAZY_FZF_BACKSPACE_EXPECT=""
@@ -3679,16 +3761,15 @@ while true; do
         TOTAL_DUP=$(echo "$TOTAL_DUP" | LC_ALL=C tr -cd '0-9')
         TOTAL_DUP=${TOTAL_DUP:-0}
         TEXTO_PROMPT=" 🔁 DUPLICADOS [${EXT_DUP:-todas}] — $TOTAL_DUP arquivo(s) ❯ "
-        DUP_AUTO_INFO=""
-        if [ -s "$SELECTED_FILE" ]; then
-            DUP_AUTO_COUNT=$(grep -c '^' "$SELECTED_FILE" 2>/dev/null || echo 0)
-            DUP_AUTO_BYTES=$(somar_selecao_bytes < "$SELECTED_FILE")
-            DUP_AUTO_BYTES=$(echo "$DUP_AUTO_BYTES" | tr -cd '0-9')
-            DUP_AUTO_BYTES=${DUP_AUTO_BYTES:-0}
-            DUP_AUTO_LABEL=$(formatar_bytes_label "$DUP_AUTO_BYTES")
-            DUP_AUTO_INFO=" | [SEL: ${DUP_AUTO_COUNT} item(ns) / ${DUP_AUTO_LABEL}]"
-        fi
-        EAZY_HEADER_HINT=" [F12]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [CTRL-R]: Marcar todos | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
+        DUP_SEL_COUNT=$(grep -c '^' "$DUP_SELECTED_FILE" 2>/dev/null || echo 0)
+        DUP_SEL_COUNT=$(echo "$DUP_SEL_COUNT" | tr -cd '0-9')
+        DUP_SEL_COUNT=${DUP_SEL_COUNT:-0}
+        DUP_SEL_BYTES=$(somar_selecao_bytes < "$DUP_SELECTED_FILE")
+        DUP_SEL_BYTES=$(echo "$DUP_SEL_BYTES" | tr -cd '0-9')
+        DUP_SEL_BYTES=${DUP_SEL_BYTES:-0}
+        DUP_SEL_LABEL=$(formatar_bytes_label "$DUP_SEL_BYTES")
+        DUP_SEL_INFO=" | [SEL: ${DUP_SEL_COUNT} item(ns) / ${DUP_SEL_LABEL}]"
+        EAZY_HEADER_HINT=" [F12]: 1/grupo$DUP_SEL_INFO | [TAB/ESPACO]: alternar | [CTRL-R]: inverter | [CTRL-A]: todos | [CTRL-X]: nenhum | [ENTER]: usar seleção | [DEL]: apagar HD | [CTRL-Y/U]: copiar/mover | [CTRL-D]: sair "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
@@ -3753,6 +3834,11 @@ while true; do
 
     # Filtro digitado persiste; navegação nunca some e nunca entra nas ações
     # --disabled: o fzf NÃO filtra de novo (senão esconde o ..); quem filtra é eazy_lista_filtrada
+    if [ "${MODO_DUP:-0}" -eq 1 ]; then
+        CTRL_R_BIND='ctrl-r:execute-silent(eazy_dup_invert)+reload(eazy_lista_filtrada '\''{q}'\'')+transform-header(eazy_status_header)'
+    else
+        CTRL_R_BIND='ctrl-r:toggle-all+transform-header(eazy_status_header {+})'
+    fi
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
         --print-query \
@@ -3774,12 +3860,12 @@ while true; do
         --preview='bash -c "eazy_preview \"\$1\"" -- {}' \
         --preview-window="${PREVIEW_WIN}" \
         --bind="change:reload:eazy_lista_filtrada '{q}'" \
-        --bind="tab:toggle+down+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
-        --bind="shift-tab:toggle+up+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
-        --bind="space:toggle+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
-        --bind="ctrl-a:select-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
-        --bind="ctrl-x:deselect-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header)" \
-        --bind="ctrl-r:toggle-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
+        --bind="tab:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+toggle+down+transform-header(eazy_status_header {+})" \
+        --bind="shift-tab:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+toggle+up+transform-header(eazy_status_header {+})" \
+        --bind="space:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+toggle+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-a:execute-silent(eazy_dup_select_all)+select-all+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-x:execute-silent(eazy_dup_clear_all)+deselect-all+transform-header(eazy_status_header)" \
+        --bind="$CTRL_R_BIND" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
@@ -3824,33 +3910,33 @@ while true; do
     fi
 
     if [ "$tecla" = "f12" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
-        : > "$SELECTED_FILE"
-        DUP_AUTO_COUNT=$(selecionar_um_duplicado_por_grupo "$SELECTED_FILE")
-        DUP_AUTO_COUNT=$(echo "$DUP_AUTO_COUNT" | tr -cd '0-9')
-        DUP_AUTO_COUNT=${DUP_AUTO_COUNT:-0}
-        if [ "$DUP_AUTO_COUNT" -gt 0 ]; then
-            DUP_AUTO_SELECTED=1
-            whiptail --title "Duplicados — seleção automática" --msgbox "Selecionado 1 arquivo de cada grupo.\n\nGrupos selecionados: $DUP_AUTO_COUNT\n\nA seleção fica pronta para Enter, Insert, apagar, copiar ou mover." 12 70
+        : > "$DUP_SELECTED_FILE"
+        rm -f "$DUP_MANUAL_FILE"
+        DUP_SEL_COUNT=$(selecionar_um_duplicado_por_grupo "$DUP_SELECTED_FILE")
+        DUP_SEL_COUNT=$(echo "$DUP_SEL_COUNT" | tr -cd '0-9')
+        DUP_SEL_COUNT=${DUP_SEL_COUNT:-0}
+        if [ "$DUP_SEL_COUNT" -gt 0 ]; then
+            whiptail --title "Duplicados — seleção automática" --msgbox "Selecionado 1 arquivo de cada grupo.\n\nGrupos selecionados: $DUP_SEL_COUNT\n\nA seleção fica pronta para Enter, Insert, apagar, copiar ou mover." 12 70
         else
-            DUP_AUTO_SELECTED=0
             whiptail --title "Duplicados" --msgbox "Nenhum grupo duplicado disponível para selecionar." 8 58
         fi
         continue
     fi
 
-    if [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -e "$DUP_MANUAL_FILE" ]; then
-        # Tab/Space/Ctrl-A/X/R passa a ter prioridade sobre F12.
-        DUP_AUTO_SELECTED=0
-        : > "$SELECTED_FILE"
-    elif [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ "$tecla" != "ctrl-d" ]; then
-        # Enter e as ações seguintes usam a seleção automática, não apenas o item focado.
-        escolha=$(cat "$SELECTED_FILE" 2>/dev/null || true)
+    if [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "$DUP_SELECTED_FILE" ]; then
+        case "$tecla" in
+            ""|del|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e|insert)
+                # A lista temporária é a fonte da verdade para tocar, apagar,
+                # copiar, mover, embaralhar e enviar para fila.
+                escolha=$(cat "$DUP_SELECTED_FILE" 2>/dev/null || true)
+                ;;
+        esac
     fi
 
     if [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
         # X / Q / CTRL-Q = sair — salva sessão completa
         salvar_sessao
-        rm -f "$TMP_FILE" "$DUP_FILE" "$SELECTED_FILE" 2>/dev/null
+        rm -f "$TMP_FILE" "$DUP_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE" "$DUP_MANUAL_FILE" 2>/dev/null
         clear
         echo -e "\033[1;32m${EAZY_NAME} ${EAZY_VERSION}\033[0m — sessão salva."
         echo -e "Filas: 1=$(contar_fila 1) · 2=$(contar_fila 2) · 3=$(contar_fila 3)"
@@ -3872,6 +3958,7 @@ while true; do
             salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
             DIRETORIO_ANTERIOR="$dir_atual"
             MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+            rm -f "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE"
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
             cd -- "$destino_anterior" || continue
@@ -3907,6 +3994,7 @@ while true; do
         [ "$dest_dir" != "$dir_atual_antes" ] && DIRETORIO_ANTERIOR="$dir_atual_antes"
         # Sai de modos especiais
         MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+        rm -f "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE"
         MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
         BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
         cd "$dest_dir" || true
@@ -4067,12 +4155,14 @@ while true; do
     elif [ "$tecla" = "ctrl-d" ]; then
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_BUSCA:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
             if [ "${MODO_DUP:-0}" -eq 1 ]; then
-                MODO_DUP=0; DUP_AUTO_SELECTED=0; rm -f "$DUP_MANUAL_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                MODO_DUP=0; rm -f "$DUP_MANUAL_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
             else
                 EXT_DUP=$(selecionar_extensoes)
                 if [ -n "$EXT_DUP" ]; then
                     encontrar_duplicados "$DUP_FILE" "$EXT_DUP"
-                    MODO_DUP=1; TMP=2; registrar_status
+                    : > "$DUP_SELECTED_FILE"
+                    rm -f "$DUP_MANUAL_FILE"
+                    MODO_DUP=1; export MODO_DUP; TMP=2; registrar_status
                 fi
             fi
         fi
@@ -4446,22 +4536,22 @@ while true; do
 
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
         if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
-            MODO_DUP=0; DUP_AUTO_SELECTED=0; rm -f "$DUP_MANUAL_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+            MODO_DUP=0; rm -f "$DUP_MANUAL_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
         fi
-        # Extrai caminhos absolutos da seleção atual; F12 já entrega caminhos prontos.
+        # A lista temporária persistente é a fonte da seleção para todas as ações.
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        if [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -s "$SELECTED_FILE" ] && [ ! -e "$DUP_MANUAL_FILE" ]; then
-            cp -- "$SELECTED_FILE" "$playlist_sel"
+        if [ -s "$DUP_SELECTED_FILE" ]; then
+            cp -- "$DUP_SELECTED_FILE" "$playlist_sel"
         else
-            : > "$SELECTED_FILE"
+            : > "$DUP_SELECTED_FILE"
             while IFS= read -r linha; do
                 [ -z "$linha" ] && continue
                 p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
                 [ -z "$p" ] && continue
                 p_abs=$(caminho_absoluto "$p")
                 printf '%s\n' "$p_abs" >> "$playlist_sel"
-                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+                printf '%s\n' "$p_abs" >> "$DUP_SELECTED_FILE"
             done <<< "$escolha"
         fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)

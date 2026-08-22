@@ -20,7 +20,7 @@ Detecta: **apt**, **pacman**, **dnf**, **zypper**, **apk**.
 
 ```bash
 chmod +x packaging/build-deb.sh && ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-8_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-9_all.deb
 ```
 
 ### Arch / Manjaro
@@ -75,8 +75,10 @@ eazy --config
 | `Del` | Remover (lista ou disco, conforme contexto) |
 | `Alt-D` | Apagar do disco (em playlist/fila) |
 | `F9` | Configuração, overview do sistema e teste de som |
-| `F12` | Duplicados: selecionar automaticamente 1 arquivo por grupo; mostra marca e bytes |
-| `Ctrl-R` | Duplicados: marcar todos e atualizar total de bytes |
+| `F12` | Duplicados: selecionar automaticamente 1 arquivo por grupo; preserva a seleção na lista temporária |
+| `Ctrl-R` | Duplicados: inverter a seleção atual (complemento de todos os arquivos) |
+| `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
+| `Tab` / `Espaço` | Duplicados: alternar a seleção manual do item focado |
 | `Q` | Sair |
 
 ### No mpv
