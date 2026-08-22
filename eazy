@@ -51,8 +51,8 @@ mostrar_overview_sistema() {
     tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-overview.XXXXXX") || return 1
 
     if [ -r /etc/os-release ]; then
-        . /etc/os-release
-        os_name="${PRETTY_NAME:-${NAME:-Linux} ${VERSION_ID:-}}"
+        os_name=$(awk -F= '$1 == "PRETTY_NAME" {gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null)
+        os_name="${os_name:-Linux}"
     else
         os_name="Linux"
     fi
@@ -138,6 +138,239 @@ mostrar_overview_sistema() {
     rm -f "$tmp"
 }
 
+# Overview ampliado: usa ferramentas nativas e aproveita utilitários opcionais quando disponíveis.
+mostrar_overview_sistema_completo() {
+    local tmp os_name kernel desktop data_boot model cpu_count phys_mem swap_total
+    local dev tipo smart_result battery connector
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-overview-full.XXXXXX") || return 1
+
+    if [ -r /etc/os-release ]; then
+        os_name=$(awk -F= '$1 == "PRETTY_NAME" {gsub(/^"|"$/, "", $2); print $2; exit}' /etc/os-release 2>/dev/null)
+        os_name="${os_name:-Linux}"
+    else
+        os_name="Linux"
+    fi
+    kernel=$(uname -srmo 2>/dev/null || echo "indisponível")
+    desktop="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-indisponível}}"
+    local display_server="${XDG_SESSION_TYPE:-}"
+    [ -n "$display_server" ] || display_server="${WAYLAND_DISPLAY:+Wayland}${DISPLAY:+X11}"
+    [ -n "$display_server" ] || display_server="indisponível"
+    data_boot=$(uptime -s 2>/dev/null || echo "indisponível")
+    model=$(awk -F': ' '/^model name[[:space:]]*:/ {print $2; exit}' /proc/cpuinfo 2>/dev/null)
+    model="${model:-indisponível}"
+    cpu_count=$(nproc --all 2>/dev/null || grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo "indisponível")
+    phys_mem=$(awk '/^MemTotal:/ {print $2 " kB"}' /proc/meminfo 2>/dev/null)
+    swap_total=$(awk '/^SwapTotal:/ {print $2 " kB"}' /proc/meminfo 2>/dev/null)
+
+    {
+        printf '%s\n' 'eazy — OVERVIEW COMPLETO DO SISTEMA'
+        printf '%s\n' '========================================'
+        printf 'Gerado em          : %s\n' "$(date '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null || echo indisponível)"
+        printf 'Hostname            : %s\n' "$(hostname 2>/dev/null || echo indisponível)"
+        printf 'Usuário             : %s\n' "${USER:-$(id -un 2>/dev/null || echo indisponível)}"
+        printf 'Sistema operacional : %s\n' "$os_name"
+        printf 'Kernel              : %s\n' "$kernel"
+        printf 'Arquitetura         : %s\n' "$(uname -m 2>/dev/null || echo indisponível)"
+        printf 'Boot                : %s\n' "$data_boot"
+        printf 'Ambiente gráfico    : %s\n' "$desktop"
+        printf 'Display server      : %s\n' "$display_server"
+        printf 'Shell               : %s\n' "${SHELL:-indisponível}"
+        printf 'Locale              : %s\n' "${LANG:-indisponível}"
+        printf 'Uptime              : %s\n' "$(uptime -p 2>/dev/null || uptime 2>/dev/null || echo indisponível)"
+
+        if command -v inxi >/dev/null 2>&1; then
+            printf '\n%s\n' 'RESUMO INXI'
+            inxi -Fazy 2>/dev/null || true
+        fi
+
+        printf '\n%s\n' 'CPU / PROCESSADOR'
+        printf 'Modelo              : %s\n' "$model"
+        printf 'CPUs lógicas        : %s\n' "$cpu_count"
+        if command -v lscpu >/dev/null 2>&1; then
+            lscpu 2>/dev/null | grep -E '^(Architecture|Vendor ID|Model name|CPU family|Model|Thread|Core|Socket|NUMA|CPU max MHz|CPU min MHz|Virtualization)' || true
+        fi
+        if [ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]; then
+            printf 'Governador           : %s\n' "$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null)"
+        fi
+        printf 'Load average        : %s\n' "$(awk '{print $1 " " $2 " " $3}' /proc/loadavg 2>/dev/null || echo indisponível)"
+
+        printf '\n%s\n' 'MEMÓRIA RAM / SWAP'
+        if command -v free >/dev/null 2>&1; then
+            free -h
+        else
+            printf 'RAM total           : %s\n' "${phys_mem:-indisponível}"
+            printf 'Swap total          : %s\n' "${swap_total:-indisponível}"
+        fi
+        if command -v swapon >/dev/null 2>&1; then
+            swapon --show 2>/dev/null || true
+        fi
+
+        printf '\n%s\n' 'PLACA-MÃE / BIOS / FIRMWARE'
+        if command -v dmidecode >/dev/null 2>&1; then
+            for campo in system-manufacturer system-product-name system-version bios-vendor bios-version bios-release-date baseboard-manufacturer baseboard-product-name; do
+                smart_result=$(dmidecode -s "$campo" 2>/dev/null || true)
+                [ -n "$smart_result" ] && printf '%-22s: %s\n' "$campo" "$smart_result"
+            done
+        else
+            printf '%s\n' 'dmidecode não instalado ou sem permissão de leitura.'
+        fi
+
+        printf '\n%s\n' 'HD / SSD / PARTIÇÕES / MONTAGENS'
+        if command -v lsblk >/dev/null 2>&1; then
+            lsblk -e7 -o NAME,PATH,SIZE,TYPE,FSTYPE,FSAVAIL,FSUSE%,MOUNTPOINTS,MODEL,SERIAL,TRAN,RM 2>/dev/null || true
+        else
+            printf '%s\n' 'lsblk não está instalado.'
+        fi
+        if command -v findmnt >/dev/null 2>&1; then
+            printf '\nMontagens:\n'
+            findmnt -D 2>/dev/null | sed -n '1,35p' || true
+        fi
+        printf '\nUso dos sistemas de arquivos:\n'
+        df -hT -x tmpfs -x devtmpfs -x squashfs 2>/dev/null | sed -n '1,35p' || true
+        if command -v smartctl >/dev/null 2>&1 && command -v lsblk >/dev/null 2>&1; then
+            printf '\nSaúde SMART resumida:\n'
+            while read -r dev tipo; do
+                [ "$tipo" = 'disk' ] || continue
+                [ -b "$dev" ] || continue
+                smart_result=$(timeout 4s smartctl -H "$dev" 2>/dev/null | grep -Ei 'overall-health|health status|result' | head -n 1 || true)
+                printf '%s: %s\n' "$dev" "${smart_result:-sem leitura SMART/permissão}"
+            done < <(lsblk -dn -o PATH,TYPE 2>/dev/null)
+        else
+            printf '\nSMART: instale smartmontools para verificar a saúde dos discos.\n'
+        fi
+
+        printf '\n%s\n' 'DRIVES REMOVÍVEIS / USB / PCI'
+        if command -v lsusb >/dev/null 2>&1; then
+            printf '%s\n' 'USB:'
+            lsusb 2>/dev/null || true
+        else
+            printf '%s\n' 'lsusb não está instalado.'
+        fi
+        if command -v lspci >/dev/null 2>&1; then
+            printf '\nPCI relevante e drivers:\n'
+            lspci -nnk 2>/dev/null | awk '/VGA compatible controller|3D controller|Display controller|Audio device|Multimedia audio controller|Network controller|Ethernet controller|USB controller|SATA controller|NVMe controller|Host bridge/ {show=1; n=0} show {print; n++} show && n >= 5 {show=0}' || true
+        else
+            printf '%s\n' 'lspci não está instalado.'
+        fi
+        if command -v lshw >/dev/null 2>&1; then
+            printf '\nHardware resumido via lshw:\n'
+            lshw -sanitize -short 2>/dev/null | sed -n '1,80p' || true
+        fi
+
+        printf '\n%s\n' 'ÁUDIO — SERVIDOR, SAÍDAS, ENTRADAS E MIXER'
+        if command -v wpctl >/dev/null 2>&1; then
+            printf 'Volume padrão: '\''%s'\''\n' "$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null || echo indisponível)"
+            wpctl status 2>/dev/null || true
+        fi
+        if command -v pactl >/dev/null 2>&1; then
+            pactl info 2>/dev/null || true
+            printf '\nSinks:\n'; pactl list short sinks 2>/dev/null || true
+            printf '\nSources:\n'; pactl list short sources 2>/dev/null || true
+        fi
+        if command -v aplay >/dev/null 2>&1; then
+            printf '\nALSA playback:\n'; aplay -l 2>/dev/null || true
+        fi
+        if command -v arecord >/dev/null 2>&1; then
+            printf '\nALSA capture:\n'; arecord -l 2>/dev/null || true
+        fi
+        if command -v amixer >/dev/null 2>&1; then
+            printf '\nControles ALSA:\n'; amixer scontrols 2>/dev/null || true
+        fi
+        if ! command -v wpctl >/dev/null 2>&1 && ! command -v pactl >/dev/null 2>&1 && ! command -v aplay >/dev/null 2>&1; then
+            printf '%s\n' 'Nenhuma ferramenta de áudio encontrada.'
+        fi
+
+        printf '\n%s\n' 'VÍDEO — GPU, DRIVER, OPENGL, VULKAN E MONITORES'
+        if command -v lspci >/dev/null 2>&1; then
+            lspci -nnk 2>/dev/null | awk '/VGA compatible controller|3D controller|Display controller/ {show=1; n=0} show {print; n++} show && n >= 5 {show=0}' || true
+        fi
+        if command -v xrandr >/dev/null 2>&1; then
+            printf '\nMonitores via xrandr:\n'; xrandr --query 2>/dev/null | sed -n '1,30p' || true
+        fi
+        if command -v glxinfo >/dev/null 2>&1; then
+            printf '\nOpenGL:\n'; glxinfo -B 2>/dev/null || true
+        fi
+        if command -v vulkaninfo >/dev/null 2>&1; then
+            printf '\nVulkan:\n'; vulkaninfo --summary 2>/dev/null | sed -n '1,45p' || true
+        fi
+        if [ -d /sys/class/drm ]; then
+            printf '\nMonitores via DRM:\n'
+            for connector in /sys/class/drm/*/status; do
+                [ -f "$connector" ] || continue
+                printf '  %s: %s\n' "$(basename "$(dirname "$connector")")" "$(cat "$connector" 2>/dev/null)"
+            done
+        fi
+        if command -v lsmod >/dev/null 2>&1; then
+            printf '\nMódulos gráficos/áudio:\n'; lsmod | grep -E '^(snd|sof|i915|amdgpu|radeon|nouveau|nvidia|vc4|xe)' | head -40 || true
+        fi
+
+        printf '\n%s\n' 'REDE / INTERNET / INTERFACES'
+        if command -v ip >/dev/null 2>&1; then
+            printf 'Interfaces:\n'; ip -br link 2>/dev/null || true
+            printf '\nEndereços:\n'; ip -br addr 2>/dev/null || true
+            printf '\nRotas:\n'; ip route 2>/dev/null | sed -n '1,20p' || true
+        fi
+        if command -v iw >/dev/null 2>&1; then
+            printf '\nWi-Fi:\n'; iw dev 2>/dev/null || true
+        fi
+        if command -v nmcli >/dev/null 2>&1; then
+            printf '\nNetworkManager:\n'; nmcli -t -f GENERAL.STATE,GENERAL.CONNECTION device show 2>/dev/null || true
+        fi
+        if command -v resolvectl >/dev/null 2>&1; then
+            printf '\nDNS:\n'; resolvectl status 2>/dev/null | sed -n '1,25p' || true
+        fi
+
+        printf '\n%s\n' 'BATERIA / ENERGIA / TEMPERATURA'
+        if command -v upower >/dev/null 2>&1; then
+            upower -e 2>/dev/null | while read -r battery; do
+                [ -n "$battery" ] || continue
+                upower -i "$battery" 2>/dev/null | grep -E 'Device:|native-path:|model:|state:|percentage:|capacity:|time to' || true
+            done
+        fi
+        if [ -d /sys/class/power_supply ]; then
+            for battery in /sys/class/power_supply/*; do
+                [ -d "$battery" ] || continue
+                printf '%s: ' "$(basename "$battery")"
+                [ -r "$battery/status" ] && printf 'status=%s ' "$(cat "$battery/status")"
+                [ -r "$battery/capacity" ] && printf 'capacity=%s%% ' "$(cat "$battery/capacity")"
+                printf '\n'
+            done
+        fi
+        if command -v sensors >/dev/null 2>&1; then
+            printf '\nSensores lm-sensors:\n'; sensors 2>/dev/null || true
+        fi
+        if [ -d /sys/class/thermal ]; then
+            printf '\nZonas térmicas:\n'
+            for zone in /sys/class/thermal/thermal_zone*; do
+                [ -d "$zone" ] || continue
+                printf '  %s: ' "$(basename "$zone")"
+                [ -r "$zone/type" ] && printf '%s ' "$(cat "$zone/type")"
+                [ -r "$zone/temp" ] && awk '{printf "%.1f°C", $1 / 1000}' "$zone/temp"
+                printf '\n'
+            done
+        fi
+
+        printf '\n%s\n' 'PROCESSOS / RECURSOS'
+        ps -eo pid,comm,%cpu,%mem,rss,stat --sort=-%cpu 2>/dev/null | head -n 16 || true
+
+        printf '\n%s\n' 'FERRAMENTAS DO EAZY'
+        for campo in fzf mpv mplayer cvlc ffplay whiptail yt-dlp ffmpeg speaker-test wpctl pactl aplay lspci lsblk; do
+            if command -v "$campo" >/dev/null 2>&1; then
+                printf '%-16s: %s (%s)\n' "$campo" "$(command -v "$campo")" "$("$campo" --version 2>/dev/null | head -n 1 || true)"
+            else
+                printf '%-16s: não instalado\n' "$campo"
+            fi
+        done
+    } > "$tmp"
+
+    if command -v whiptail >/dev/null 2>&1; then
+        whiptail --title "eazy — Overview completo do sistema" --textbox "$tmp" 38 120 --scrolltext
+    else
+        cat "$tmp"
+    fi
+    rm -f "$tmp"
+}
+
 testar_som() {
     local log metodo rc=0 trecho sample encontrou=0
     if ! whiptail --title "Teste de som" --yesno \
@@ -195,7 +428,7 @@ configurar_defaults() {
         "cancel" "Voltar" \
         3>&1 1>&2 2>&3)
     case "$f9_acao" in
-        overview) mostrar_overview_sistema; return ;;
+        overview) mostrar_overview_sistema_completo; return ;;
         sound) testar_som; return ;;
         config) : ;;
         *) return 0 ;;

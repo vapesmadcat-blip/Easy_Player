@@ -1,11 +1,11 @@
 Package: eazy
-Version: 3.0-4
+Version: 3.0-5
 Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
 Depends: bash, fzf, whiptail, gawk, findutils, sed, wget | curl, mpv | mplayer | vlc | ffmpeg
-Suggests: yt-dlp, aria2, axel, chafa, ffmpeg, p7zip-full, rar, pciutils, alsa-utils, pulseaudio-utils
+Suggests: yt-dlp, aria2, axel, chafa, ffmpeg, p7zip-full, rar, pciutils, alsa-utils, pulseaudio-utils, lshw, smartmontools, dmidecode, inxi, usbutils, x11-xserver-utils, mesa-utils, vulkan-tools, iw, network-manager, upower, lm-sensors
 Description: terminal media browser and player
  eazy is a keyboard-driven terminal media browser and player built around
  fzf and a command-line media player. It provides persistent queues,

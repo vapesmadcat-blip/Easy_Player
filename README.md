@@ -20,7 +20,7 @@ Detecta: **apt**, **pacman**, **dnf**, **zypper**, **apk**.
 
 ```bash
 chmod +x packaging/build-deb.sh && ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-4_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-5_all.deb
 ```
 
 ### Arch / Manjaro

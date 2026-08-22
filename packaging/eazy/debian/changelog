@@ -1,3 +1,13 @@
+eazy (3.0-5) unstable; urgency=medium
+
+  * Expand the F9 system overview with CPU, BIOS, firmware, SMART, USB, PCI,
+    GPU, drivers, OpenGL, Vulkan, monitors, network, battery, sensors,
+    processes, and eazy tool versions.
+  * Use optional diagnostic utilities when available and report missing tools
+    without blocking the overview.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-4) unstable; urgency=medium
 
   * Add an F9 system overview with OS, kernel, RAM, disks, removable drives,
