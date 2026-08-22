@@ -1,3 +1,11 @@
+eazy (3.0-7) unstable; urgency=medium
+
+  * Move automatic duplicate-group selection from F11 to F12 because
+    terminal emulators commonly reserve F11 for fullscreen.
+  * Keep F11 available to the terminal and preserve Tab for manual marking.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-6) unstable; urgency=medium
 
   * Add F11 in Duplicados to select one existing file from each duplicate group.
@@ -13,14 +21,5 @@ eazy (3.0-5) unstable; urgency=medium
     processes, and eazy tool versions.
   * Use optional diagnostic utilities when available and report missing tools
     without blocking the overview.
-
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
-
-eazy (3.0-4) unstable; urgency=medium
-
-  * Add an F9 system overview with OS, kernel, RAM, disks, removable drives,
-    audio devices, video devices, graphics drivers, and monitors.
-  * Add an F9 sound test using the first available speaker-test, ffplay,
-    paplay, or canberra-gtk-play method.
 
  -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300

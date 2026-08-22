@@ -548,7 +548,7 @@ Atalhos principais (dentro do eazy):
   Del                Apagar (contexto: lista ou disco)
   Alt-D              Apagar do disco (em playlists/filas)
   F9                 Configuração, overview e teste de som · F10 Ajuda
-  F11                Duplicados: selecionar 1 arquivo por grupo
+  F12                Duplicados: selecionar 1 arquivo por grupo
   Q · X · Ctrl-Q     Sair (salva sessão)
 
 No mpv:
@@ -592,7 +592,7 @@ BUSCA E DISCO
 
 OUTROS
   Ctrl-B downloads · Ctrl-O playlist · Ctrl-G histórico
-  Ctrl-K ações · F9 config/overview/som · F11 1 por grupo (duplicados) · Q sair
+  Ctrl-K ações · F9 config/overview/som · F12 1 por grupo (duplicados) · Q sair
 
 mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
     else
@@ -3667,7 +3667,7 @@ while true; do
             DUP_AUTO_COUNT=$(grep -c '^' "$SELECTED_FILE" 2>/dev/null || echo 0)
             DUP_AUTO_INFO=" | [AUTO: ${DUP_AUTO_COUNT} 1/grupo]"
         fi
-        EAZY_HEADER_HINT=" [F11]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
+        EAZY_HEADER_HINT=" [F12]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
@@ -3736,7 +3736,7 @@ while true; do
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
-        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
+        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
         --delimiter='\t' \
         --with-nth=2,3 \
         --layout=reverse \
@@ -3802,7 +3802,7 @@ while true; do
         TMP=${TMP:-1}
     fi
 
-    if [ "$tecla" = "f11" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
+    if [ "$tecla" = "f12" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
         : > "$SELECTED_FILE"
         DUP_AUTO_COUNT=$(selecionar_um_duplicado_por_grupo "$SELECTED_FILE")
         DUP_AUTO_COUNT=$(echo "$DUP_AUTO_COUNT" | tr -cd '0-9')
@@ -3818,7 +3818,7 @@ while true; do
     fi
 
     if [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -e "$DUP_MANUAL_FILE" ]; then
-        # Tab/Space/Ctrl-A/X/R passa a ter prioridade sobre F11.
+        # Tab/Space/Ctrl-A/X/R passa a ter prioridade sobre F12.
         DUP_AUTO_SELECTED=0
         : > "$SELECTED_FILE"
     elif [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ "$tecla" != "ctrl-d" ]; then
@@ -4427,7 +4427,7 @@ while true; do
         if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
             MODO_DUP=0; DUP_AUTO_SELECTED=0; rm -f "$DUP_MANUAL_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
         fi
-        # Extrai caminhos absolutos da seleção atual; F11 já entrega caminhos prontos.
+        # Extrai caminhos absolutos da seleção atual; F12 já entrega caminhos prontos.
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
         if [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -s "$SELECTED_FILE" ] && [ ! -e "$DUP_MANUAL_FILE" ]; then

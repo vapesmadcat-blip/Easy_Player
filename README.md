@@ -75,7 +75,7 @@ eazy --config
 | `Del` | Remover (lista ou disco, conforme contexto) |
 | `Alt-D` | Apagar do disco (em playlist/fila) |
 | `F9` | Configuração, overview do sistema e teste de som |
-| `F11` | Duplicados: selecionar automaticamente 1 arquivo por grupo |
+| `F12` | Duplicados: selecionar automaticamente 1 arquivo por grupo |
 | `Q` | Sair |
 
 ### No mpv
