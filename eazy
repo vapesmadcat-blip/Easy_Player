@@ -45,9 +45,161 @@ fi
 PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
 SEM_AUDIO="${SEM_AUDIO:-0}"
 
+# --- DIAGNÓSTICO DO SISTEMA (DISPONÍVEL DENTRO DO F9) ---
+mostrar_overview_sistema() {
+    local tmp os_name kernel desktop PRETTY_NAME NAME VERSION_ID
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-overview.XXXXXX") || return 1
+
+    if [ -r /etc/os-release ]; then
+        . /etc/os-release
+        os_name="${PRETTY_NAME:-${NAME:-Linux} ${VERSION_ID:-}}"
+    else
+        os_name="Linux"
+    fi
+    kernel=$(uname -srmo 2>/dev/null || echo "indisponível")
+    desktop="${XDG_CURRENT_DESKTOP:-${DESKTOP_SESSION:-indisponível}}"
+
+    {
+        printf '%s\n' 'eazy — OVERVIEW DO SISTEMA'
+        printf '%s\n' '========================================'
+        printf 'Sistema operacional : %s\n' "$os_name"
+        printf 'Kernel              : %s\n' "$kernel"
+        printf 'Hostname            : %s\n' "$(hostname 2>/dev/null || echo indisponível)"
+        printf 'Ambiente gráfico    : %s\n' "$desktop"
+        printf 'Shell               : %s\n' "${SHELL:-indisponível}"
+        printf '\n%s\n' 'MEMÓRIA RAM'
+        if command -v free >/dev/null 2>&1; then
+            free -h
+        elif [ -r /proc/meminfo ]; then
+            grep -E '^(MemTotal|MemAvailable|SwapTotal|SwapFree):' /proc/meminfo
+        else
+            printf '%s\n' 'Informação indisponível.'
+        fi
+
+        printf '\n%s\n' 'HD / ARMAZENAMENTO'
+        if command -v lsblk >/dev/null 2>&1; then
+            lsblk -e7 -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS,MODEL 2>/dev/null || true
+        else
+            printf '%s\n' 'lsblk não está instalado.'
+        fi
+        printf '\n%s\n' 'USO DOS SISTEMAS DE ARQUIVOS'
+        if command -v df >/dev/null 2>&1; then
+            df -hT -x tmpfs -x devtmpfs -x squashfs 2>/dev/null | sed -n '1,20p'
+        fi
+        printf '\n%s\n' 'DRIVES REMOVÍVEIS / INTERFACE'
+        if command -v lsblk >/dev/null 2>&1; then
+            lsblk -e7 -o NAME,TRAN,RM,SIZE,TYPE,MOUNTPOINTS 2>/dev/null | awk 'NR == 1 || $3 == "1" || $2 != ""'
+        else
+            printf '%s\n' 'Informação indisponível.'
+        fi
+
+        printf '\n%s\n' 'ÁUDIO — SERVIDOR, SAÍDAS E ENTRADAS'
+        if command -v wpctl >/dev/null 2>&1; then
+            wpctl status 2>/dev/null || true
+        elif command -v pactl >/dev/null 2>&1; then
+            pactl info 2>/dev/null || true
+            pactl list short sinks 2>/dev/null || true
+            pactl list short sources 2>/dev/null || true
+        elif command -v aplay >/dev/null 2>&1 || command -v arecord >/dev/null 2>&1; then
+            command -v aplay >/dev/null 2>&1 && aplay -l 2>/dev/null || true
+            command -v arecord >/dev/null 2>&1 && arecord -l 2>/dev/null || true
+        else
+            printf '%s\n' 'Nenhuma ferramenta de áudio encontrada.'
+        fi
+
+        printf '\n%s\n' 'VÍDEO — GPU, DRIVER E MONITORES'
+        if command -v lspci >/dev/null 2>&1; then
+            lspci -nnk 2>/dev/null | awk '
+                /Audio device|Multimedia audio controller|VGA compatible controller|3D controller|Display controller/ {show=1; n=0}
+                show {print; n++}
+                show && n >= 4 {show=0}
+            '
+        else
+            printf '%s\n' 'lspci não está instalado.'
+        fi
+        if [ -d /sys/class/drm ]; then
+            printf '\nMonitores detectados:\n'
+            for connector in /sys/class/drm/*/status; do
+                [ -f "$connector" ] || continue
+                printf '  %s: %s\n' "$(basename "$(dirname "$connector")")" "$(cat "$connector" 2>/dev/null)"
+            done
+        fi
+        if command -v lsmod >/dev/null 2>&1; then
+            printf '\nMódulos gráficos/áudio carregados:\n'
+            lsmod | grep -E '^(snd|sof|i915|amdgpu|radeon|nouveau|nvidia|vc4|xe)' | head -30 || true
+        fi
+    } > "$tmp"
+
+    if command -v whiptail >/dev/null 2>&1; then
+        whiptail --title "eazy — Overview do sistema" --textbox "$tmp" 32 112 --scrolltext
+    else
+        cat "$tmp"
+    fi
+    rm -f "$tmp"
+}
+
+testar_som() {
+    local log metodo rc=0 trecho sample encontrou=0
+    if ! whiptail --title "Teste de som" --yesno \
+        "Será emitido um tom de teste de 440 Hz pelos dispositivos de saída.\n\nDeseja continuar?" 10 68; then
+        return 0
+    fi
+
+    log=$(mktemp "${TMPDIR:-/tmp}/eazy-sound-test.XXXXXX") || return 1
+    if command -v speaker-test >/dev/null 2>&1; then
+        metodo="ALSA speaker-test"
+        timeout 5s speaker-test -t sine -f 440 -l 1 -s 1 >"$log" 2>&1 || rc=$?
+    elif command -v ffplay >/dev/null 2>&1; then
+        metodo="FFmpeg ffplay"
+        ffplay -f lavfi -i 'sine=frequency=440:duration=2' -nodisp -autoexit -loglevel error >"$log" 2>&1 || rc=$?
+    elif command -v paplay >/dev/null 2>&1; then
+        metodo="PulseAudio/PipeWire paplay"
+        for sample in /usr/share/sounds/freedesktop/stereo/bell.oga /usr/share/sounds/freedesktop/stereo/message.oga /usr/share/sounds/gnome/default/alerts/glass.ogg; do
+            if [ -f "$sample" ]; then
+                encontrou=1
+                paplay "$sample" >"$log" 2>&1 || rc=$?
+                break
+            fi
+        done
+        [ "$encontrou" -eq 1 ] || { rc=127; printf '%s\n' 'Nenhum arquivo de som do sistema foi encontrado.' >"$log"; }
+    elif command -v canberra-gtk-play >/dev/null 2>&1; then
+        metodo="libcanberra"
+        canberra-gtk-play -i bell >"$log" 2>&1 || rc=$?
+    else
+        metodo="indisponível"
+        rc=127
+        printf '%s\n' 'Nenhum método de teste encontrado (speaker-test, ffplay, paplay ou canberra-gtk-play).' >"$log"
+    fi
+
+    trecho=$(tail -n 8 "$log" 2>/dev/null)
+    if [ "$rc" -eq 0 ]; then
+        whiptail --title "Teste de som — concluído" --msgbox "Método: $metodo\n\nO teste foi enviado ao dispositivo de saída.\n\n$trecho" 16 82
+    elif [ "$rc" -eq 124 ]; then
+        whiptail --title "Teste de som — verificação" --msgbox "Método: $metodo\n\nO teste foi interrompido após 5 segundos. Verifique se o tom foi ouvido.\n\n$trecho" 16 82
+    else
+        whiptail --title "Teste de som — erro" --msgbox "Método: $metodo\n\nNão foi possível concluir o teste (código $rc).\nVerifique a saída de som e as ferramentas instaladas.\n\n$trecho" 18 82
+    fi
+    rm -f "$log"
+}
+
 # --- FUNÇÃO DE CONFIGURAÇÃO (WIZARD WHIPTAIL) ---
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
+
+    local f9_acao
+    f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \
+        --menu "Escolha uma opção:" 16 78 4 \
+        "config" "Configurar o eazy" \
+        "overview" "Overview do sistema" \
+        "sound" "Teste de som" \
+        "cancel" "Voltar" \
+        3>&1 1>&2 2>&3)
+    case "$f9_acao" in
+        overview) mostrar_overview_sistema; return ;;
+        sound) testar_som; return ;;
+        config) : ;;
+        *) return 0 ;;
+    esac
 
     local nova_tela
     nova_tela=$(whiptail --title "Configuração: Modo de Tela" \
@@ -162,7 +314,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-/             Preview on/off (persiste)
   Del                Apagar (contexto: lista ou disco)
   Alt-D              Apagar do disco (em playlists/filas)
-  F9                 Configuração · F10 Ajuda
+  F9                 Configuração, overview e teste de som · F10 Ajuda
   Q · X · Ctrl-Q     Sair (salva sessão)
 
 No mpv:
@@ -206,7 +358,7 @@ BUSCA E DISCO
 
 OUTROS
   Ctrl-B downloads · Ctrl-O playlist · Ctrl-G histórico
-  Ctrl-K ações · F9 config · Q sair
+  Ctrl-K ações · F9 config/overview/som · Q sair
 
 mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
     else

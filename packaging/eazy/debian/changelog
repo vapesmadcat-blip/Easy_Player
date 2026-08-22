@@ -1,3 +1,14 @@
+eazy (3.0-4) unstable; urgency=medium
+
+  * Add an F9 system overview with OS, kernel, RAM, disks, removable drives,
+    audio devices, video devices, graphics drivers, and monitors.
+  * Add an F9 sound test using the first available speaker-test, ffplay,
+    paplay, or canberra-gtk-play method.
+  * Keep the overview and sound test available without changing the normal
+    configuration flow.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-3) unstable; urgency=medium
 
   * Add Ctrl+Backspace navigation to return to the last directory.

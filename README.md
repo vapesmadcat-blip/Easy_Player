@@ -20,7 +20,7 @@ Detecta: **apt**, **pacman**, **dnf**, **zypper**, **apk**.
 
 ```bash
 chmod +x packaging/build-deb.sh && ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-2_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-4_all.deb
 ```
 
 ### Arch / Manjaro
@@ -74,7 +74,7 @@ eazy --config
 | `Ctrl-/` | Preview on/off |
 | `Del` | Remover (lista ou disco, conforme contexto) |
 | `Alt-D` | Apagar do disco (em playlist/fila) |
-| `F9` | Configuração |
+| `F9` | Configuração, overview do sistema e teste de som |
 | `Q` | Sair |
 
 ### No mpv
