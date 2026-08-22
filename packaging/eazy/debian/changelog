@@ -1,3 +1,11 @@
+eazy (3.0-6) unstable; urgency=medium
+
+  * Add F11 in Duplicados to select one existing file from each duplicate group.
+  * Keep Tab, Space, Ctrl-A, Ctrl-X, and Ctrl-R available for manual selection.
+  * Show the number of automatically selected representatives in the header.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
+
 eazy (3.0-5) unstable; urgency=medium
 
   * Expand the F9 system overview with CPU, BIOS, firmware, SMART, USB, PCI,
@@ -14,30 +22,5 @@ eazy (3.0-4) unstable; urgency=medium
     audio devices, video devices, graphics drivers, and monitors.
   * Add an F9 sound test using the first available speaker-test, ffplay,
     paplay, or canberra-gtk-play method.
-  * Keep the overview and sound test available without changing the normal
-    configuration flow.
-
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
-
-eazy (3.0-3) unstable; urgency=medium
-
-  * Add Ctrl+Backspace navigation to return to the last directory.
-  * Persist actual fzf focus positions, including Page Down and Page Up.
-  * Preserve independent cursor positions for folders and playlists.
-  * Use Ctrl+H as a compatibility fallback on older fzf releases.
-
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
-
-eazy (3.0-2) unstable; urgency=medium
-
-  * Open `.m3u` files in the internal playlist browser when selected with Enter.
-  * Keep direct playback available from the playlist view and existing actions.
-
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300
-
-eazy (3.0-1) unstable; urgency=medium
-
-  * Initial Debian package for eazy 3.0 professional.
-  * Install the terminal application, desktop launcher, and documentation.
 
  -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 22 Aug 2026 00:00:00 -0300

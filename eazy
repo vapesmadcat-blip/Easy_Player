@@ -548,6 +548,7 @@ Atalhos principais (dentro do eazy):
   Del                Apagar (contexto: lista ou disco)
   Alt-D              Apagar do disco (em playlists/filas)
   F9                 Configuração, overview e teste de som · F10 Ajuda
+  F11                Duplicados: selecionar 1 arquivo por grupo
   Q · X · Ctrl-Q     Sair (salva sessão)
 
 No mpv:
@@ -591,7 +592,7 @@ BUSCA E DISCO
 
 OUTROS
   Ctrl-B downloads · Ctrl-O playlist · Ctrl-G histórico
-  Ctrl-K ações · F9 config/overview/som · Q sair
+  Ctrl-K ações · F9 config/overview/som · F11 1 por grupo (duplicados) · Q sair
 
 mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
     else
@@ -774,6 +775,7 @@ TMP=1
 TMP_FILE="/tmp/fzf_tmp_$$"
 DUP_FILE="/tmp/fzf_dup_$$"
 SELECTED_FILE="/tmp/fzf_selected_$$"
+DUP_MANUAL_FILE="/tmp/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" 2>/dev/null || true
 # Migra fila legada e garante 3 filas
 [ -f "$PLAYLIST_PERSISTENTE" ] && [ ! -f "$PLAYLIST_1" ] && mv "$PLAYLIST_PERSISTENTE" "$PLAYLIST_1" 2>/dev/null || true
@@ -803,6 +805,7 @@ MODO_PLAYLIST=0
 MODO_BUSCA=0
 MODO_DUP=0
 MODO_DOWNLOAD=0
+DUP_AUTO_SELECTED=0
 ARQUIVO_PLAYLIST_ABERTO=""
 ALVO=""
 ULTIMO_ARQUIVO=""
@@ -1855,6 +1858,23 @@ encontrar_duplicados() {
     sort -t $'\t' -k1,1 -o "$saida" "$saida" 2>/dev/null
 
     rm -f "$tmp_all" "$tmp_sizes" "$tmp_hashes" "$tmp_hashdup"
+}
+
+selecionar_um_duplicado_por_grupo() {
+    local destino="$1" hash tamanho caminho ultimo_hash="" caminho_abs total=0
+    : > "$destino"
+    [ -s "${DUP_FILE:-}" ] || return 0
+    while IFS=$'\t' read -r hash tamanho caminho; do
+        [ -n "$hash" ] || continue
+        [ "$hash" = "$ultimo_hash" ] && continue
+        ultimo_hash="$hash"
+        caminho_abs=$(caminho_absoluto "$caminho")
+        if [ -f "$caminho_abs" ]; then
+            printf '%s\n' "$caminho_abs" >> "$destino"
+            total=$((total + 1))
+        fi
+    done < "$DUP_FILE"
+    printf '%s\n' "$total"
 }
 
 registrar_status() {
@@ -3642,7 +3662,12 @@ while true; do
         TOTAL_DUP=$(echo "$TOTAL_DUP" | LC_ALL=C tr -cd '0-9')
         TOTAL_DUP=${TOTAL_DUP:-0}
         TEXTO_PROMPT=" 🔁 DUPLICADOS [${EXT_DUP:-todas}] — $TOTAL_DUP arquivo(s) ❯ "
-        EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
+        DUP_AUTO_INFO=""
+        if [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -s "$SELECTED_FILE" ]; then
+            DUP_AUTO_COUNT=$(grep -c '^' "$SELECTED_FILE" 2>/dev/null || echo 0)
+            DUP_AUTO_INFO=" | [AUTO: ${DUP_AUTO_COUNT} 1/grupo]"
+        fi
+        EAZY_HEADER_HINT=" [F11]: Selecionar 1/grupo$DUP_AUTO_INFO | [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [DEL]: Apagar HD | [CTRL-Y/U]: Copiar/Mover | [CTRL-D]: Sair "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
@@ -3711,7 +3736,7 @@ while true; do
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
-        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
+        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
         --delimiter='\t' \
         --with-nth=2,3 \
         --layout=reverse \
@@ -3728,12 +3753,12 @@ while true; do
         --preview='bash -c "eazy_preview \"\$1\"" -- {}' \
         --preview-window="${PREVIEW_WIN}" \
         --bind="change:reload:eazy_lista_filtrada '{q}'" \
-        --bind="tab:toggle+down+transform-header(eazy_status_header {+})" \
-        --bind="shift-tab:toggle+up+transform-header(eazy_status_header {+})" \
-        --bind="space:toggle+transform-header(eazy_status_header {+})" \
-        --bind="ctrl-a:select-all+transform-header(eazy_status_header {+})" \
-        --bind="ctrl-x:deselect-all+transform-header(eazy_status_header)" \
-        --bind="ctrl-r:toggle-all+transform-header(eazy_status_header {+})" \
+        --bind="tab:toggle+down+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
+        --bind="shift-tab:toggle+up+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
+        --bind="space:toggle+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-a:select-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
+        --bind="ctrl-x:deselect-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header)" \
+        --bind="ctrl-r:toggle-all+execute-silent(touch '$DUP_MANUAL_FILE')+transform-header(eazy_status_header {+})" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
@@ -3775,6 +3800,30 @@ while true; do
         IFS='|' read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PLAYLIST < "$TMP_FILE"
         TMP=$(echo "$TMP" | LC_ALL=C tr -cd '0-9')
         TMP=${TMP:-1}
+    fi
+
+    if [ "$tecla" = "f11" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
+        : > "$SELECTED_FILE"
+        DUP_AUTO_COUNT=$(selecionar_um_duplicado_por_grupo "$SELECTED_FILE")
+        DUP_AUTO_COUNT=$(echo "$DUP_AUTO_COUNT" | tr -cd '0-9')
+        DUP_AUTO_COUNT=${DUP_AUTO_COUNT:-0}
+        if [ "$DUP_AUTO_COUNT" -gt 0 ]; then
+            DUP_AUTO_SELECTED=1
+            whiptail --title "Duplicados — seleção automática" --msgbox "Selecionado 1 arquivo de cada grupo.\n\nGrupos selecionados: $DUP_AUTO_COUNT\n\nA seleção fica pronta para Enter, Insert, apagar, copiar ou mover." 12 70
+        else
+            DUP_AUTO_SELECTED=0
+            whiptail --title "Duplicados" --msgbox "Nenhum grupo duplicado disponível para selecionar." 8 58
+        fi
+        continue
+    fi
+
+    if [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -e "$DUP_MANUAL_FILE" ]; then
+        # Tab/Space/Ctrl-A/X/R passa a ter prioridade sobre F11.
+        DUP_AUTO_SELECTED=0
+        : > "$SELECTED_FILE"
+    elif [ "${MODO_DUP:-0}" -eq 1 ] && [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ "$tecla" != "ctrl-d" ]; then
+        # Enter e as ações seguintes usam a seleção automática, não apenas o item focado.
+        escolha=$(cat "$SELECTED_FILE" 2>/dev/null || true)
     fi
 
     if [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
@@ -3997,7 +4046,7 @@ while true; do
     elif [ "$tecla" = "ctrl-d" ]; then
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_BUSCA:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
             if [ "${MODO_DUP:-0}" -eq 1 ]; then
-                MODO_DUP=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                MODO_DUP=0; DUP_AUTO_SELECTED=0; rm -f "$DUP_MANUAL_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
             else
                 EXT_DUP=$(selecionar_extensoes)
                 if [ -n "$EXT_DUP" ]; then
@@ -4376,20 +4425,24 @@ while true; do
 
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
         if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
-            MODO_DUP=0; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+            MODO_DUP=0; DUP_AUTO_SELECTED=0; rm -f "$DUP_MANUAL_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
         fi
-        # Extrai caminhos absolutos da seleção atual
+        # Extrai caminhos absolutos da seleção atual; F11 já entrega caminhos prontos.
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        : > "$SELECTED_FILE"
-        while IFS= read -r linha; do
-            [ -z "$linha" ] && continue
-            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-            [ -z "$p" ] && continue
-            p_abs=$(caminho_absoluto "$p")
-            printf '%s\n' "$p_abs" >> "$playlist_sel"
-            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
-        done <<< "$escolha"
+        if [ "${DUP_AUTO_SELECTED:-0}" -eq 1 ] && [ -s "$SELECTED_FILE" ] && [ ! -e "$DUP_MANUAL_FILE" ]; then
+            cp -- "$SELECTED_FILE" "$playlist_sel"
+        else
+            : > "$SELECTED_FILE"
+            while IFS= read -r linha; do
+                [ -z "$linha" ] && continue
+                p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+                [ -z "$p" ] && continue
+                p_abs=$(caminho_absoluto "$p")
+                printf '%s\n' "$p_abs" >> "$playlist_sel"
+                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            done <<< "$escolha"
+        fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
         total_sel=${total_sel:-0}
