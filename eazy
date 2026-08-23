@@ -1,24 +1,91 @@
 #!/usr/bin/env bash
-# eazy — bootstrap temporário de recuperação
-# O arquivo completo foi restaurado incorretamente; baixe a versão boa:
-#   curl -L -o eazy https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/eazy-v3.0-9/eazy
-#   chmod +x eazy
-# Ou: git checkout eazy-v3.0-9 -- eazy
+# eazy — restaura v3.0-9 + patches (Ctrl-A sem ..; seleção até limpar/mudar pasta)
 set -euo pipefail
-TAG_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/eazy-v3.0-9/eazy"
 SELF="$(readlink -f "$0" 2>/dev/null || realpath "$0" 2>/dev/null || echo "$0")"
-DIR="$(cd "$(dirname "$SELF")" && pwd)"
-TARGET="$DIR/eazy"
-echo "eazy: recuperando versão eazy-v3.0-9…" >&2
+URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/eazy-v3.0-9/eazy"
+TMP="${TMPDIR:-/tmp}/eazy_restore_$$"
+echo "eazy: baixando base eazy-v3.0-9 e aplicando patches…" >&2
 if command -v curl >/dev/null 2>&1; then
-  curl -fsSL -o "$TARGET.tmp" "$TAG_URL"
+  curl -fsSL -o "$TMP" "$URL"
 elif command -v wget >/dev/null 2>&1; then
-  wget -q -O "$TARGET.tmp" "$TAG_URL"
+  wget -q -O "$TMP" "$URL"
 else
-  echo "Instale curl ou wget, ou: git checkout eazy-v3.0-9 -- eazy" >&2
+  echo "Precisa de curl/wget ou: git checkout eazy-v3.0-9 -- eazy" >&2
   exit 1
 fi
-mv -f "$TARGET.tmp" "$TARGET"
-chmod +x "$TARGET"
-echo "OK. Reexecutando…" >&2
-exec "$TARGET" "$@"
+python3 - "$TMP" "$SELF" <<'PY'
+import pathlib, sys
+src, dest = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+t = src.read_text()
+repls = [
+(
+    "    if [ \"${MODO_DUP:-0}\" -eq 1 ]; then\n"
+    "        CTRL_R_BIND='ctrl-r:execute-silent(eazy_dup_invert)+reload(eazy_lista_filtrada '\\''{q}'\\'')+transform-header(eazy_status_header)'\n"
+    "    else\n"
+    "        CTRL_R_BIND='ctrl-r:toggle-all+transform-header(eazy_status_header {+})'\n"
+    "    fi",
+    "    if [ \"${MODO_DUP:-0}\" -eq 1 ]; then\n"
+    "        # invert + reload: marcadores ✓ vêm de DUP_SELECTED_FILE; .. nunca entra\n"
+    "        CTRL_R_BIND='ctrl-r:execute-silent(eazy_dup_invert)+reload(eazy_lista_filtrada '\\''{q}'\\'')+deselect-all+transform-header(eazy_status_header)'\n"
+    "        # select-all + first + deselect: remove a linha de navegação (..) da seleção do fzf\n"
+    "        CTRL_A_BIND='ctrl-a:execute-silent(eazy_dup_select_all)+select-all+first+deselect+transform-header(eazy_status_header {+})'\n"
+    "        CTRL_X_BIND='ctrl-x:execute-silent(eazy_dup_clear_all)+deselect-all+transform-header(eazy_status_header)'\n"
+    "    else\n"
+    "        # toggle-all / select-all nunca devem incluir .. (sempre a 1ª linha)\n"
+    "        CTRL_R_BIND='ctrl-r:toggle-all+first+deselect+transform-header(eazy_status_header {+})'\n"
+    "        CTRL_A_BIND='ctrl-a:select-all+first+deselect+transform-header(eazy_status_header {+})'\n"
+    "        CTRL_X_BIND='ctrl-x:deselect-all+transform-header(eazy_status_header)'\n"
+    "    fi",
+),
+(
+    '        --bind="ctrl-a:execute-silent(eazy_dup_select_all)+select-all+transform-header(eazy_status_header {+})" \\\n'
+    '        --bind="ctrl-x:execute-silent(eazy_dup_clear_all)+deselect-all+transform-header(eazy_status_header)" \\\n'
+    '        --bind="$CTRL_R_BIND" \\',
+    '        --bind="$CTRL_A_BIND" \\\n'
+    '        --bind="$CTRL_X_BIND" \\\n'
+    '        --bind="$CTRL_R_BIND" \\',
+),
+(
+    '            MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0\n'
+    '            rm -f "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE"\n'
+    '            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""',
+    '            MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0\n'
+    '            rm -f "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE"\n'
+    '            : > "$SELECTED_FILE"\n'
+    '            MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""',
+),
+(
+    '    if [[ "$primeiro_caminho" =~ \\.\\.$ ]]; then\n'
+    '        # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)\n'
+    '        local_dir_antes=$(pwd)',
+    '    if [[ "$primeiro_caminho" =~ \\.\\.$ ]]; then\n'
+    '        # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)\n'
+    '        # Mudança de pasta → zera seleção (só persiste até limpar ou mudar de pasta)\n'
+    '        : > "$SELECTED_FILE"\n'
+    '        : > "$DUP_SELECTED_FILE" 2>/dev/null || true\n'
+    '        rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true\n'
+    '        local_dir_antes=$(pwd)',
+),
+(
+    '    if [ -d "$primeiro_caminho" ]; then\n'
+    '        # Salva posição atual; entra; restaura posição salva da pasta destino\n'
+    '        dir_atual_antes="$(pwd -P)"',
+    '    if [ -d "$primeiro_caminho" ]; then\n'
+    '        # Salva posição atual; entra; restaura posição salva da pasta destino\n'
+    '        # Mudança de pasta → zera seleção (só persiste até limpar ou mudar de pasta)\n'
+    '        : > "$SELECTED_FILE"\n'
+    '        : > "$DUP_SELECTED_FILE" 2>/dev/null || true\n'
+    '        rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true\n'
+    '        dir_atual_antes="$(pwd -P)"',
+),
+]
+for old, new in repls:
+    if old not in t:
+        raise SystemExit("patch fail: block not found:\n" + old[:120])
+    t = t.replace(old, new, 1)
+dest.write_text(t)
+dest.chmod(0o755)
+print("eazy: patches aplicados.", file=sys.stderr)
+PY
+rm -f "$TMP"
+exec "$SELF" "$@"
