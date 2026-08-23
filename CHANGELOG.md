@@ -6,6 +6,8 @@
 - Ctrl-R inverte a seleção atual; Ctrl-A seleciona todos e Ctrl-X limpa todos
 - F12 mantém a seleção de um representante existente por grupo
 - Enter, Insert, apagar, copiar, mover e embaralhar usam a seleção persistente
+- Seleção permanece até Ctrl-X (zerar) ou mudança de pasta
+- Ctrl-A / Ctrl-R não incluem a linha `..` / Voltar na seleção
 
 ## 3.0 — professional
 
