@@ -2,18 +2,17 @@
 set -euo pipefail
 D="$(cd "$(dirname "$0")" && pwd)"
 FULL="$D/eazy.full"
-# Já expandido
 if [ -f "$FULL" ] && [ "$(wc -c < "$FULL" 2>/dev/null || echo 0)" -gt 100000 ]; then
   exec bash "$FULL" "$@"
 fi
 python3 - "$D" <<'P'
 import pathlib, zlib, base64, re, sys
 d = pathlib.Path(sys.argv[1])
-t = (d / "eazy.part1").read_text() + (d / "eazy.part2").read_text()
+parts = sorted(d.glob("eazy.p*"))
+t = "".join(p.read_text() for p in parts)
 m = re.search(r'b="""(.+?)"""', t, re.S)
 if not m:
-    sys.stderr.write("eazy: payload inválido\n")
-    sys.exit(1)
+    sys.stderr.write("eazy: payload inválido\n"); sys.exit(1)
 data = zlib.decompress(base64.b64decode(m.group(1)))
 out = d / "eazy.full"
 out.write_bytes(data)
