@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.0-10
+
+- Filtro digitado (`FZF_QUERY`) permanece até mudar de pasta ou apagar
+- Seleção no modo normal persiste em `SELECTED_FILE` (sobrevive a reload/filtro)
+- Ctrl-A / Ctrl-R / Ctrl-X usam `eazy_sel_*` e não incluem `..`
+- Ao mudar de pasta: zera seleção e limpa o filtro digitado
+
 ## 3.0-9
 
 - Lista temporária dedicada para preservar seleções no modo Duplicados durante redesenhos
