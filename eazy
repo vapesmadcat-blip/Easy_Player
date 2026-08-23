@@ -21,6 +21,7 @@ PLAYLIST_PERSISTENTE="$CONFIG_DIR/temp_playlist"   # legado → migrado para _1
 PLAYLIST_1="$CONFIG_DIR/temp_playlist_1"
 PLAYLIST_2="$CONFIG_DIR/temp_playlist_2"
 PLAYLIST_3="$CONFIG_DIR/temp_playlist_3"
+DUP_LISTA="$CONFIG_DIR/temp_duplicados"  # lista tmp de duplicados (persiste até limpar)
 FILA_ATUAL=1   # 1, 2 ou 3
 SESSION_FILE="$CONFIG_DIR/session"
 POSITIONS_FILE="$CONFIG_DIR/dir_positions"
@@ -782,6 +783,7 @@ mkdir -p "$CONFIG_DIR" 2>/dev/null || true
 # Migra fila legada e garante 3 filas
 [ -f "$PLAYLIST_PERSISTENTE" ] && [ ! -f "$PLAYLIST_1" ] && mv "$PLAYLIST_PERSISTENTE" "$PLAYLIST_1" 2>/dev/null || true
 touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
+touch "$DUP_LISTA" 2>/dev/null || true
 FILA_ATUAL="${FILA_ATUAL:-1}"
 case "$FILA_ATUAL" in 1|2|3) ;; *) FILA_ATUAL=1 ;; esac
 PLAYLIST_FILE="$CONFIG_DIR/temp_playlist_${FILA_ATUAL}"
@@ -1869,6 +1871,41 @@ encontrar_duplicados() {
     sort -t $'\t' -k1,1 -o "$saida" "$saida" 2>/dev/null
 
     rm -f "$tmp_all" "$tmp_sizes" "$tmp_hashes" "$tmp_hashdup"
+}
+
+
+# Persistência da lista de duplicados (como filas 1-2-3)
+eazy_dup_salvar_lista() {
+    [ -n "${DUP_LISTA:-}" ] || return 0
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    if [ -f "${DUP_FILE:-}" ]; then
+        cp -f -- "$DUP_FILE" "$DUP_LISTA" 2>/dev/null || true
+    fi
+}
+
+eazy_dup_carregar_lista() {
+    [ -n "${DUP_LISTA:-}" ] || return 1
+    [ -s "$DUP_LISTA" ] || return 1
+    mkdir -p "$(dirname "$DUP_FILE")" 2>/dev/null || true
+    cp -f -- "$DUP_LISTA" "$DUP_FILE" 2>/dev/null || return 1
+    return 0
+}
+
+eazy_dup_lista_tem_itens() {
+    [ -n "${DUP_LISTA:-}" ] && [ -s "$DUP_LISTA" ]
+}
+
+eazy_dup_limpar_lista() {
+    : > "${DUP_LISTA:-/dev/null}" 2>/dev/null || true
+    : > "${DUP_FILE:-/dev/null}" 2>/dev/null || true
+    : > "${DUP_SELECTED_FILE:-/dev/null}" 2>/dev/null || true
+    rm -f "${DUP_MANUAL_FILE:-}" 2>/dev/null || true
+}
+
+contar_dup_lista() {
+    local n
+    n=$(grep -c '^' "${DUP_LISTA:-}" 2>/dev/null || echo 0)
+    echo "$n" | tr -cd '0-9'
 }
 
 selecionar_um_duplicado_por_grupo() {
@@ -3102,6 +3139,7 @@ confirmar_e_excluir() {
             # Se estiver em modo duplicados, remove também da lista de dups
             if [ "${MODO_DUP:-0}" -eq 1 ] && [ -f "$DUP_FILE" ]; then
                 grep -vF "$item" "$DUP_FILE" > "${DUP_FILE}.tmp" 2>/dev/null && mv "${DUP_FILE}.tmp" "$DUP_FILE"
+                eazy_dup_salvar_lista
             fi
         done < "$alvos_tmp"
         echo -e "\033[1;32mConcluído.\033[0m"
@@ -3658,6 +3696,7 @@ mover_arquivos() {
             ok=$((ok + 1))
             if [ "${MODO_DUP:-0}" -eq 1 ] && [ -f "$DUP_FILE" ]; then
                 grep -vF "$item_abs" "$DUP_FILE" > "${DUP_FILE}.tmp" 2>/dev/null && mv "${DUP_FILE}.tmp" "$DUP_FILE"
+                eazy_dup_salvar_lista
             fi
         else
             echo -e "  \033[1;31m✗\033[0m $(basename "$item_abs")"
@@ -3671,7 +3710,7 @@ mover_arquivos() {
 registrar_status
 
 # Preview precisa estar exportado para o subprocess do fzf
-export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert 2>/dev/null || true
+export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert eazy_dup_salvar_lista eazy_dup_carregar_lista eazy_dup_lista_tem_itens eazy_dup_limpar_lista contar_dup_lista 2>/dev/null || true
 
 # fzf mais novo diferencia Ctrl+Backspace; versões antigas o reportam como Ctrl+H.
 EAZY_FZF_BACKSPACE_EXPECT=""
@@ -3760,7 +3799,7 @@ while true; do
         TOTAL_DUP=$(grep -c '^' "$DUP_FILE" 2>/dev/null || echo 0)
         TOTAL_DUP=$(echo "$TOTAL_DUP" | LC_ALL=C tr -cd '0-9')
         TOTAL_DUP=${TOTAL_DUP:-0}
-        TEXTO_PROMPT=" 🔁 DUPLICADOS [${EXT_DUP:-todas}] — $TOTAL_DUP arquivo(s) ❯ "
+        TEXTO_PROMPT=" 🔁 DUPLICADOS (tmp) [${EXT_DUP:-todas}] — $TOTAL_DUP arq. | limpar: Alt-X ❯ "
         DUP_SEL_COUNT=$(grep -c '^' "$DUP_SELECTED_FILE" 2>/dev/null || echo 0)
         DUP_SEL_COUNT=$(echo "$DUP_SEL_COUNT" | tr -cd '0-9')
         DUP_SEL_COUNT=${DUP_SEL_COUNT:-0}
@@ -3769,7 +3808,7 @@ while true; do
         DUP_SEL_BYTES=${DUP_SEL_BYTES:-0}
         DUP_SEL_LABEL=$(formatar_bytes_label "$DUP_SEL_BYTES")
         DUP_SEL_INFO=" | [SEL: ${DUP_SEL_COUNT} item(ns) / ${DUP_SEL_LABEL}]"
-        EAZY_HEADER_HINT=" [F12]: 1/grupo$DUP_SEL_INFO | [TAB/ESPACO]: alternar | [CTRL-R]: inverter | [CTRL-A]: todos | [CTRL-X]: nenhum | [ENTER]: usar seleção | [DEL]: apagar HD | [CTRL-Y/U]: copiar/mover | [CTRL-D]: sair "
+        EAZY_HEADER_HINT=" [F12]: 1/grupo$DUP_SEL_INFO | [TAB/ESPACO]: alternar | [CTRL-R/A/X]: sel | [ENTER]: usar | [DEL]: apagar HD | [CTRL-Y/U]: copiar/mover | [CTRL-P]: filas | [CTRL-D]: sair (lista tmp fica) | [ALT-X]: limpar lista tmp "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
@@ -3850,7 +3889,7 @@ while true; do
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
-        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
+        --expect=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X \
         --delimiter='\t' \
         --with-nth=2,3 \
         --layout=reverse \
@@ -4160,14 +4199,45 @@ while true; do
             fi
         fi
         continue
+    elif [ "$tecla" = "alt-x" ]; then
+        # ALT-X: limpa a lista tmp de duplicados (libera Ctrl-D para nova busca)
+        if [ "${MODO_DUP:-0}" -eq 1 ] || eazy_dup_lista_tem_itens; then
+            n_dup=$(contar_dup_lista)
+            n_dup=${n_dup:-0}
+            if whiptail --title "Limpar lista de duplicados" --yesno \
+"Apagar a lista temporária de duplicados ($n_dup itens)?
+
+Isso NÃO apaga arquivos do disco.
+Só libera o Ctrl-D para uma nova busca." 12 58; then
+                eazy_dup_limpar_lista
+                MODO_DUP=0
+                TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                whiptail --title "Duplicados" --msgbox "Lista tmp limpa.\nCtrl-D agora inicia nova busca." 9 50
+            fi
+        fi
+        continue
     elif [ "$tecla" = "ctrl-d" ]; then
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_BUSCA:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
             if [ "${MODO_DUP:-0}" -eq 1 ]; then
-                MODO_DUP=0; rm -f "$DUP_MANUAL_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                # Sair do modo (lista tmp permanece até limpar)
+                eazy_dup_salvar_lista
+                MODO_DUP=0
+                rm -f "$DUP_MANUAL_FILE"
+                : > "$DUP_SELECTED_FILE"
+                : > "$SELECTED_FILE"
+                TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+            elif eazy_dup_lista_tem_itens; then
+                # Já existe busca: só reabre a lista tmp (não inicia nova)
+                eazy_dup_carregar_lista
+                : > "$DUP_SELECTED_FILE"
+                rm -f "$DUP_MANUAL_FILE"
+                MODO_DUP=1; export MODO_DUP; TMP=2; registrar_status
             else
+                # Lista vazia → permite nova busca
                 EXT_DUP=$(selecionar_extensoes)
                 if [ -n "$EXT_DUP" ]; then
                     encontrar_duplicados "$DUP_FILE" "$EXT_DUP"
+                    eazy_dup_salvar_lista
                     : > "$DUP_SELECTED_FILE"
                     rm -f "$DUP_MANUAL_FILE"
                     MODO_DUP=1; export MODO_DUP; TMP=2; registrar_status
@@ -4214,29 +4284,35 @@ while true; do
             --msgbox "Adicionados: $quantidade_adicionada\nTotal na Fila $dest_fila: $total_fila" 10 45
         continue
     elif [ "$tecla" = "ctrl-p" ]; then
-        # CTRL-P: diretório → Fila1 → Fila2 → Fila3 → diretório
+        # CTRL-P: diretório → Fila1 → Fila2 → Fila3 → Duplicados → diretório
         posicao_origem="$(pwd -P)"
         if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
             posicao_origem="$ARQUIVO_PLAYLIST_ABERTO"
         fi
+        if [ "${MODO_DUP:-0}" -eq 1 ]; then
+            eazy_dup_salvar_lista
+            posicao_origem="dup"
+        fi
         salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
-        MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
+        MODO_BUSCA=0; MODO_DOWNLOAD=0
         touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
+        touch "$DUP_LISTA" 2>/dev/null || true
 
-        # Detecta em qual fila está agora (pelo arquivo aberto)
         local_onde="dir"
-        if [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
+        if [ "${MODO_DUP:-0}" -eq 1 ]; then
+            local_onde="dup"
+        elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
             case "$ARQUIVO_PLAYLIST_ABERTO" in
                 *temp_playlist_1) local_onde="1" ;;
                 *temp_playlist_2) local_onde="2" ;;
                 *temp_playlist_3) local_onde="3" ;;
-                *) local_onde="outra" ;;  # histórico / .m3u externo
+                *) local_onde="outra" ;;
             esac
         fi
 
         case "$local_onde" in
             dir|outra)
-                # Pasta (ou outra lista) → Fila 1
+                MODO_DUP=0
                 FILA_ATUAL=1
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
@@ -4245,6 +4321,7 @@ while true; do
                 carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             1)
+                MODO_DUP=0
                 FILA_ATUAL=2
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
@@ -4253,6 +4330,7 @@ while true; do
                 carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             2)
+                MODO_DUP=0
                 FILA_ATUAL=3
                 atualizar_fila_atual
                 MODO_PLAYLIST=1
@@ -4261,7 +4339,19 @@ while true; do
                 carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             3)
-                # Fila 3 → volta ao diretório
+                # Fila 3 → Duplicados (lista tmp)
+                MODO_PLAYLIST=0
+                ARQUIVO_PLAYLIST_ABERTO=""
+                eazy_dup_carregar_lista || : > "$DUP_FILE"
+                : > "$DUP_SELECTED_FILE"
+                rm -f "$DUP_MANUAL_FILE"
+                MODO_DUP=1; export MODO_DUP
+                TMP=2; ULTIMO_ARQUIVO=""
+                ;;
+            dup)
+                # Duplicados → volta ao diretório
+                eazy_dup_salvar_lista
+                MODO_DUP=0
                 MODO_PLAYLIST=0
                 ARQUIVO_PLAYLIST_ABERTO=""
                 FILA_ATUAL=1
