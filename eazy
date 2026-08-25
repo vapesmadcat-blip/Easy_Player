@@ -733,6 +733,89 @@ mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
 # ============================================================================
 
 # ============================================================================
+# 7. HELP EXPANDIDO (F10)
+exibir_help_expandido() {
+    whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" --msgbox "eazy — Navegador e Reprodutor Multimídia
+
+════════════════════════════════════════════════════════════════════
+NAVEGAÇÃO, FILTROS E BUSCA
+════════════════════════════════════════════════════════════════════
+  Enter              Tocar arquivo / entrar em pasta / abrir playlist
+  Tab / Espaço       Marcar ou alternar o item sob o cursor
+  Ctrl-A             Selecionar todos os itens (fora de Duplicados)
+  Ctrl-R             Inverter a seleção (fora de Duplicados)
+  Ctrl-X             Limpar a seleção
+  Ctrl-Backspace     Voltar ao último diretório
+  Ctrl-L             Ir à pasta do arquivo sob o cursor
+  Ctrl-/             Ligar/desligar preview
+  Ctrl-F             Abrir busca recursiva por extensão, tamanho e texto
+  Esc                Sair da busca e voltar à pasta normal
+  F1/F2/F3           Ordenar por tamanho/nome e alternar visualização
+  F4/F5/F6/F7        Filtrar áudio/vídeo/imagens/compactados
+  F8                 Alternar entre filtro atual e TODOS
+  Page Up/Down       Rolar a página
+
+════════════════════════════════════════════════════════════════════
+DUPLICADOS E PROGRESSO
+════════════════════════════════════════════════════════════════════
+  Ctrl-D             Buscar duplicados ou reabrir a lista temporária
+  F12                Amostra: um arquivo por grupo
+  Ctrl-A             Marcar todos os duplicados
+  Ctrl-T             Passar amostras para a seleção ativa
+  Ctrl-R             Inverter a seleção ativa
+  Ctrl-X             Limpar a seleção ativa
+  Tab / Espaço       Alternar seleção do item focado
+  Alt-X              Limpar a lista temporária de duplicados
+  ● vermelho         Amostra fixa criada pelo F12
+  ✓ amarelo          Seleção ativa usada por Enter, Del, copiar e mover
+  Progresso          Mostrado durante inventário, hashes e consolidação
+
+════════════════════════════════════════════════════════════════════
+FILAS, PLAYLISTS E AÇÕES
+════════════════════════════════════════════════════════════════════
+  Insert             Enviar seleção para fila 1, 2 ou 3
+  Ctrl-P             Alternar filas 1 → 2 → 3 → diretório
+  Ctrl-O             Abrir playlist .m3u/.pls
+  Ctrl-G             Abrir histórico de arquivos tocados
+  Ctrl-E             Tocar seleção em ordem aleatória
+  Ctrl-Y             Copiar seleção para uma pasta
+  Ctrl-U             Mover seleção para uma pasta
+  Ctrl-K             Ações sobre a seleção e manutenção do sistema
+  Del                Remover conforme o contexto
+  Alt-D              Apagar do disco sem usar a lixeira
+
+════════════════════════════════════════════════════════════════════
+MENU Ctrl-K — MANUTENÇÃO
+════════════════════════════════════════════════════════════════════
+  S                  Sistema: CPU, RAM, cache, processos, rede e logs
+  H                  HD: análise de disco, partições e saúde SMART
+  A                  Som: diagnóstico, reinício e teste de áudio
+  V                  Vídeo: GPU, codecs, otimização e reprodução
+  W                  SWAP: status, criação, limpeza e configuração
+  Z                  Diretórios vazios: buscar, selecionar e remover
+  M                  Menu completo de manutenção
+  V                  Validar e limpar playlist .M3U
+  P                  Proteger pasta/arquivo com senha
+  DRY-RUN            Estado visível nas telas; simula ações destrutivas
+  sudo               Caixa de senha antes de comandos privilegiados
+  Temperatura CPU    Diagnóstico térmico via lm-sensors/kernel
+
+════════════════════════════════════════════════════════════════════
+SISTEMA, CONFIGURAÇÃO E SAÍDA
+════════════════════════════════════════════════════════════════════
+  F9                 Configuração, overview de hardware e teste de som
+  F10                Abrir este HELP EXPANDIDO
+  Ctrl-B             Gerenciador de downloads: axel, aria2 e wget
+  Ctrl-Q / Q / X     Salvar sessão e sair
+
+A busca de duplicados e a limpeza/análise do HD exibem progresso.
+O DRY-RUN fica visível no cabeçalho e nas telas de manutenção.
+Operações com sudo pedem a senha antes de executar e restauram o terminal
+em caso de cancelamento ou erro.
+
+Use ESC para fechar esta ajuda e retornar ao navegador." 55 100
+}
+
 # 1. VALIDAÇÃO E LIMPEZA DE ARQUIVOS .M3U (Ctrl+K)
 # ============================================================================
 
@@ -2853,7 +2936,7 @@ verificar_disco_smart() {
         whiptail --title "❌ Erro" --msgbox "smartmontools não instalado.\n\nInstale com: sudo apt install smartmontools" 8 60
         return
     fi
-
+    
     {
         echo "Dispositivos encontrados:"
         smartctl --scan 2>/dev/null || true
@@ -2982,7 +3065,7 @@ alterar_swappiness() {
     local valor
     valor=$(whiptail --inputbox "Valor de swappiness (0-100):\n\n0 = usar RAM ao máximo\n100 = usar swap agressivamente\n\nValor atual: $(cat /proc/sys/vm/swappiness)" 12 60 \
         3>&1 1>&2 2>&3)
-
+    
     if [ -n "$valor" ] && [ "$valor" -ge 0 ] && [ "$valor" -le 100 ]; then
         if operacao_com_sudo "sysctl vm.swappiness=$valor" "Alterar swappiness"; then
             whiptail --title "✅ OK" --msgbox "Swappiness alterado para $valor" 8 50
@@ -2999,7 +3082,7 @@ redimensionar_swap() {
     local tamanho
     tamanho=$(whiptail --inputbox "Novo tamanho do swap (em GB):\n\nExemplo: 2 para 2GB\nExemplo: 4 para 4GB" 10 60 \
         3>&1 1>&2 2>&3)
-
+    
     if [ -n "$tamanho" ] && [ "$tamanho" -gt 0 ] 2>/dev/null; then
         solicitar_senha_sudo || return 1
         {
@@ -3082,7 +3165,7 @@ reiniciar_som() {
     eazy_dry_run_bloquear "reinício do sistema de som" && return 0
     whiptail --title "🔄 Reiniciar Som" --yesno \
         "Isso irá reiniciar o sistema de som.\nAplicações em reprodução serão pausadas.\n\nContinuar?" 10 60 || return
-
+    
     {
         echo "Reiniciando sistema de som..."
         if command -v systemctl &>/dev/null; then
@@ -3100,7 +3183,7 @@ reiniciar_som() {
 testar_audio() {
     whiptail --title "🔊 Teste de Áudio" --msgbox \
         "Você deve ouvir um tom de teste nos próximos 3 segundos.\n\nSe não ouve nada, verifique o volume." 10 60
-
+    
     speaker-test -t wav -c 2 -l 1 2>/dev/null || \
     paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || \
     ffplay -nodisp -autoexit /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null
@@ -3290,10 +3373,10 @@ teste_reproducao() {
 
 remover_dirs_vazios_fzf() {
     local pasta="${1:-.}"
-
+    
     whiptail --title "🗂️  Remover Diretórios Vazios — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --yesno \
         "Procurar e remover diretórios vazios em:\n\n  $pasta\n\nEstado: $(eazy_dry_run_status)\n\nContinuar?" 12 70 || return
-
+    
     local tmp selecionados
     tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-empty.XXXXXX") || return
     {
@@ -3304,7 +3387,7 @@ remover_dirs_vazios_fzf() {
         fzf -m \
             --header="[ESPAÇO]: Selecionar | [TAB]: Alternar | [ENTER]: Confirmar" \
             --bind="del:accept" 2>/dev/null) || true
-
+    
     {
         if [ -z "$selecionados" ]; then
             echo "Nenhum diretório selecionado (ou nenhum vazio)."
@@ -5322,6 +5405,11 @@ while true; do
     fi
     FZF_BIND_T=()
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
+    FZF_BIND_ESC=()
+    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        FZF_EXPECT="${FZF_EXPECT},esc"
+        FZF_BIND_ESC=(--bind='esc:accept')
+    fi
 
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
@@ -5351,6 +5439,7 @@ while true; do
         --bind="$CTRL_X_BIND" \
         --bind="$CTRL_R_BIND" \
         "${FZF_BIND_T[@]}" \
+        "${FZF_BIND_ESC[@]}" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
@@ -5392,6 +5481,15 @@ while true; do
         IFS='|' read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PLAYLIST < "$TMP_FILE"
         TMP=$(echo "$TMP" | LC_ALL=C tr -cd '0-9')
         TMP=${TMP:-1}
+    fi
+
+    if [ "$tecla" = "esc" ] && [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        MODO_BUSCA=0
+        BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""
+        BUSCA_CONTEUDO=""
+        TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"
+        registrar_status
+        continue
     fi
 
     if [ "$tecla" = "f12" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then

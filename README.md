@@ -1,57 +1,59 @@
 # eazy 3.0 (professional)
 
-Navegador e reprodutor multimídia no **terminal** — rápido, com teclado e poucas dependências.
-
-Constrói sobre **fzf** + **mpv** (ou mplayer / VLC CLI / ffplay).
+Navegador e reprodutor multimídia no **terminal**, rápido, orientado por teclado e com poucas dependências. O projeto usa **fzf** em conjunto com **mpv**, mplayer, VLC CLI ou ffplay.
 
 ## Instalação
 
-### Rápida (qualquer distro)
+### Debian / Ubuntu: pacote `.deb` da Release
+
+```bash
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-11/eazy_3.0-11_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-11/eazy_3.0-11_all.deb.sha256
+sha256sum -c eazy_3.0-11_all.deb.sha256
+sudo apt install ./eazy_3.0-11_all.deb
+eazy
+```
+
+Para corrigir dependências caso necessário:
+
+```bash
+sudo apt -f install
+```
+
+### Instalação rápida a partir do código
 
 ```bash
 chmod +x eazy
-./eazy --install         # deps + /usr/local/bin/eazy + .desktop
-./eazy --uninstall       # remove comando e launcher
+./eazy --install
+./eazy --uninstall
 ```
 
-Detecta: **apt**, **pacman**, **dnf**, **zypper**, **apk**.
+O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem privilégios solicitam a senha em uma caixa segura antes da execução.
 
-### Debian / Ubuntu (.deb)
+### Gerar o pacote Debian localmente
 
 ```bash
-chmod +x packaging/build-deb.sh && ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-9_all.deb
+chmod +x packaging/build-deb.sh
+./packaging/build-deb.sh
+sudo apt install ./packaging/eazy/dist/eazy_3.0-11_all.deb
 ```
 
-### Arch / Manjaro
-
-```bash
-./packaging/build-arch.sh
-cd packaging/arch/build && makepkg -si
-```
-
-### Fedora / RHEL
-
-```bash
-rpmbuild -ba packaging/rpm/eazy.spec   # com sources configuradas
-```
-
-### Dependências manuais (apt)
+### Dependências manuais no Debian/Ubuntu
 
 ```bash
 sudo apt update && sudo apt install -y \
   fzf mpv mplayer gawk sed findutils whiptail wget \
-  axel aria2 unzip p7zip-full rar yt-dlp
+  axel aria2 unzip p7zip-full rar yt-dlp lm-sensors
 ```
 
-Opcionais: `chafa`, `ffmpeg`, `vlc`.
+Opcionais: `chafa`, `ffmpeg`, `vlc`, `smartmontools`, `pciutils`, `lshw`, `inxi`, `dmidecode`, `usbutils`, `mesa-utils` e `vulkan-tools`.
 
 ## Uso
 
 ```bash
-eazy                  # última sessão ou pasta padrão
-eazy ~/Videos         # abre nesta pasta
-eazy ./filme.mp4      # pasta do arquivo + cursor no arquivo
+eazy
+eazy ~/Videos
+eazy ./filme.mp4
 eazy --help
 eazy --version
 eazy --config
@@ -60,51 +62,41 @@ eazy --config
 ## Atalhos
 
 | Tecla | Ação |
-|-------|------|
-| `Enter` | Tocar / entrar na pasta / abrir playlist `.m3u` |
+|---|---|
+| `Enter` | Tocar, entrar na pasta ou abrir playlist `.m3u` |
+| `Esc` | Sair da busca recursiva e voltar à pasta normal |
 | `Ctrl-Backspace` | Voltar ao último diretório |
-| `Tab` / `Espaço` | Marcar |
+| `Tab` / `Espaço` | Marcar item |
 | `Insert` | Enviar para fila 1, 2 ou 3 |
 | `Ctrl-P` | Alternar filas 1→2→3→diretório |
-| `Ctrl-F` | Busca recursiva |
-| `Ctrl-D` | Duplicados |
+| `Ctrl-F` | Busca recursiva por extensão, tamanho e conteúdo |
+| `Ctrl-D` | Buscar duplicados ou reabrir a lista temporária |
 | `Ctrl-B` | Downloads |
-| `Ctrl-K` | Menu de ações |
+| `Ctrl-K` | Menu completo de ações e manutenção |
 | `Ctrl-L` | Ir à pasta do arquivo |
-| `Ctrl-/` | Preview on/off |
-| `Del` | Remover (lista ou disco, conforme contexto) |
-| `Alt-D` | Apagar do disco (em playlist/fila) |
-| `F9` | Configuração, overview do sistema e teste de som |
-| `F12` | Duplicados: selecionar automaticamente 1 arquivo por grupo; preserva a seleção na lista temporária |
-| `Ctrl-R` | Duplicados: inverter a seleção atual (complemento de todos os arquivos) |
+| `Ctrl-/` | Ligar/desligar preview |
+| `Del` | Remover conforme o contexto |
+| `Alt-D` | Apagar do disco em playlist/fila |
+| `F9` | Configuração e overview do sistema |
+| `F10` | HELP EXPANDIDO com atalhos e manutenção |
+| `F12` | Duplicados: selecionar uma amostra por grupo |
+| `Ctrl-R` | Duplicados: inverter seleção |
 | `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
-| `Tab` / `Espaço` | Duplicados: alternar a seleção manual do item focado |
-| `Q` | Sair |
+| `Q` / `X` | Sair do programa |
 
-### No mpv
+O menu `Ctrl-K` inclui manutenção de sistema, análise e limpeza de HD, SMART, SWAP, som, vídeo/GPU, remoção de diretórios vazios, overview e monitoramento de temperatura da CPU.
 
-| Tecla | Ação |
-|-------|------|
-| `d` | Marcar para exclusão ao sair |
-| `D` | Marcar e próximo da playlist |
+## Duplicados e progresso
+
+A busca de duplicados filtra primeiro por tamanho e depois compara o conteúdo por hash. Uma barra de progresso informa o andamento do inventário, cálculo dos hashes e consolidação dos grupos. A análise de HD e a limpeza automática também mostram o avanço por etapas.
+
+## DRY-RUN e sudo
+
+O estado do **DRY-RUN** é exibido no cabeçalho e nas telas de manutenção. Com o modo ligado, operações destrutivas são apenas simuladas. Quando uma operação exige `sudo`, o eazy abre uma caixa de senha antes da execução, autentica com `sudo -S` e executa o comando posterior com `sudo -n`, evitando prompts inesperados que possam quebrar a tela.
 
 ## Configuração
 
-Tudo em `~/.config/eazy/`:
-
-- `config` — player, volume, pastas, preview, sem áudio  
-- `session` — última pasta e estado  
-- `temp_playlist_1..3` — filas temporárias  
-- `history` — últimos tocados  
-- `marked_delete` — marcados no mpv  
-
-## Características
-
-- 3 filas temporárias persistentes  
-- Busca com progresso, cache em sessão, filtro de tamanho e conteúdo  
-- Preview de imagens (chafa) e metadados de mídia  
-- Sessão: pasta, cursor, filtro digitado, preview  
-- Players: mpv, mplayer, cvlc, ffplay  
+Os dados de usuário ficam em `~/.config/eazy/`, incluindo configuração, sessão, filas temporárias, histórico, seleções e listas de duplicados.
 
 ## Licença
 

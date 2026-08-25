@@ -8,7 +8,7 @@ DEBIAN_DIR="$SCRIPT_DIR/debian"
 PKGROOT="$SCRIPT_DIR/pkgroot"
 DIST_DIR="$SCRIPT_DIR/dist"
 PACKAGE="eazy"
-VERSION="3.0-9"
+VERSION="3.0-11"
 ARCH="all"
 OUTPUT="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
@@ -27,6 +27,7 @@ for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy.desktop" "$SRC_DIR/README.md
 done
 
 rm -rf "$PKGROOT"
+mkdir -p "$DIST_DIR"
 mkdir -p \
     "$PKGROOT/DEBIAN" \
     "$PKGROOT/usr/bin" \

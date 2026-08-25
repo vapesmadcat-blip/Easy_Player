@@ -1,4 +1,20 @@
+## 3.0-11 — Release eazy-v3.0-11
+
+- Instalação oficial por Release GitHub com pacote `.deb` e checksum `.sha256`.
+- HELP EXPANDIDO atualizado com busca por `Esc`, DRY-RUN, sudo, progresso e temperatura da CPU.
+
 # Changelog
+
+## 3.0-11
+
+- Restaurado o HELP EXPANDIDO do F10 com navegação, filas, duplicados, manutenção e dicas completas.
+- `Esc` sai da busca recursiva e retorna à pasta normal sem fechar o eazy.
+- Busca de duplicados com barra de progresso durante inventário, hashes e consolidação.
+- Análise e limpeza automática de HD com progresso por etapas.
+- Menu Ctrl-K ampliado com manutenção de sistema, HD, vídeo, som, SWAP e diretórios vazios.
+- Nova opção de monitoramento de temperatura da CPU via `lm-sensors` e sensores térmicos do kernel.
+- Operações que exigem sudo solicitam a senha em caixa antes da execução e usam `sudo -n` depois da autenticação.
+- Estado do DRY-RUN exibido no cabeçalho e nas telas de manutenção.
 
 ## 3.0-10
 
