@@ -27,8 +27,6 @@ SESSION_FILE="$CONFIG_DIR/session"
 POSITIONS_FILE="$CONFIG_DIR/dir_positions"
 MARK_DELETE_FILE="$CONFIG_DIR/marked_delete"
 MPV_SCRIPT_DIR="$CONFIG_DIR/mpv_scripts"
-SCRIPTS_DIR="${CONFIG_DIR}/scripts"
-BACKUPS_DIR="${CONFIG_DIR}/backups"
 
 # --- VALORES PADRÃO (FALLBACKS) ---
 TELA_PADRAO="fs"
@@ -66,53 +64,25 @@ DRY_RUN="${DRY_RUN:-0}"
 # ============================================================
 # SUDO + DRY RUN
 # ============================================================
-restaurar_terminal() {
-    stty sane 2>/dev/null || true
-    tput cnorm 2>/dev/null || true
-    printf '\033[0m'
-}
-
-solicitar_senha_sudo() {
-    local senha ret
-    if sudo -n true 2>/dev/null; then
-        return 0
-    fi
-    if ! command -v whiptail >/dev/null 2>&1; then
-        echo -e "${YELLOW}sudo requer senha, mas o whiptail não está disponível.${NC}" >&2
-        restaurar_terminal
-        return 1
-    fi
-    senha=$(whiptail --title "Autenticação sudo" --passwordbox \
-        "Digite sua senha para autorizar a próxima operação privilegiada:\n\nA senha não será exibida nem gravada." 10 70 3>&1 1>&2 2>&3)
-    ret=$?
-    restaurar_terminal
-    [ "$ret" -eq 0 ] || return 1
-    [ -n "$senha" ] || return 1
-    if printf '%s\n' "$senha" | sudo -S -p '' -v >/dev/null 2>&1; then
-        unset senha
-        return 0
-    fi
-    unset senha
-    whiptail --title "Senha sudo" --msgbox "Senha incorreta ou sudo não autorizado." 8 60 2>/dev/null || true
-    restaurar_terminal
-    return 1
-}
-
 executar_com_sudo() {
-    local cmd="$1" desc="${2:-Executando comando}" dry_msg="${3:-}" ret
+    local cmd="$1"
+    local desc="${2:-Executando comando}"
+    local dry_msg="${3:-}"
+
     if [ "${DRY_RUN:-0}" = "1" ]; then
         echo -e "${YELLOW}[DRY RUN] $desc${NC}"
         [ -n "$dry_msg" ] && echo -e "${YELLOW}[DRY RUN] $dry_msg${NC}"
         echo -e "${YELLOW}[DRY RUN] Comando: $cmd${NC}"
         return 0
     fi
-    if [[ "$cmd" =~ ^(sudo |apt|apt-get|dnf|pacman|zypper|apk|swapoff|swapon|fallocate|dd |mount|umount|systemctl|journalctl|smartctl|sysctl|mkswap|tee ) ]]; then
-        solicitar_senha_sudo || return 1
-        # -n garante que o comando não tente abrir prompt no terminal depois.
-        sudo -n bash -c "$cmd" 2>&1
-        ret=$?
-        restaurar_terminal
-        return "$ret"
+
+    if [[ "$cmd" =~ ^(sudo |apt|apt-get|dnf|pacman|zypper|apk|swapoff|swapon|fallocate|dd |mount|umount|systemctl|journalctl|smartctl|sysctl|mkswap) ]]; then
+        if ! sudo -n true 2>/dev/null; then
+            echo -e "${YELLOW}🔑 Requer root. Digite a senha sudo (Ctrl+C cancela):${NC}"
+        fi
+        # shellcheck disable=SC2086
+        sudo bash -c "$cmd" 2>&1
+        return $?
     fi
     eval "$cmd" 2>&1
     return $?
@@ -968,21 +938,6 @@ limpeza_auto() {
 
     echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA${NC}"
     echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}\n"
-    local progresso_hd="/tmp/eazy-hd-clean-progress-$$" concluido_hd="/tmp/eazy-hd-clean-done-$$" gauge_hd=""
-    : > "$progresso_hd"; rm -f "$concluido_hd"
-    if command -v whiptail >/dev/null 2>&1 && [ -t 2 ]; then
-        (
-            while [ ! -f "$concluido_hd" ]; do
-                pct=$(tail -n 1 "$progresso_hd" 2>/dev/null || echo 0)
-                pct=$(printf '%s' "$pct" | tr -cd '0-9'); pct=${pct:-0}
-                printf '%s\n' "$pct"
-                sleep 0.15
-            done
-            printf '100\n'
-        ) | whiptail --gauge "Limpando HD...\nCaches, logs, lixeira e temporários." 8 70 0 2>/dev/null &
-        gauge_hd=$!
-    fi
-    printf '10\n' >> "$progresso_hd"
 
     if command -v apt-get >/dev/null 2>&1; then
         echo -e "${YELLOW}APT...${NC}"
@@ -999,7 +954,6 @@ limpeza_auto() {
         operacao_com_sudo "docker system prune -af" "Docker prune"
     fi
 
-    printf '55\n' >> "$progresso_hd"
     echo -e "${YELLOW}Logs /tmp / lixeira...${NC}"
     if [ "${DRY_RUN:-0}" = "1" ]; then
         echo "  [DRY RUN] find /var/log -name '*.log' -mtime +30 -delete"
@@ -1016,12 +970,7 @@ limpeza_auto() {
         find /tmp -type d -mtime +30 -empty -delete 2>/dev/null || true
     fi
 
-    printf '90\n' >> "$progresso_hd"
     echo -e "\n${GREEN}✅ Limpeza finalizada (DRY RUN=$([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO)).${NC}"
-    printf '100\n' >> "$progresso_hd"
-    touch "$concluido_hd"
-    [ -n "$gauge_hd" ] && wait "$gauge_hd" 2>/dev/null || true
-    rm -f "$progresso_hd" "$concluido_hd"
     read -r -p "Enter para continuar..."
 }
 
@@ -2008,7 +1957,7 @@ eazy_status_header() {
         done
     fi
     sel_h=$(formatar_bytes_label "$sel_bytes")
-    printf "DRY-RUN: %s  |  HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" "$livre_h" "$total_h" "$sel_h" "$sel_count"
+    printf "HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$livre_h" "$total_h" "$sel_h" "$sel_count"
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
     fi
@@ -2323,68 +2272,49 @@ obter_nome_do_link() {
 }
 
 encontrar_duplicados() {
-    local saida="$1" extensoes="$2"
-    local tmp_all="/tmp/dup_all_$$" tmp_sizes="/tmp/dup_sizes_$$"
-    local tmp_hashes="/tmp/dup_hashes_$$" tmp_hashdup="/tmp/dup_hashdup_$$"
-    local progresso="/tmp/dup_progress_$$"
-    local -a ext_arr find_dup
+    local saida="$1"
+    local extensoes="$2"
+    local tmp_all="/tmp/dup_all_$$"
+    local tmp_sizes="/tmp/dup_sizes_$$"
+    local tmp_hashes="/tmp/dup_hashes_$$"
+    local tmp_hashdup="/tmp/dup_hashdup_$$"
+
+    local -a ext_arr
     construir_iname_array ext_arr "$extensoes"
-    find_dup=("$(pwd -P)" "-type" "f" "(" "${ext_arr[@]}" ")")
-    : > "$saida" "$progresso"
-    local concluido="${progresso}.done" gauge_pid=""
-    rm -f "$concluido"
-    if command -v whiptail >/dev/null 2>&1 && [ -t 2 ]; then
-        (
-            while [ ! -f "$concluido" ]; do
-                pct=$(tail -n 1 "$progresso" 2>/dev/null || echo 0)
-                pct=$(printf '%s' "$pct" | tr -cd '0-9'); pct=${pct:-0}
-                printf '%s\n' "$pct"
-                sleep 0.15
-            done
-            printf '100\n'
-        ) | whiptail --gauge "Procurando duplicados...\nCalculando hashes e comparando conteúdo." 8 70 0 2>/dev/null &
-        gauge_pid=$!
-    fi
 
+    local -a find_dup=("$(pwd -P)" "-type" "f" "(" "${ext_arr[@]}" ")")
+
+    : > "$saida"
     find "${find_dup[@]}" -printf "%s\t%p\n" 2>/dev/null > "$tmp_all"
-    local total processados=0 percentual=10
-    total=$(wc -l < "$tmp_all" 2>/dev/null || echo 0)
-    total=$(printf '%s' "$total" | tr -cd '0-9'); total=${total:-0}
-    printf '10\n' >> "$progresso"
-    awk -F'\t' '{print $1}' "$tmp_all" | sort -n | uniq -d > "$tmp_sizes"
-    : > "$tmp_hashes"
 
+    awk -F'\t' '{print $1}' "$tmp_all" | sort -n | uniq -d > "$tmp_sizes"
+
+    : > "$tmp_hashes"
     if [ -s "$tmp_sizes" ]; then
         while IFS= read -r tam; do
             [ -z "$tam" ] && continue
-            while IFS=$'\t' read -r _size caminho; do
+            awk -F'\t' -v t="$tam" '$1 == t {print $2}' "$tmp_all" | while IFS= read -r caminho; do
                 [ -f "$caminho" ] || continue
                 local h
                 h=$(md5sum "$caminho" 2>/dev/null | awk '{print $1}')
                 [ -z "$h" ] && continue
                 printf "%s\t%s\t%s\n" "$h" "$tam" "$caminho" >> "$tmp_hashes"
-                processados=$((processados + 1))
-                if [ "$total" -gt 0 ]; then
-                    percentual=$((10 + processados * 75 / total))
-                    [ "$percentual" -gt 85 ] && percentual=85
-                fi
-                printf '%s\n' "$percentual" >> "$progresso"
-            done < <(awk -F'\t' -v t="$tam" '$1 == t {print}' "$tmp_all")
+            done
         done < "$tmp_sizes"
     fi
 
     awk -F'\t' '{print $1}' "$tmp_hashes" | sort | uniq -d > "$tmp_hashdup"
+
     if [ -s "$tmp_hashdup" ]; then
         while IFS= read -r hsh; do
             [ -z "$hsh" ] && continue
             awk -F'\t' -v h="$hsh" '$1 == h' "$tmp_hashes" >> "$saida"
         done < "$tmp_hashdup"
     fi
+
     sort -t $'\t' -k1,1 -o "$saida" "$saida" 2>/dev/null
-    printf '100\n' >> "$progresso"
-    touch "$concluido"
-    [ -n "$gauge_pid" ] && wait "$gauge_pid" 2>/dev/null || true
-    rm -f "$tmp_all" "$tmp_sizes" "$tmp_hashes" "$tmp_hashdup" "$progresso" "$concluido"
+
+    rm -f "$tmp_all" "$tmp_sizes" "$tmp_hashes" "$tmp_hashdup"
 }
 
 
@@ -2656,680 +2586,6 @@ eazy_dup_refresh_lista() {
         fi
     } > "$out"
     eazy_lista_filtrada "$q"
-}
-
-eazy_dry_run_status() {
-    [ "${DRY_RUN:-0}" = "1" ] && printf 'LIGADO — operações destrutivas serão simuladas' || printf 'DESLIGADO — operações poderão alterar o sistema'
-}
-
-eazy_dry_run_bloquear() {
-    [ "${DRY_RUN:-0}" = "1" ] || return 1
-    printf '\n[DRY-RUN] Simulação ativa: nenhuma alteração será aplicada.\n'
-    [ -n "${1:-}" ] && printf '[DRY-RUN] Operação protegida: %s\n' "$1"
-    return 0
-}
-
-eazy_mostrar_texto() {
-    local titulo="${1:-eazy}"
-    local altura="${2:-25}"
-    local largura="${3:-75}"
-    local tmp
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-txt.XXXXXX") || return 1
-    {
-        printf 'DRY-RUN: %s\n\n' "$(eazy_dry_run_status)"
-        cat
-    } > "$tmp"
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "$titulo" --textbox "$tmp" "$altura" "$largura" --scrolltext
-    else
-        cat "$tmp"
-        read -r -p "Pressione Enter..."
-    fi
-    rm -f "$tmp"
-}
-export -f eazy_dry_run_status eazy_dry_run_bloquear eazy_mostrar_texto 2>/dev/null || true
-
-monitorar_temperatura_cpu() {
-    local tmp
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-cpu-temp.XXXXXX") || return 1
-    {
-        echo "╔════════════════════════════════════════════════════════════════╗"
-        echo "║              MONITORAMENTO DE TEMPERATURA DA CPU               ║"
-        echo "╚════════════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "DRY-RUN: $(eazy_dry_run_status)"
-        echo ""
-        if command -v sensors >/dev/null 2>&1; then
-            echo "Sensores disponíveis (lm-sensors):"
-            sensors 2>/dev/null || echo "Não foi possível ler os sensores."
-        else
-            echo "lm-sensors não instalado."
-            echo "Instale com: sudo apt install lm-sensors"
-        fi
-        echo ""
-        echo "Sensores térmicos do kernel:"
-        found=0
-        for zone in /sys/class/thermal/thermal_zone*/; do
-            [ -r "${zone}temp" ] || continue
-            name=$(cat "${zone}type" 2>/dev/null || basename "$zone")
-            raw=$(cat "${zone}temp" 2>/dev/null || echo 0)
-            temp=$(awk -v t="$raw" 'BEGIN { if (t > 1000) printf "%.1f°C", t/1000; else printf "%.1f°C", t }')
-            printf '  %-24s %s\n' "$name" "$temp"
-            found=1
-        done
-        [ "$found" -eq 1 ] || echo "Nenhum sensor térmico do kernel encontrado."
-        echo ""
-        echo "Atualização: execute esta opção novamente para uma nova leitura."
-    } > "$tmp"
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "🌡️ Temperatura da CPU — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --textbox "$tmp" 28 90 --scrolltext
-    else
-        cat "$tmp"
-        read -r -p "Pressione Enter..."
-    fi
-    rm -f "$tmp"
-}
-
-menu_manutencao_sistema() {
-    local opcao
-    opcao=$(whiptail --title "🖥️  Manutenção de Sistema — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --menu "Estado: $(eazy_dry_run_status)\n\nEscolha uma opção:" 16 70 9 \
-        "1" "Diagnóstico Rápido (CPU, RAM, Disco)" \
-        "2" "Limpeza de Cache e Temporários" \
-        "3" "Análise de Disco (du -sh)" \
-        "4" "Verificar Saúde do Disco (SMART)" \
-        "5" "Processos Pesados (top 10)" \
-        "6" "Estatísticas de Rede" \
-        "7" "Logs do Sistema" \
-        "8" "Temperatura da CPU" \
-        "0" "Voltar" \
-        3>&1 1>&2 2>&3)
-
-    case "$opcao" in
-        1) diagnostico_rapido ;;
-        2) limpar_cache_sistema ;;
-        3) analise_disco ;;
-        4) verificar_disco_smart ;;
-        5) processos_pesados ;;
-        6) estatisticas_rede ;;
-        7) logs_sistema ;;
-        8) monitorar_temperatura_cpu ;;
-        0) return ;;
-    esac
-}
-
-diagnostico_rapido() {
-    {
-        echo "╔════════════════════════════════════════════════════════════════╗"
-        echo "║              DIAGNÓSTICO RÁPIDO DO SISTEMA                     ║"
-        echo "╚════════════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "📊 CPU:"
-        if command -v lscpu >/dev/null 2>&1; then
-            lscpu 2>/dev/null | grep -E "Model name|CPU max|CPU min|cores|Thread|Socket" || true
-        else
-            grep -m1 'model name' /proc/cpuinfo 2>/dev/null || echo "CPU: indisponível"
-            echo "Cores: $(nproc 2>/dev/null || echo ?)"
-        fi
-        echo ""
-        echo "💾 MEMÓRIA:"
-        free -h 2>/dev/null || true
-        echo ""
-        echo "💿 DISCO:"
-        df -h / 2>/dev/null | tail -1 || true
-        echo ""
-        echo "🌡️  TEMPERATURA:"
-        if command -v sensors &>/dev/null; then
-            sensors 2>/dev/null | grep -E "Core|Package|temp" || echo "Sensor não disponível"
-        else
-            echo "lm-sensors não instalado"
-        fi
-        echo ""
-        echo "⏱️  UPTIME:"
-        uptime 2>/dev/null || true
-        echo ""
-    } | eazy_mostrar_texto "Diagnóstico Rápido" 28 78
-}
-
-limpar_cache_sistema() {
-    eazy_dry_run_bloquear "limpeza de cache e temporários" && return 0
-    whiptail --title "🧹 Limpeza de Cache" --yesno \
-        "Isso irá limpar:\n\n  • Cache do sistema (/tmp)\n  • Cache de aplicações\n  • Arquivos temporários\n\nContinuar?" 12 60 || return
-    solicitar_senha_sudo || return 1
-    {
-
-        echo "Limpando caches..."
-        sync 2>/dev/null || true
-        if [ -w /proc/sys/vm/drop_caches ]; then
-            echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-        else
-            echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || echo "(drop_caches: precisa de root)"
-        fi
-        rm -rf ~/.cache/thumbnails/* 2>/dev/null || true
-        rm -rf ~/.cache/fontconfig/* 2>/dev/null || true
-        # Não apaga /tmp inteiro sem root e com risco — só arquivos do usuário com +30 dias seria melhor;
-        # mantém a intenção original mas evita falha silenciosa.
-        find /tmp -maxdepth 1 -type f -user "$(id -un)" -delete 2>/dev/null || true
-        echo "✅ Limpeza concluída!"
-    } | eazy_mostrar_texto "Limpeza de Cache" 12 60
-}
-
-analise_disco() {
-    local tmp progress concluido gauge_pid=""
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-disk-analysis.XXXXXX") || return 1
-    progress=$(mktemp "${TMPDIR:-/tmp}/eazy-disk-progress.XXXXXX") || { rm -f "$tmp"; return 1; }
-    concluido="${progress}.done"
-    : > "$progress"; rm -f "$concluido"
-    if command -v whiptail >/dev/null 2>&1 && [ -t 2 ]; then
-        (
-            while [ ! -f "$concluido" ]; do
-                pct=$(tail -n 1 "$progress" 2>/dev/null || echo 0)
-                pct=$(printf '%s' "$pct" | tr -cd '0-9'); pct=${pct:-0}
-                printf '%s\n' "$pct"
-                sleep 0.15
-            done
-            printf '100\n'
-        ) | whiptail --gauge "Analisando HD...\nCalculando uso das pastas e partições." 8 70 0 2>/dev/null &
-        gauge_pid=$!
-    fi
-    {
-        printf '5\n' >> "$progress"
-        echo "Analisando uso de disco (top 20)..."
-        echo ""
-        du -sh /* 2>/dev/null | sort -rh | head -20
-        printf '70\n' >> "$progress"
-        echo ""
-        echo "--- Partições ---"
-        df -hT -x tmpfs -x devtmpfs 2>/dev/null | sed -n '1,25p' || true
-        printf '100\n' >> "$progress"
-    } > "$tmp"
-    touch "$concluido"
-    [ -n "$gauge_pid" ] && wait "$gauge_pid" 2>/dev/null || true
-    cat "$tmp" | eazy_mostrar_texto "Análise de Disco" 28 78
-    rm -f "$tmp" "$progress" "$concluido"
-}
-
-verificar_disco_smart() {
-    if ! command -v smartctl &>/dev/null; then
-        whiptail --title "❌ Erro" --msgbox "smartmontools não instalado.\n\nInstale com: sudo apt install smartmontools" 8 60
-        return
-    fi
-
-    {
-        echo "Dispositivos encontrados:"
-        smartctl --scan 2>/dev/null || true
-        echo ""
-        echo "Status SMART resumido:"
-        while read -r dev tipo; do
-            [ "$tipo" = "disk" ] || continue
-            [ -b "$dev" ] || continue
-            echo "=== $dev ==="
-            # tenta sem sudo primeiro; depois com sudo
-            out=$(smartctl -H "$dev" 2>/dev/null | grep -Ei 'overall-health|health status|result|PASSED|FAILED' | head -3)
-            if [ -z "$out" ]; then
-                if solicitar_senha_sudo; then
-                    out=$(sudo -n smartctl -H "$dev" 2>/dev/null | grep -Ei 'overall-health|health status|result|PASSED|FAILED' | head -3)
-                fi
-            fi
-            echo "${out:-sem leitura (permissão ou SMART indisponível)}"
-            smartctl -i "$dev" 2>/dev/null | grep -E 'Model|Serial|Capacity' | head -5 || true
-            echo ""
-        done < <(lsblk -dn -o PATH,TYPE 2>/dev/null)
-    } | eazy_mostrar_texto "SMART / Saúde do Disco" 24 78
-}
-
-processos_pesados() {
-    {
-        echo "10 Processos que mais usam CPU:"
-        ps aux --sort=-%cpu 2>/dev/null | head -11 || true
-        echo ""
-        echo "10 Processos que mais usam memória:"
-        ps aux --sort=-%mem 2>/dev/null | head -11 || true
-    } | eazy_mostrar_texto "Processos Pesados" 26 90
-}
-
-estatisticas_rede() {
-    {
-        echo "Interfaces de rede:"
-        ip -br link 2>/dev/null || ip link show 2>/dev/null || true
-        echo ""
-        echo "Endereços:"
-        ip -br addr 2>/dev/null || ip addr show 2>/dev/null || true
-        echo ""
-        echo "Rotas:"
-        ip route show 2>/dev/null | sed -n '1,25p' || true
-    } | eazy_mostrar_texto "Estatísticas de Rede" 26 78
-}
-
-logs_sistema() {
-    {
-        echo "Últimas 50 linhas do journal/syslog:"
-        echo ""
-        journalctl -n 50 --no-pager 2>/dev/null || tail -50 /var/log/syslog 2>/dev/null || tail -50 /var/log/messages 2>/dev/null || echo "Logs indisponíveis."
-    } | eazy_mostrar_texto "Logs do Sistema" 28 90
-}
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 2. MENU DE GERENCIAMENTO DE SWAP (Ctrl+K → Swap)
-# ════════════════════════════════════════════════════════════════════════════════
-
-menu_gerenciar_swap() {
-    local opcao
-    opcao=$(whiptail --title "💾 Gerenciador de SWAP — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --menu "Estado: $(eazy_dry_run_status)\n\nEscolha uma opção:" 14 70 7 \
-        "1" "Ver Status do Swap" \
-        "2" "Limpar Swap (drop_caches)" \
-        "3" "Alterar Swappiness" \
-        "4" "Redimensionar Arquivo de Swap" \
-        "5" "Criar Novo Swap" \
-        "0" "Voltar" \
-        3>&1 1>&2 2>&3)
-
-    case "$opcao" in
-        1) ver_status_swap ;;
-        2) limpar_swap ;;
-        3) alterar_swappiness ;;
-        4) redimensionar_swap ;;
-        5) criar_novo_swap ;;
-        0) return ;;
-    esac
-}
-
-ver_status_swap() {
-    {
-        echo "╔════════════════════════════════════════════════════════════════╗"
-        echo "║                    STATUS DO SWAP                              ║"
-        echo "╚════════════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "Partições/Arquivos de Swap:"
-        swapon --show 2>/dev/null || echo "Nenhum swap ativo"
-        echo ""
-        echo "Uso de Memória:"
-        free -h 2>/dev/null || true
-        echo ""
-        echo "Swappiness Atual:"
-        cat /proc/sys/vm/swappiness 2>/dev/null || echo "indisponível"
-    } | eazy_mostrar_texto "Status do SWAP" 22 75
-}
-
-limpar_swap() {
-    eazy_dry_run_bloquear "limpeza de swap" && return 0
-    whiptail --title "🧹 Limpeza de Swap" --yesno \
-                "Isso irá desativar e reativar o swap.\nDados na RAM serão preservados.\n\nContinuar?" 10 60 || return
-    solicitar_senha_sudo || return 1
-    {
-
-        echo "Desativando swap..."
-        if sudo -n swapoff -a 2>/dev/null; then
-            sleep 1
-            echo "Limpando cache de memória..."
-            sudo -n sync 2>/dev/null || true
-            echo 3 | sudo -n tee /proc/sys/vm/drop_caches >/dev/null 2>&1 || true
-            sleep 1
-            echo "Reativando swap..."
-            sudo -n swapon -a 2>/dev/null || true
-            echo ""
-            echo "✅ Swap limpo com sucesso!"
-        else
-            echo "❌ Falha (precisa de root / sudo)."
-        fi
-        echo ""
-        echo "Novo status:"
-        free -h 2>/dev/null | grep -i swap || true
-    } | eazy_mostrar_texto "Limpeza de Swap" 16 65
-}
-
-alterar_swappiness() {
-    eazy_dry_run_bloquear "alteração de swappiness" && return 0
-    local valor
-    valor=$(whiptail --inputbox "Valor de swappiness (0-100):\n\n0 = usar RAM ao máximo\n100 = usar swap agressivamente\n\nValor atual: $(cat /proc/sys/vm/swappiness)" 12 60 \
-        3>&1 1>&2 2>&3)
-
-    if [ -n "$valor" ] && [ "$valor" -ge 0 ] && [ "$valor" -le 100 ]; then
-        if operacao_com_sudo "sysctl vm.swappiness=$valor" "Alterar swappiness"; then
-            whiptail --title "✅ OK" --msgbox "Swappiness alterado para $valor" 8 50
-        else
-            whiptail --title "❌ Erro" --msgbox "Não foi possível alterar o swappiness." 8 55
-        fi
-    else
-        whiptail --title "❌ Erro" --msgbox "Valor inválido. Use 0-100." 8 50
-    fi
-}
-
-redimensionar_swap() {
-    eazy_dry_run_bloquear "redimensionamento do swap" && return 0
-    local tamanho
-    tamanho=$(whiptail --inputbox "Novo tamanho do swap (em GB):\n\nExemplo: 2 para 2GB\nExemplo: 4 para 4GB" 10 60 \
-        3>&1 1>&2 2>&3)
-
-    if [ -n "$tamanho" ] && [ "$tamanho" -gt 0 ] 2>/dev/null; then
-        solicitar_senha_sudo || return 1
-        {
-            echo "Redimensionando swap para ${tamanho}GB..."
-            sudo -n swapoff -a 2>/dev/null || true
-            sudo -n rm -f /swap.img 2>/dev/null || true
-            if sudo -n fallocate -l ${tamanho}G /swap.img 2>/dev/null || sudo -n dd if=/dev/zero of=/swap.img bs=1G count="$tamanho" status=progress 2>/dev/null; then
-                sudo -n chmod 600 /swap.img
-                sudo -n mkswap /swap.img
-                sudo -n swapon /swap.img
-                echo "✅ Swap redimensionado com sucesso!"
-            else
-                echo "❌ Falha ao criar /swap.img"
-            fi
-            free -h 2>/dev/null | grep -i swap || true
-        } | eazy_mostrar_texto "Redimensionar Swap" 16 65
-    fi
-}
-
-criar_novo_swap() {
-    eazy_dry_run_bloquear "criação de novo arquivo de swap" && return 0
-    whiptail --title "ℹ️ Criar Novo Swap" --msgbox \
-        "Para criar um novo swap, você precisa:\n\n1. Ter espaço em disco livre\n2. Privilégios de root\n3. Saber qual dispositivo usar\n\nRecomenda-se usar: sudo cfdisk /dev/sdX" 12 60
-}
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 3. MENU DE SOM (Ctrl+K → Som)
-# ════════════════════════════════════════════════════════════════════════════════
-
-menu_gerenciar_som() {
-    local opcao
-    opcao=$(whiptail --title "🔊 Gerenciador de Som — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --menu "Estado: $(eazy_dry_run_status)\n\nEscolha uma opção:" 14 70 7 \
-        "1" "Diagnóstico de Som" \
-        "2" "Reiniciar Sistema de Som" \
-        "3" "Testar Saída de Áudio" \
-        "4" "Listar Dispositivos de Áudio" \
-        "5" "Ajustar Volume (alsamixer)" \
-        "0" "Voltar" \
-        3>&1 1>&2 2>&3)
-
-    case "$opcao" in
-        1) diagnostico_som ;;
-        2) reiniciar_som ;;
-        3) testar_audio ;;
-        4) listar_dispositivos_audio ;;
-        5) ajustar_volume ;;
-        0) return ;;
-    esac
-}
-
-diagnostico_som() {
-    {
-        echo "╔════════════════════════════════════════════════════════════════╗"
-        echo "║                 DIAGNÓSTICO DE SOM                             ║"
-        echo "╚════════════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "🎵 Servidor de Som:"
-        if command -v wpctl &>/dev/null; then
-            echo "PipeWire (wpctl):"
-            wpctl status 2>/dev/null | head -40 || true
-        elif command -v pactl &>/dev/null; then
-            echo "PulseAudio/PipeWire (pactl):"
-            pactl info 2>/dev/null | head -12 || true
-            echo ""
-            echo "Sinks:"
-            pactl list short sinks 2>/dev/null || true
-        else
-            echo "Nenhum servidor detectado (wpctl/pactl)"
-        fi
-        echo ""
-        echo "🎧 Dispositivos ALSA:"
-        aplay -l 2>/dev/null || echo "ALSA não disponível"
-        echo ""
-        echo "🔊 Mixer:"
-        amixer info 2>/dev/null | head -5 || echo "amixer indisponível"
-    } | eazy_mostrar_texto "Diagnóstico de Som" 28 78
-}
-
-reiniciar_som() {
-    eazy_dry_run_bloquear "reinício do sistema de som" && return 0
-    whiptail --title "🔄 Reiniciar Som" --yesno \
-        "Isso irá reiniciar o sistema de som.\nAplicações em reprodução serão pausadas.\n\nContinuar?" 10 60 || return
-
-    {
-        echo "Reiniciando sistema de som..."
-        if command -v systemctl &>/dev/null; then
-            systemctl --user restart pipewire pipewire-pulse wireplumber 2>/dev/null || true
-            systemctl --user restart pulseaudio 2>/dev/null || true
-        fi
-        pulseaudio -k 2>/dev/null || true
-        sleep 1
-        pulseaudio --start 2>/dev/null || true
-        echo "✅ Comandos de reinício enviados."
-        echo "(Se usar PipeWire puro, reinicie a sessão se o áudio não voltar.)"
-    } | eazy_mostrar_texto "Reiniciar Som" 14 65
-}
-
-testar_audio() {
-    whiptail --title "🔊 Teste de Áudio" --msgbox \
-        "Você deve ouvir um tom de teste nos próximos 3 segundos.\n\nSe não ouve nada, verifique o volume." 10 60
-
-    speaker-test -t wav -c 2 -l 1 2>/dev/null || \
-    paplay /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null || \
-    ffplay -nodisp -autoexit /usr/share/sounds/freedesktop/stereo/complete.oga 2>/dev/null
-}
-
-listar_dispositivos_audio() {
-    {
-        echo "Dispositivos ALSA (playback):"
-        aplay -l 2>/dev/null || echo "indisponível"
-        echo ""
-        echo "Dispositivos ALSA (capture):"
-        arecord -l 2>/dev/null || echo "indisponível"
-        echo ""
-        echo "PulseAudio/PipeWire sinks:"
-        if command -v pactl &>/dev/null; then
-            pactl list sinks 2>/dev/null | grep -E "Name:|State:|device.description" || true
-        else
-            echo "pactl não instalado"
-        fi
-        if command -v wpctl &>/dev/null; then
-            echo ""
-            echo "wpctl status:"
-            wpctl status 2>/dev/null | head -40 || true
-        fi
-    } | eazy_mostrar_texto "Dispositivos de Áudio" 28 78
-}
-
-ajustar_volume() {
-    if command -v alsamixer &>/dev/null; then
-        alsamixer
-    elif command -v pavucontrol &>/dev/null; then
-        pavucontrol
-    else
-        whiptail --title "❌ Erro" --msgbox "Nenhum mixer disponível.\n\nInstale: sudo apt install alsamixer pavucontrol" 8 60
-    fi
-}
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 4. MENU DE VÍDEO/OTIMIZAÇÃO (Ctrl+K → Vídeo)
-# ════════════════════════════════════════════════════════════════════════════════
-
-menu_otimizar_video() {
-    local opcao
-    opcao=$(whiptail --title "🎬 Otimização de Vídeo — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --menu "Estado: $(eazy_dry_run_status)\n\nEscolha uma opção:" 14 70 7 \
-        "1" "Diagnóstico de GPU/Vídeo" \
-        "2" "Otimizar para Vídeo (Performance)" \
-        "3" "Desfazer Otimizações" \
-        "4" "Ver Codecs Disponíveis" \
-        "5" "Teste de Reprodução" \
-        "0" "Voltar" \
-        3>&1 1>&2 2>&3)
-
-    case "$opcao" in
-        1) diagnostico_video ;;
-        2) otimizar_para_video ;;
-        3) remover_otimizacoes ;;
-        4) ver_codecs ;;
-        5) teste_reproducao ;;
-        0) return ;;
-    esac
-}
-
-diagnostico_video() {
-    {
-        echo "╔════════════════════════════════════════════════════════════════╗"
-        echo "║            DIAGNÓSTICO DE GPU/VÍDEO                            ║"
-        echo "╚════════════════════════════════════════════════════════════════╝"
-        echo ""
-        echo "🖥️  GPU (PCI):"
-        if command -v lspci >/dev/null 2>&1; then
-            lspci -nnk 2>/dev/null | awk "/VGA compatible controller|3D controller|Display controller/ {show=1; n=0} show {print; n++} show && n >= 5 {show=0}" || true
-        else
-            echo "lspci não instalado"
-        fi
-        echo ""
-        echo "📊 Memória de vídeo / GPU:"
-        if command -v nvidia-smi >/dev/null 2>&1; then
-            nvidia-smi --query-gpu=name,driver_version,memory.total,memory.used --format=csv,noheader 2>/dev/null || nvidia-smi 2>/dev/null | head -20
-        else
-            echo "(nvidia-smi não encontrado)"
-        fi
-        if command -v glxinfo >/dev/null 2>&1; then
-            echo ""
-            echo "OpenGL (glxinfo -B):"
-            glxinfo -B 2>/dev/null || glxinfo 2>/dev/null | grep -E "OpenGL|Memory|renderer|vendor" | head -20
-        else
-            echo ""
-            echo "glxinfo não instalado (sudo apt install mesa-utils)"
-        fi
-        if command -v vulkaninfo >/dev/null 2>&1; then
-            echo ""
-            echo "Vulkan (resumo):"
-            vulkaninfo --summary 2>/dev/null | sed -n "1,30p" || true
-        fi
-        if [ -d /sys/class/drm ]; then
-            echo ""
-            echo "Conectores DRM:"
-            for connector in /sys/class/drm/*/status; do
-                [ -f "$connector" ] || continue
-                printf "  %s: %s\n" "$(basename "$(dirname "$connector")")" "$(cat "$connector" 2>/dev/null)"
-            done
-        fi
-        if command -v xrandr >/dev/null 2>&1; then
-            echo ""
-            echo "Monitores (xrandr):"
-            xrandr --query 2>/dev/null | sed -n "1,25p" || true
-        fi
-        if command -v lsmod >/dev/null 2>&1; then
-            echo ""
-            echo "Módulos gráficos:"
-            lsmod | grep -E "^(i915|amdgpu|radeon|nouveau|nvidia|xe|vc4)" | head -15 || true
-        fi
-    } | eazy_mostrar_texto "Diagnóstico de GPU/Vídeo" 32 90
-}
-
-otimizar_para_video() {
-    eazy_dry_run_bloquear "otimização de vídeo e parâmetros do sistema" && return 0
-    whiptail --title "⚡ Otimizar para Vídeo" --yesno \
-                "Isso irá:\n\n  • Reduzir swappiness\n  • Ajustar cache pressure\n  • Aumentar buffers de rede\n\nContinuar? (pode exigir sudo)" 12 60 || return
-    solicitar_senha_sudo || return 1
-    {
-        echo "Aplicando otimizações (temporárias até reiniciar)..."
-        ok=0
-        if sudo -n sysctl -w vm.swappiness=10 >/dev/null 2>&1; then
-            echo "✓ vm.swappiness=10"; ok=1
-        else
-            echo "✗ vm.swappiness (sem permissão)"
-        fi
-        if sudo -n sysctl -w vm.vfs_cache_pressure=50 >/dev/null 2>&1; then
-            echo "✓ vm.vfs_cache_pressure=50"; ok=1
-        else
-            echo "✗ vfs_cache_pressure (sem permissão)"
-        fi
-        if sudo -n sysctl -w net.core.rmem_max=16777216 >/dev/null 2>&1; then
-            echo "✓ net.core.rmem_max aumentado"; ok=1
-        else
-            echo "✗ rmem_max (sem permissão)"
-        fi
-        echo ""
-        if [ "$ok" -eq 1 ]; then
-            echo "✅ Pelo menos uma otimização aplicada."
-        else
-            echo "❌ Nenhuma alteração (precisa de sudo)."
-        fi
-    } | eazy_mostrar_texto "Otimizar Vídeo" 16 65
-}
-
-remover_otimizacoes() {
-    eazy_dry_run_bloquear "restauração dos parâmetros de vídeo" && return 0
-    whiptail --title "⚙️  Remover Otimizações" --yesno \
-        "Restaurar valores padrão de sistema?\n\nIsso reverterá as otimizações de vídeo." 10 60 || return
-    solicitar_senha_sudo || return 1
-    {
-
-        echo "Removendo otimizações..."
-        sudo -n sysctl -w vm.swappiness=60 >/dev/null 2>&1 && echo "✓ swappiness=60" || echo "✗ swappiness"
-        sudo -n sysctl -w vm.vfs_cache_pressure=100 >/dev/null 2>&1 && echo "✓ vfs_cache_pressure=100" || echo "✗ cache_pressure"
-        echo "✅ Concluído (se tinha permissão)."
-    } | eazy_mostrar_texto "Remover Otimizações" 12 60
-}
-
-ver_codecs() {
-    {
-        if command -v ffmpeg >/dev/null 2>&1; then
-            echo "Codecs de vídeo/áudio (ffmpeg, amostra):"
-            echo ""
-            ffmpeg -codecs 2>/dev/null | grep -E "^ DEV|^ D.V|^ D.A" | head -40
-            echo ""
-            echo "--- Decoders comuns ---"
-            ffmpeg -hide_banner -decoders 2>/dev/null | grep -Ei "h264|hevc|vp9|av1|aac|opus" | head -20 || true
-        else
-            echo "ffmpeg não instalado."
-            echo "Instale: sudo apt install ffmpeg"
-        fi
-    } | eazy_mostrar_texto "Codecs Disponíveis" 28 78
-}
-
-
-teste_reproducao() {
-    whiptail --title "🎬 Teste de Reprodução" --msgbox \
-        "Para testar reprodução de vídeo,\nuse o eazy normalmente com Ctrl+B\n\nOu execute um vídeo com: mpv arquivo.mp4" 10 60
-}
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 5. REMOVER DIRETÓRIOS VAZIOS
-# ════════════════════════════════════════════════════════════════════════════════
-
-remover_dirs_vazios_fzf() {
-    local pasta="${1:-.}"
-
-    whiptail --title "🗂️  Remover Diretórios Vazios — DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" --yesno \
-        "Procurar e remover diretórios vazios em:\n\n  $pasta\n\nEstado: $(eazy_dry_run_status)\n\nContinuar?" 12 70 || return
-
-    local tmp selecionados
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-empty.XXXXXX") || return
-    {
-        echo "Buscando diretórios vazios..."
-        # fzf interativo precisa do terminal — roda fora do pipe do whiptail
-    } > "$tmp"
-    selecionados=$(find "$pasta" -type d -empty 2>/dev/null | \
-        fzf -m \
-            --header="[ESPAÇO]: Selecionar | [TAB]: Alternar | [ENTER]: Confirmar" \
-            --bind="del:accept" 2>/dev/null) || true
-
-    {
-        if [ -z "$selecionados" ]; then
-            echo "Nenhum diretório selecionado (ou nenhum vazio)."
-        else
-            echo "Diretórios selecionados:"
-            echo "$selecionados"
-            echo ""
-            echo "Removendo... (DRY-RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO))"
-            while IFS= read -r dir; do
-                [ -z "$dir" ] && continue
-                if [ "${DRY_RUN:-0}" = "1" ]; then
-                    echo "[DRY-RUN] rmdir -- $dir"
-                else
-                    rmdir "$dir" 2>/dev/null && echo "✓ $dir" || echo "✗ $dir"
-                fi
-            done <<< "$selecionados"
-            echo "✅ Concluído!"
-        fi
-    } > "$tmp"
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Dirs Vazios" --textbox "$tmp" 20 70 --scrolltext
-    else
-        cat "$tmp"
-    fi
-    rm -f "$tmp"
 }
 
 registrar_status() {
