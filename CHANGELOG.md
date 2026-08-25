@@ -1,5 +1,23 @@
 # Changelog
 
+## 3.0-11
+
+- Restaurado o HELP EXPANDIDO do F10 com navegação, filas, duplicados, manutenção e dicas completas.
+- `Esc` sai da busca recursiva e retorna à pasta normal sem fechar o eazy.
+- Busca de duplicados com barra de progresso durante inventário, hashes e consolidação.
+- Análise e limpeza automática de HD com progresso por etapas.
+- Menu Ctrl-K ampliado com manutenção de sistema, HD, vídeo, som, SWAP e diretórios vazios.
+- Nova opção de monitoramento de temperatura da CPU via `lm-sensors` e sensores térmicos do kernel.
+- Operações que exigem sudo solicitam a senha em caixa antes da execução e usam `sudo -n` depois da autenticação.
+- Estado do DRY-RUN exibido no cabeçalho e nas telas de manutenção.
+
+## 3.0-10
+
+- Filtro digitado (`FZF_QUERY`) permanece até mudar de pasta ou apagar
+- Seleção no modo normal persiste em `SELECTED_FILE` (sobrevive a reload/filtro)
+- Ctrl-A / Ctrl-R / Ctrl-X usam `eazy_sel_*` e não incluem `..`
+- Ao mudar de pasta: zera seleção e limpa o filtro digitado
+
 ## 3.0-9
 
 - Lista temporária dedicada para preservar seleções no modo Duplicados durante redesenhos
