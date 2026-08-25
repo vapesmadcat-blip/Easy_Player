@@ -1,3 +1,9 @@
+## 3.0-12 — Release eazy-v3.0-12
+
+- Suporte integrado para leitura e conversão de PDF.
+- PDF abre pelo Enter; nenhuma opção D foi adicionada ao menu.
+- Ferramentas: pdftotext, pdftohtml, pdftoppm e img2pdf.
+
 ## 3.0-11 — Release eazy-v3.0-11
 
 - Instalação oficial por Release GitHub com pacote `.deb` e checksum `.sha256`.

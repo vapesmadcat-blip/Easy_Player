@@ -781,7 +781,8 @@ FILAS, PLAYLISTS E AÇÕES
   Ctrl-Y             Copiar seleção para uma pasta
   Ctrl-U             Mover seleção para uma pasta
   Ctrl-K             Ações sobre a seleção e manutenção do sistema
-  Ctrl-K → D         Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
+  Ctrl-K → C         Conversões: vídeo, imagem e PDF
+  PDF no Enter       Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
   Del                Remover conforme o contexto
   Alt-D              Apagar do disco sem usar a lixeira
 
@@ -797,7 +798,8 @@ MENU Ctrl-K — MANUTENÇÃO
   M                  Menu completo de manutenção
   V                  Validar e limpar playlist .M3U
   P                  Proteger pasta/arquivo com senha
-  PDF                Ler texto, converter para HTML/PNG ou abrir no sistema
+  C                  Conversões: vídeo→vídeo, imagem→imagem, PDF→HTML/texto/imagem, imagem→PDF
+  PDF no Enter       Ler texto, converter para HTML/PNG ou abrir no sistema
   DRY-RUN            Estado visível nas telas; simula ações destrutivas
   sudo               Caixa de senha antes de comandos privilegiados
   Temperatura CPU    Diagnóstico térmico via lm-sensors/kernel
@@ -811,6 +813,7 @@ SISTEMA, CONFIGURAÇÃO E SAÍDA
   Ctrl-Q / Q / X     Salvar sessão e sair
 
 A busca de duplicados e a limpeza/análise do HD exibem progresso.
+Imagens abertas no terminal aguardam Enter para voltar ao navegador.
 O DRY-RUN fica visível no cabeçalho e nas telas de manutenção.
 Operações com sudo pedem a senha antes de executar e restauram o terminal
 em caso de cancelamento ou erro.
@@ -4905,6 +4908,68 @@ executar_selecao() {
     read -p "Pressione Enter para continuar..."
 }
 
+# --- Leitor e conversor de PDF/imagem/vídeo ---
+eh_arquivo_imagem() {
+    local f="$1" ext
+    [ -f "$f" ] || return 1
+    ext=$(printf '%s' "${f##*.}" | tr '[:upper:]' '[:lower:]')
+    [[ "$ext" =~ ^(jpg|jpeg|png|bmp|gif|webp|tif|tiff)$ ]]
+}
+
+mostrar_imagem_com_pausa() {
+    local img="$1"
+    [ -f "$img" ] || return 1
+    clear
+    if command -v chafa >/dev/null 2>&1; then
+        chafa --format symbols --size "${COLUMNS:-100}x${LINES:-30}" -- "$img" 2>/dev/null || true
+        printf '\nImagem: %s\n' "$img"
+        read -r -p 'Pressione Enter para voltar ao navegador... ' _
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "$img" >/dev/null 2>&1 &
+        read -r -p 'Imagem aberta. Pressione Enter para voltar ao navegador... ' _
+    else
+        whiptail --title 'Imagem' --msgbox "Nenhum visualizador disponível. Instale chafa ou use xdg-open." 9 70
+    fi
+}
+
+converter_video_video() {
+    local src out
+    command -v ffmpeg >/dev/null 2>&1 || { whiptail --title 'Conversão de vídeo' --msgbox 'ffmpeg não está instalado.\n\nInstale: sudo apt install ffmpeg' 9 70; return 1; }
+    src=$(whiptail --inputbox 'Arquivo de vídeo de entrada:' 10 80 '' 3>&1 1>&2 2>&3) || return
+    [ -f "$src" ] || { whiptail --title 'Conversão de vídeo' --msgbox "Arquivo não encontrado:\n$src" 9 70; return 1; }
+    out=$(whiptail --inputbox 'Arquivo de vídeo de saída (ex.: saida.mp4, saida.avi):' 10 80 "${src%.*}_convertido.mp4" 3>&1 1>&2 2>&3) || return
+    [ -n "$out" ] || return
+    if ffmpeg -hide_banner -i "$src" -y "$out" >/tmp/eazy-ffmpeg.log 2>&1; then
+        whiptail --title 'Conversão de vídeo' --msgbox "Vídeo convertido:\n$out" 9 70
+    else
+        whiptail --title 'Conversão de vídeo' --msgbox "Falha na conversão.\n\n$(tail -n 8 /tmp/eazy-ffmpeg.log)" 14 80
+    fi
+}
+
+converter_imagem_imagem() {
+    local src out
+    if command -v magick >/dev/null 2>&1; then :; elif command -v convert >/dev/null 2>&1; then :; else
+        whiptail --title 'Conversão de imagem' --msgbox 'ImageMagick não está instalado.\n\nInstale: sudo apt install imagemagick' 9 70; return 1
+    fi
+    src=$(whiptail --inputbox 'Imagem de entrada (JPG/PNG/BMP/JPEG):' 10 80 '' 3>&1 1>&2 2>&3) || return
+    [ -f "$src" ] || { whiptail --title 'Conversão de imagem' --msgbox "Arquivo não encontrado:\n$src" 9 70; return 1; }
+    out=$(whiptail --inputbox 'Imagem de saída (ex.: saida.png, saida.jpg):' 10 80 "${src%.*}_convertida.png" 3>&1 1>&2 2>&3) || return
+    [ -n "$out" ] || return
+    if command -v magick >/dev/null 2>&1; then magick "$src" "$out" >/dev/null 2>&1; else convert "$src" "$out" >/dev/null 2>&1; fi
+    if [ -f "$out" ]; then whiptail --title 'Conversão de imagem' --msgbox "Imagem convertida:\n$out" 9 70; else whiptail --title 'Conversão de imagem' --msgbox 'Falha na conversão da imagem.' 9 60; fi
+}
+
+converter_imagem_pdf() {
+    imagens_para_pdf
+}
+
+converter_pdf_imagem() {
+    local pdf
+    pdf=$(whiptail --inputbox 'Arquivo PDF de entrada:' 10 75 '' 3>&1 1>&2 2>&3) || return
+    eh_arquivo_pdf "$pdf" || { whiptail --title 'PDF → Imagens' --msgbox "PDF não encontrado ou inválido:\n$pdf" 9 70; return 1; }
+    pdf_para_imagens "$pdf"
+}
+
 # --- Leitor e conversor de PDF ---
 eh_arquivo_pdf() {
     local f="$1" mime
@@ -4981,6 +5046,30 @@ imagens_para_pdf() {
     fi
 }
 
+menu_conversoes() {
+    local opcao
+    opcao=$(whiptail --title 'Conversões multimídia' --menu 'Escolha o tipo de conversão:' 18 82 8 \
+        '1' 'Vídeo → Vídeo (ffmpeg: MP4/AVI/MKV...)' \
+        '2' 'Imagem → Imagem (JPG/PNG/BMP/JPEG...)' \
+        '3' 'Imagens → PDF (img2pdf)' \
+        '4' 'PDF → Imagens PNG (pdftoppm)' \
+        '5' 'PDF → Texto / HTML' \
+        '0' 'Voltar' 3>&1 1>&2 2>&3) || return
+    case "$opcao" in
+        1) converter_video_video ;;
+        2) converter_imagem_imagem ;;
+        3) converter_imagem_pdf ;;
+        4) converter_pdf_imagem ;;
+        5)
+            local pdf escolha
+            pdf=$(whiptail --inputbox 'Arquivo PDF:' 10 70 '' 3>&1 1>&2 2>&3) || return
+            eh_arquivo_pdf "$pdf" || return
+            escolha=$(whiptail --title 'PDF' --menu 'Conversão:' 12 60 3 '1' 'PDF → texto' '2' 'PDF → HTML' '0' 'Voltar' 3>&1 1>&2 2>&3) || return
+            case "$escolha" in 1) pdf_ler_texto "$pdf" ;; 2) pdf_para_html "$pdf" ;; esac
+            ;;
+    esac
+}
+
 menu_pdf() {
     local pdf="$1" opcao
     eh_arquivo_pdf "$pdf" || return 1
@@ -5021,10 +5110,10 @@ menu_acoes_selecao() {
         "7" "📋 Copiar para pasta..." \
         "8" "📁 Mover para pasta..." \
         "9" "➕ Adicionar à Fila (INSERT)" \
-        "D" "📄 Ler/Converter PDF" \
         "M" "🛠️  Manutenção" \
         "V" "✔️  Validar .M3U" \
         "P" "🔒 Proteção" \
+        "C" "🔄 Conversões" \
         "S" "🖥️  Sistema" \
         "H" "💿 HD / Disco" \
         "A" "🔊 Som / Áudio" \
@@ -5067,6 +5156,9 @@ menu_acoes_selecao() {
             # Validar playlist
             arquivo=$(whiptail --inputbox "Arquivo .M3U:" 10 60 "$PLAYLIST_1" 3>&1 1>&2 2>&3)
             [ -n "$arquivo" ] && validar_e_limpar_m3u "$arquivo"
+            ;;
+        C)
+            menu_conversoes
             ;;
         P)
             # Proteção com senha
@@ -5114,6 +5206,8 @@ menu_acoes_selecao() {
                         menu_pdf "$tocado"
                     elif eh_arquivo_texto "$tocado"; then
                         mostrar_texto "$tocado"
+                    elif eh_arquivo_imagem "$tocado"; then
+                        mostrar_imagem_com_pausa "$tocado"
                     else
                         tocar_arquivo "$tocado"
                     fi
@@ -5128,12 +5222,6 @@ menu_acoes_selecao() {
         6) renomear_selecao "$selecao" ;;
         7) copiar_arquivos "$selecao" ;;
         8) mover_arquivos "$selecao" ;;
-        D)
-            # Leitor e conversor de PDF
-            pdf_item=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | head -n1)
-            pdf_item=$(caminho_absoluto "$pdf_item")
-            menu_pdf "$pdf_item"
-            ;;
         9)
             # INSERT
             quantidade_adicionada=0
@@ -6283,6 +6371,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                     menu_pdf "$tocado"
                 elif eh_arquivo_texto "$tocado"; then
                     mostrar_texto "$tocado"
+                elif eh_arquivo_imagem "$tocado"; then
+                    mostrar_imagem_com_pausa "$tocado"
                 else
                     tocar_arquivo "$tocado"
                 fi
@@ -6331,6 +6421,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 menu_pdf "$ULTIMO_ARQUIVO"
             elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_imagem "$ULTIMO_ARQUIVO"; then
+                mostrar_imagem_com_pausa "$ULTIMO_ARQUIVO"
             else
                 tocar_arquivo "$ULTIMO_ARQUIVO"
             fi
@@ -6371,6 +6463,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 menu_pdf "$ULTIMO_ARQUIVO"
             elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_imagem "$ULTIMO_ARQUIVO"; then
+                mostrar_imagem_com_pausa "$ULTIMO_ARQUIVO"
             else
                 tocar_arquivo "$ULTIMO_ARQUIVO"
             fi

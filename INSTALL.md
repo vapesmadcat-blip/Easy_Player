@@ -1,14 +1,14 @@
 # Instalação do eazy
 
-## Debian / Ubuntu — versão 3.0-11
+## Debian / Ubuntu — versão 3.0-12
 
 A instalação oficial usa a **Release do GitHub**, o pacote `.deb` e seu checksum SHA-256:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-11/eazy_3.0-11_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-11/eazy_3.0-11_all.deb.sha256
-sha256sum -c eazy_3.0-11_all.deb.sha256
-sudo apt install ./eazy_3.0-11_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-12/eazy_3.0-12_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-12/eazy_3.0-12_all.deb.sha256
+sha256sum -c eazy_3.0-12_all.deb.sha256
+sudo apt install ./eazy_3.0-12_all.deb
 eazy
 ```
 
@@ -17,7 +17,7 @@ O comando `sha256sum -c` deve informar `OK` antes da instalação. Não instale 
 Para remover os arquivos baixados depois da instalação:
 
 ```bash
-rm -f eazy_3.0-11_all.deb eazy_3.0-11_all.deb.sha256
+rm -f eazy_3.0-12_all.deb eazy_3.0-12_all.deb.sha256
 ```
 
 ## Atualização a partir do código
@@ -27,8 +27,8 @@ git clone https://github.com/vapesmadcat-blip/Easy_Player.git
 cd Easy_Player
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sha256sum packaging/eazy/dist/eazy_3.0-11_all.deb
-sudo apt install ./packaging/eazy/dist/eazy_3.0-11_all.deb
+sha256sum packaging/eazy/dist/eazy_3.0-12_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-12_all.deb
 eazy
 ```
 
@@ -56,13 +56,13 @@ sudo apt install -y fzf mpv mplayer gawk sed findutils whiptail wget \
 
 Recursos opcionais: `chafa`, `ffmpeg`, `vlc`, `smartmontools`, `pciutils`, `lshw`, `inxi`, `dmidecode`, `usbutils`, `mesa-utils` e `vulkan-tools`.
 
-## Recursos da versão 3.0-11
+## Recursos da versão 3.0-12
 
 A atualização inclui HELP EXPANDIDO no `F10`, saída com `Esc` da busca recursiva, barras de progresso na busca de duplicados e na limpeza/análise do HD, menu `Ctrl-K` completo, monitoramento de temperatura da CPU, autenticação sudo por caixa de senha e indicador persistente de DRY-RUN.
 
 ## PDF: leitura e conversão
 
-Ao selecionar um arquivo `.pdf` e pressionar `Enter`, o eazy oferece leitura do texto no terminal, conversão para HTML, conversão das páginas para PNG ou abertura no leitor gráfico do sistema. No menu de ações (`Ctrl-K`), use `D — Ler/Converter PDF`. Para converter imagens PNG/JPG em PDF, escolha `Ctrl-K → D` a partir de uma seleção compatível.
+Ao selecionar um arquivo `.pdf` e pressionar `Enter`, o eazy abre uma caixa para escolher leitura do texto no terminal, conversão para HTML, conversão das páginas para PNG ou abertura no leitor gráfico do sistema. O menu `Ctrl-K → C — Conversões` oferece vídeo→vídeo, imagem→imagem, imagens→PDF e PDF→imagem. Imagens abertas no terminal aguardam `Enter` antes de retornar ao navegador.
 
 As ferramentas usadas são `pdftotext`, `pdftohtml`, `pdftoppm` e `img2pdf`, fornecidas por `poppler-utils` e `img2pdf`.
 
