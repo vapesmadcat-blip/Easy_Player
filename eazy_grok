@@ -4932,11 +4932,27 @@ mostrar_imagem_com_pausa() {
     fi
 }
 
+selecionar_arquivo_conversao() {
+    local titulo="$1" tipo="$2" multi="${3:-0}" lista
+    case "$tipo" in
+        video) lista=$(find . -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.avi' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mpg' -o -iname '*.mpeg' \) -printf '%p\n' 2>/dev/null) ;;
+        imagem) lista=$(find . -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.bmp' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.tif' -o -iname '*.tiff' \) -printf '%p\n' 2>/dev/null) ;;
+        pdf) lista=$(find . -maxdepth 1 -type f -iname '*.pdf' -printf '%p\n' 2>/dev/null) ;;
+        *) lista=$(find . -maxdepth 1 -type f -printf '%p\n' 2>/dev/null) ;;
+    esac
+    [ -n "$lista" ] || { whiptail --title 'Conversões' --msgbox 'Nenhum arquivo compatível encontrado nesta pasta.' 9 65; return 1; }
+    if [ "$multi" -eq 1 ]; then
+        printf '%s\n' "$lista" | sed 's|^\./||' | sort | fzf --multi --height=80% --border --prompt="$titulo ❯ " --header='TAB/ESPAÇO: marcar | ENTER: confirmar | ESC: cancelar'
+    else
+        printf '%s\n' "$lista" | sed 's|^\./||' | sort | fzf --height=80% --border --prompt="$titulo ❯ " --header='ENTER: escolher | ESC: cancelar'
+    fi
+}
+
 converter_video_video() {
     local src out
     command -v ffmpeg >/dev/null 2>&1 || { whiptail --title 'Conversão de vídeo' --msgbox 'ffmpeg não está instalado.\n\nInstale: sudo apt install ffmpeg' 9 70; return 1; }
-    src=$(whiptail --inputbox 'Arquivo de vídeo de entrada:' 10 80 '' 3>&1 1>&2 2>&3) || return
-    [ -f "$src" ] || { whiptail --title 'Conversão de vídeo' --msgbox "Arquivo não encontrado:\n$src" 9 70; return 1; }
+    src=$(selecionar_arquivo_conversao 'Vídeo de entrada' video) || return
+    [ -f "$src" ] || return
     out=$(whiptail --inputbox 'Arquivo de vídeo de saída (ex.: saida.mp4, saida.avi):' 10 80 "${src%.*}_convertido.mp4" 3>&1 1>&2 2>&3) || return
     [ -n "$out" ] || return
     if ffmpeg -hide_banner -i "$src" -y "$out" >/tmp/eazy-ffmpeg.log 2>&1; then
@@ -4951,8 +4967,8 @@ converter_imagem_imagem() {
     if command -v magick >/dev/null 2>&1; then :; elif command -v convert >/dev/null 2>&1; then :; else
         whiptail --title 'Conversão de imagem' --msgbox 'ImageMagick não está instalado.\n\nInstale: sudo apt install imagemagick' 9 70; return 1
     fi
-    src=$(whiptail --inputbox 'Imagem de entrada (JPG/PNG/BMP/JPEG):' 10 80 '' 3>&1 1>&2 2>&3) || return
-    [ -f "$src" ] || { whiptail --title 'Conversão de imagem' --msgbox "Arquivo não encontrado:\n$src" 9 70; return 1; }
+    src=$(selecionar_arquivo_conversao 'Imagem de entrada' imagem) || return
+    [ -f "$src" ] || return
     out=$(whiptail --inputbox 'Imagem de saída (ex.: saida.png, saida.jpg):' 10 80 "${src%.*}_convertida.png" 3>&1 1>&2 2>&3) || return
     [ -n "$out" ] || return
     if command -v magick >/dev/null 2>&1; then magick "$src" "$out" >/dev/null 2>&1; else convert "$src" "$out" >/dev/null 2>&1; fi
@@ -4960,13 +4976,24 @@ converter_imagem_imagem() {
 }
 
 converter_imagem_pdf() {
-    imagens_para_pdf
+    local out
+    local -a imagens=()
+    command -v img2pdf >/dev/null 2>&1 || { whiptail --title 'Imagens → PDF' --msgbox 'img2pdf não está instalado.\n\nInstale: sudo apt install img2pdf' 9 70; return 1; }
+    mapfile -t imagens < <(selecionar_arquivo_conversao 'Selecione imagens para o PDF' imagem 1)
+    [ "${#imagens[@]}" -gt 0 ] || return
+    out=$(whiptail --inputbox 'Nome do PDF de saída:' 10 75 "$(pwd)/convertido.pdf" 3>&1 1>&2 2>&3) || return
+    [ -n "$out" ] || return
+    if img2pdf "${imagens[@]}" -o "$out" >/dev/null 2>&1; then
+        whiptail --title 'Imagens → PDF' --msgbox "PDF criado com ${#imagens[@]} imagem(ns):\n$out" 10 75
+    else
+        whiptail --title 'Imagens → PDF' --msgbox 'Falha ao criar o PDF.' 9 60
+    fi
 }
 
 converter_pdf_imagem() {
     local pdf
-    pdf=$(whiptail --inputbox 'Arquivo PDF de entrada:' 10 75 '' 3>&1 1>&2 2>&3) || return
-    eh_arquivo_pdf "$pdf" || { whiptail --title 'PDF → Imagens' --msgbox "PDF não encontrado ou inválido:\n$pdf" 9 70; return 1; }
+    pdf=$(selecionar_arquivo_conversao 'Selecione o PDF' pdf) || return
+    [ -f "$pdf" ] || return
     pdf_para_imagens "$pdf"
 }
 
@@ -5603,6 +5630,15 @@ while true; do
         FZF_BIND_ESC=(--bind='esc:accept')
     fi
 
+    FZF_DUP_SELECT_BINDS=()
+    if [ "${MODO_DUP:-0}" -eq 1 ]; then
+        FZF_DUP_SELECT_BINDS=(
+            --bind='tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+down+transform-header(eazy_status_header)'
+            --bind='shift-tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+up+transform-header(eazy_status_header)'
+            --bind='space:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
+        )
+    fi
+
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
         --print-query \
@@ -5624,9 +5660,7 @@ while true; do
         --preview='bash -c "eazy_preview \"\$1\"" -- {}' \
         --preview-window="${PREVIEW_WIN}" \
         --bind="change:reload:eazy_lista_filtrada '{q}'" \
-        --bind="tab:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+down+transform-header(eazy_status_header)" \
-        --bind="shift-tab:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+up+transform-header(eazy_status_header)" \
-        --bind="space:execute-silent(bash -c 'eazy_dup_toggle_path \"\$1\"' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)" \
+        "${FZF_DUP_SELECT_BINDS[@]}" \
         --bind="$CTRL_A_BIND" \
         --bind="$CTRL_X_BIND" \
         --bind="$CTRL_R_BIND" \
