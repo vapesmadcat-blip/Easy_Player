@@ -781,6 +781,7 @@ FILAS, PLAYLISTS E AÇÕES
   Ctrl-Y             Copiar seleção para uma pasta
   Ctrl-U             Mover seleção para uma pasta
   Ctrl-K             Ações sobre a seleção e manutenção do sistema
+  Ctrl-K → D         Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
   Del                Remover conforme o contexto
   Alt-D              Apagar do disco sem usar a lixeira
 
@@ -796,6 +797,7 @@ MENU Ctrl-K — MANUTENÇÃO
   M                  Menu completo de manutenção
   V                  Validar e limpar playlist .M3U
   P                  Proteger pasta/arquivo com senha
+  PDF                Ler texto, converter para HTML/PNG ou abrir no sistema
   DRY-RUN            Estado visível nas telas; simula ações destrutivas
   sudo               Caixa de senha antes de comandos privilegiados
   Temperatura CPU    Diagnóstico térmico via lm-sensors/kernel
@@ -4903,6 +4905,99 @@ executar_selecao() {
     read -p "Pressione Enter para continuar..."
 }
 
+# --- Leitor e conversor de PDF ---
+eh_arquivo_pdf() {
+    local f="$1" mime
+    [ -f "$f" ] || return 1
+    [[ "${f##*.}" =~ ^[Pp][Dd][Ff]$ ]] && return 0
+    if command -v file >/dev/null 2>&1; then
+        mime=$(file -b --mime-type -- "$f" 2>/dev/null || true)
+        [ "$mime" = "application/pdf" ] && return 0
+    fi
+    return 1
+}
+
+pdf_exigir_ferramenta() {
+    local cmd="$1" pacote="$2"
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+        whiptail --title "Ferramenta ausente" --msgbox "$cmd não está instalado.\n\nInstale com:\nsudo apt install $pacote" 10 70
+        return 1
+    fi
+}
+
+pdf_ler_texto() {
+    local pdf="$1" out
+    pdf_exigir_ferramenta pdftotext poppler-utils || return 1
+    out="${pdf%.*}.txt"
+    if pdftotext -layout -- "$pdf" "$out" 2>/dev/null; then
+        mostrar_texto "$out"
+    else
+        whiptail --title "PDF" --msgbox "Não foi possível extrair texto de:\n$pdf" 9 70
+    fi
+}
+
+pdf_para_html() {
+    local pdf="$1" outdir base
+    pdf_exigir_ferramenta pdftohtml poppler-utils || return 1
+    base="${pdf%.*}"
+    outdir=$(whiptail --inputbox "Pasta de saída do HTML:" 10 70 "${base}_html" 3>&1 1>&2 2>&3) || return
+    [ -n "$outdir" ] || return
+    mkdir -p -- "$outdir"
+    if pdftohtml -s -noframes -- "$pdf" "$outdir/$(basename "$base").html" >/dev/null 2>&1; then
+        whiptail --title "PDF → HTML" --msgbox "HTML criado em:\n$outdir" 9 70
+    else
+        whiptail --title "PDF → HTML" --msgbox "Falha ao converter o PDF para HTML." 9 70
+    fi
+}
+
+pdf_para_imagens() {
+    local pdf="$1" outdir base
+    pdf_exigir_ferramenta pdftoppm poppler-utils || return 1
+    base="${pdf%.*}"
+    outdir=$(whiptail --inputbox "Pasta de saída das imagens:" 10 70 "${base}_img" 3>&1 1>&2 2>&3) || return
+    [ -n "$outdir" ] || return
+    mkdir -p -- "$outdir"
+    if pdftoppm -png -- "$pdf" "$outdir/pagina" >/dev/null 2>&1; then
+        whiptail --title "PDF → Imagens" --msgbox "Imagens PNG criadas em:\n$outdir" 9 70
+    else
+        whiptail --title "PDF → Imagens" --msgbox "Falha ao converter o PDF para imagens." 9 70
+    fi
+}
+
+imagens_para_pdf() {
+    local dir out
+    local -a imagens=()
+    pdf_exigir_ferramenta img2pdf img2pdf || return 1
+    dir=$(whiptail --inputbox "Pasta com imagens (PNG/JPG):" 10 70 "$(pwd)" 3>&1 1>&2 2>&3) || return
+    [ -d "$dir" ] || { whiptail --title "Imagens → PDF" --msgbox "Pasta não encontrada:\n$dir" 9 65; return 1; }
+    mapfile -d '' imagens < <(find "$dir" -maxdepth 1 -type f \( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' \) -print0 | sort -z)
+    [ "${#imagens[@]}" -gt 0 ] || { whiptail --title "Imagens → PDF" --msgbox "Nenhuma imagem PNG/JPG encontrada em:\n$dir" 9 70; return 1; }
+    out=$(whiptail --inputbox "Nome do PDF de saída:" 10 70 "$dir/convertido.pdf" 3>&1 1>&2 2>&3) || return
+    [ -n "$out" ] || return
+    if img2pdf "${imagens[@]}" -o "$out" >/dev/null 2>&1; then
+        whiptail --title "Imagens → PDF" --msgbox "PDF criado com ${#imagens[@]} imagem(ns):\n$out" 10 75
+    else
+        whiptail --title "Imagens → PDF" --msgbox "Falha ao criar o PDF." 9 60
+    fi
+}
+
+menu_pdf() {
+    local pdf="$1" opcao
+    eh_arquivo_pdf "$pdf" || return 1
+    opcao=$(whiptail --title "PDF — $(basename "$pdf")" --menu "Escolha uma operação:" 15 78 6 \
+        "1" "Ler texto no terminal" \
+        "2" "Converter PDF → HTML" \
+        "3" "Converter PDF → imagens PNG" \
+        "4" "Abrir com leitor gráfico do sistema" \
+        "0" "Voltar" 3>&1 1>&2 2>&3) || return
+    case "$opcao" in
+        1) pdf_ler_texto "$pdf" ;;
+        2) pdf_para_html "$pdf" ;;
+        3) pdf_para_imagens "$pdf" ;;
+        4) command -v xdg-open >/dev/null 2>&1 && xdg-open "$pdf" >/dev/null 2>&1 || whiptail --title "PDF" --msgbox "Instale um leitor gráfico ou use a opção de leitura de texto." 9 70 ;;
+    esac
+}
+
 # Menu de ações sobre a seleção (como INSERT, mas escolhe o que fazer)
 menu_acoes_selecao() {
     local selecao="$1"
@@ -4926,6 +5021,7 @@ menu_acoes_selecao() {
         "7" "📋 Copiar para pasta..." \
         "8" "📁 Mover para pasta..." \
         "9" "➕ Adicionar à Fila (INSERT)" \
+        "D" "📄 Ler/Converter PDF" \
         "M" "🛠️  Manutenção" \
         "V" "✔️  Validar .M3U" \
         "P" "🔒 Proteção" \
@@ -5014,7 +5110,9 @@ menu_acoes_selecao() {
                     tocado=$(head -n1 "$playlist_sel")
                     ULTIMO_ARQUIVO="$tocado"
                     registrar_status
-                    if eh_arquivo_texto "$tocado"; then
+                    if eh_arquivo_pdf "$tocado"; then
+                        menu_pdf "$tocado"
+                    elif eh_arquivo_texto "$tocado"; then
                         mostrar_texto "$tocado"
                     else
                         tocar_arquivo "$tocado"
@@ -5030,6 +5128,12 @@ menu_acoes_selecao() {
         6) renomear_selecao "$selecao" ;;
         7) copiar_arquivos "$selecao" ;;
         8) mover_arquivos "$selecao" ;;
+        D)
+            # Leitor e conversor de PDF
+            pdf_item=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | head -n1)
+            pdf_item=$(caminho_absoluto "$pdf_item")
+            menu_pdf "$pdf_item"
+            ;;
         9)
             # INSERT
             quantidade_adicionada=0
@@ -6175,6 +6279,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             if [ -f "$tocado" ]; then
                 if eh_playlist_m3u "$tocado"; then
                     abrir_playlist_no_navegador "$tocado"
+                elif eh_arquivo_pdf "$tocado"; then
+                    menu_pdf "$tocado"
                 elif eh_arquivo_texto "$tocado"; then
                     mostrar_texto "$tocado"
                 else
@@ -6221,6 +6327,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             registrar_status
             if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
                 abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_pdf "$ULTIMO_ARQUIVO"; then
+                menu_pdf "$ULTIMO_ARQUIVO"
             elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
             else
@@ -6259,6 +6367,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             registrar_status
             if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
                 abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
+            elif eh_arquivo_pdf "$ULTIMO_ARQUIVO"; then
+                menu_pdf "$ULTIMO_ARQUIVO"
             elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
                 mostrar_texto "$ULTIMO_ARQUIVO"
             else

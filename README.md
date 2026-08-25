@@ -43,7 +43,7 @@ sudo apt install ./packaging/eazy/dist/eazy_3.0-11_all.deb
 ```bash
 sudo apt update && sudo apt install -y \
   fzf mpv mplayer gawk sed findutils whiptail wget \
-  axel aria2 unzip p7zip-full rar yt-dlp lm-sensors
+  axel aria2 unzip p7zip-full rar yt-dlp lm-sensors poppler-utils img2pdf
 ```
 
 Opcionais: `chafa`, `ffmpeg`, `vlc`, `smartmontools`, `pciutils`, `lshw`, `inxi`, `dmidecode`, `usbutils`, `mesa-utils` e `vulkan-tools`.
@@ -72,7 +72,7 @@ eazy --config
 | `Ctrl-F` | Busca recursiva por extensão, tamanho e conteúdo |
 | `Ctrl-D` | Buscar duplicados ou reabrir a lista temporária |
 | `Ctrl-B` | Downloads |
-| `Ctrl-K` | Menu completo de ações e manutenção |
+| `Ctrl-K` | Menu completo de ações e manutenção, incluindo PDF |
 | `Ctrl-L` | Ir à pasta do arquivo |
 | `Ctrl-/` | Ligar/desligar preview |
 | `Del` | Remover conforme o contexto |
@@ -84,7 +84,7 @@ eazy --config
 | `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
 | `Q` / `X` | Sair do programa |
 
-O menu `Ctrl-K` inclui manutenção de sistema, análise e limpeza de HD, SMART, SWAP, som, vídeo/GPU, remoção de diretórios vazios, overview e monitoramento de temperatura da CPU.
+O menu `Ctrl-K` inclui manutenção de sistema, análise e limpeza de HD, SMART, SWAP, som, vídeo/GPU, remoção de diretórios vazios, overview, monitoramento de temperatura da CPU e leitor/conversor de PDF.
 
 ## Duplicados e progresso
 
