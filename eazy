@@ -6575,8 +6575,12 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             registrar_status
             if eh_playlist_m3u "$tocado"; then
                 abrir_playlist_no_navegador "$tocado"
+            elif eh_arquivo_pdf "$tocado"; then
+                menu_pdf "$tocado"
             elif eh_arquivo_texto "$tocado"; then
                 mostrar_texto "$tocado"
+            elif eh_arquivo_imagem "$tocado"; then
+                mostrar_imagem_com_pausa "$tocado"
             else
                 tocar_arquivo "$tocado"
             fi

@@ -1,3 +1,9 @@
+## 3.0-13 — Release eazy-v3.0-13
+
+- Corrige o despacho de PDF antes do player MPlayer/mpv.
+- PDF selecionado no navegador abre a caixa de leitura/conversão.
+- Mantém a seleção fzf e a pausa de imagens.
+
 ## 3.0-12 — Release eazy-v3.0-12
 
 - Suporte integrado para leitura e conversão de PDF.
