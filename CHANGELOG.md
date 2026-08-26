@@ -1,3 +1,9 @@
+## 3.0-14 — Editor de notas rápidas
+
+- Ctrl-N abre a última nota ou cria `nota.txt`.
+- Alt-N cria uma nova nota dentro do editor.
+- Esc salva o conteúdo e sai do editor.
+
 ## 3.0-13 — Release eazy-v3.0-13
 
 - Corrige o despacho de PDF antes do player MPlayer/mpv.

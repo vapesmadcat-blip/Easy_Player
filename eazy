@@ -7,12 +7,14 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.1"
+EAZY_VERSION="3.0-14"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
 # --- DIRETÓRIOS E ARQUIVOS DE CONFIGURAÇÃO ---
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/eazy"
+NOTES_DIR="$CONFIG_DIR/notas"
+LAST_NOTE_FILE="$NOTES_DIR/.ultima_nota"
 CONFIG_FILE="$CONFIG_DIR/config"
 DOWNLOAD_QUEUE="$CONFIG_DIR/download_queue"
 DOWNLOAD_PASSWORDS="$CONFIG_DIR/download_passwords"
@@ -733,7 +735,8 @@ mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
 # ============================================================================
 
 # ============================================================================
-# 7. HELP EXPANDIDO (F10)
+# --- HELP EXPANDIDO ---
+# F10 — HELP EXPANDIDO. Ctrl-N abre a última nota; no editor, Alt-N cria outra e Esc salva/sai.
 exibir_help_expandido() {
     whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" --msgbox "eazy — Navegador e Reprodutor Multimídia
 
@@ -781,6 +784,7 @@ FILAS, PLAYLISTS E AÇÕES
   Ctrl-Y             Copiar seleção para uma pasta
   Ctrl-U             Mover seleção para uma pasta
   Ctrl-K             Ações sobre a seleção e manutenção do sistema
+  Ctrl-N             Abrir a última nota (ou criar nota.txt)
   Ctrl-K → C         Conversões: vídeo, imagem e PDF
   PDF no Enter       Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
   Del                Remover conforme o contexto
@@ -815,6 +819,7 @@ SISTEMA, CONFIGURAÇÃO E SAÍDA
 A busca de duplicados e a limpeza/análise do HD exibem progresso.
 Imagens abertas no terminal aguardam Enter para voltar ao navegador.
 O DRY-RUN fica visível no cabeçalho e nas telas de manutenção.
+Notas rápidas: Ctrl-N abre a última nota; dentro do editor, Alt-N cria outra nota e Esc salva o conteúdo e sai.
 Operações com sudo pedem a senha antes de executar e restauram o terminal
 em caso de cancelamento ou erro.
 
@@ -3856,6 +3861,72 @@ caminho_absoluto() {
     fi
 }
 
+# --- Editor de notas rápidas ---
+# Ctrl-N abre a última nota; se ainda não houver, cria nota.txt.
+# Dentro do editor: Alt-N cria uma nota nova; Esc salva e sai.
+abrir_editor_notas() {
+    local nota rc nome nova
+    mkdir -p "$NOTES_DIR" 2>/dev/null || {
+        whiptail --title "Notas" --msgbox "Não foi possível criar: $NOTES_DIR" 8 60
+        return 1
+    }
+    nota=""
+    [ -s "$LAST_NOTE_FILE" ] && nota=$(head -n1 "$LAST_NOTE_FILE")
+    if [ -z "$nota" ] || [ ! -f "$nota" ]; then
+        nota="$NOTES_DIR/nota.txt"
+        touch "$nota" 2>/dev/null || return 1
+    fi
+    printf '%s\n' "$nota" > "$LAST_NOTE_FILE"
+    rc=$(mktemp "${TMPDIR:-/tmp}/eazy-notes.XXXXXX") || return 1
+    cat > "$rc" <<'VIMRC'
+set nocompatible
+set number
+set wrap
+set noswapfile
+set backupcopy=yes
+let g:eazy_notes_dir = $EAZY_NOTES_DIR
+let g:eazy_last_note = $EAZY_LAST_NOTE
+function! EazySaveLastNote() abort
+  silent! call writefile([expand('%:p')], g:eazy_last_note)
+endfunction
+function! EazyNovaNota() abort
+  silent update
+  let l:nome = input('Nome da nova nota: ', 'nota-')
+  if empty(l:nome)
+    return
+  endif
+  if l:nome !~ '\\.'
+    let l:nome .= '.txt'
+  endif
+  let l:caminho = g:eazy_notes_dir . '/' . l:nome
+  execute 'edit ' . fnameescape(l:caminho)
+  call EazySaveLastNote()
+endfunction
+augroup eazy_notes_state
+  autocmd!
+  autocmd BufEnter * call EazySaveLastNote()
+augroup END
+nnoremap <silent> <Esc> :update<CR>:qa<CR>
+inoremap <silent> <Esc> <C-o>:update<CR><C-o>:qa<CR>
+nnoremap <silent> <M-n> :call EazyNovaNota()<CR>
+inoremap <silent> <M-n> <C-o>:call EazyNovaNota()<CR>
+VIMRC
+    EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE"; export EAZY_NOTES_DIR EAZY_LAST_NOTE
+    if command -v vim >/dev/null 2>&1; then
+        vim -u "$rc" -N -- "$nota"
+    elif command -v nvim >/dev/null 2>&1; then
+        nvim -u "$rc" -N -- "$nota"
+    elif command -v vi >/dev/null 2>&1; then
+        vi -u "$rc" -N -- "$nota"
+    else
+        whiptail --title "Editor de notas" --msgbox "Instale vim ou nvim para usar o editor de notas." 8 65
+        rm -f "$rc"
+        return 1
+    fi
+    rm -f "$rc"
+    [ -f "$nota" ] && printf '%s\n' "$nota" > "$LAST_NOTE_FILE"
+}
+
 # --- Detecta se arquivo é texto (para visualização read-only) ---
 eh_arquivo_texto() {
     local f="$1"
@@ -5618,9 +5689,9 @@ while true; do
         CTRL_T_BIND=''
     fi
     # Ctrl-T: em duplicados é bind (●→✓); fora, --expect altera ordenação por data
-    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
+    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     if [ "${MODO_DUP:-0}" -ne 1 ]; then
-        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
+        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     fi
     FZF_BIND_T=()
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
@@ -5753,7 +5824,10 @@ Depois use:
         esac
     fi
 
-    if [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
+    if [ "$tecla" = "ctrl-n" ]; then
+        abrir_editor_notas
+        continue
+    elif [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
         # X / Q / CTRL-Q = sair — salva sessão completa
         salvar_sessao
         rm -f "$TMP_FILE" "$DUP_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE" "$DUP_MANUAL_FILE" 2>/dev/null

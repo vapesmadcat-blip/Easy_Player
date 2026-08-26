@@ -1,3 +1,9 @@
+eazy (3.0-14) unstable; urgency=medium
+
+  * Add quick notes editor with Ctrl-N, Alt-N, Esc save/exit, and last-note persistence.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 02:30:00 +0000
+
 eazy (3.0-13) unstable; urgency=medium
 
   * Route PDF files to the reader/conversion dialog before the media player.
