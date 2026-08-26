@@ -8,7 +8,7 @@ DEBIAN_DIR="$SCRIPT_DIR/debian"
 PKGROOT="$SCRIPT_DIR/pkgroot"
 DIST_DIR="$SCRIPT_DIR/dist"
 PACKAGE="eazy"
-VERSION="3.0-15"
+VERSION="3.0-16"
 ARCH="all"
 OUTPUT="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
@@ -19,7 +19,7 @@ for required in dpkg-deb install; do
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy.desktop" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -31,10 +31,12 @@ mkdir -p "$DIST_DIR"
 mkdir -p \
     "$PKGROOT/DEBIAN" \
     "$PKGROOT/usr/bin" \
+    "$PKGROOT/usr/lib/eazy" \
     "$PKGROOT/usr/share/applications" \
     "$PKGROOT/usr/share/doc/$PACKAGE"
 
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
+install -m 0755 "$SRC_DIR/eazy-notes-editor" "$PKGROOT/usr/lib/eazy/eazy-notes-editor"
 install -m 0644 "$SRC_DIR/eazy.desktop" "$PKGROOT/usr/share/applications/eazy.desktop"
 install -m 0644 "$SRC_DIR/README.md" "$PKGROOT/usr/share/doc/$PACKAGE/README.md"
 install -m 0644 "$SRC_DIR/CHANGELOG.md" "$PKGROOT/usr/share/doc/$PACKAGE/CHANGELOG.md"

@@ -1,3 +1,10 @@
+eazy (3.0-16) unstable; urgency=medium
+
+  * Replace Vim-based notes editing with the bundled visual Bash mini editor.
+  * Preserve Ctrl-N, Ctrl-S, Esc, Enter, Backspace and notes management shortcuts.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 03:30:00 +0000
+
 eazy (3.0-15) unstable; urgency=medium
 
   * Add compact centered notes menu with delete, rename, and export shortcuts.

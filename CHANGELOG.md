@@ -1,3 +1,9 @@
+## 3.0-16 — Mini editor visual de notas
+
+- Substitui o editor baseado em Vim pelo mini editor visual Bash incluído no projeto.
+- Mantém Ctrl-N para nova nota, Ctrl-S para salvar e abrir outra, Esc para salvar e sair, Enter para nova linha e Backspace para apagar.
+- Preserva Ctrl-E, Ctrl-R e Ctrl-X para listar, renomear e exportar notas.
+
 ## 3.0-15 — Gerenciador de notas rápidas
 
 - Ctrl-E abre uma lista compacta centralizada com as notas.

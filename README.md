@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-15/eazy_3.0-15_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-15/eazy_3.0-15_all.deb.sha256
-sha256sum -c eazy_3.0-15_all.deb.sha256
-sudo apt install ./eazy_3.0-15_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-16/eazy_3.0-16_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-16/eazy_3.0-16_all.deb.sha256
+sha256sum -c eazy_3.0-16_all.deb.sha256
+sudo apt install ./eazy_3.0-16_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-15_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-16_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
@@ -83,6 +83,22 @@ eazy --config
 | `Ctrl-R` | Duplicados: inverter seleção |
 | `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
 | `Q` / `X` | Sair do programa |
+
+### Editor de notas rápidas
+
+Ao pressionar `Ctrl-N` no navegador, o eazy abre a última nota. O mini editor visual fornecido no projeto não depende de Vim, vi ou nano e usa os seguintes controles:
+
+| Tecla | Ação |
+|---|---|
+| `Ctrl-N` | Nova nota |
+| `Ctrl-S` | Salva e abre outra nota |
+| `Esc` | Salva e sai |
+| `Enter` | Nova linha |
+| `Backspace` | Apaga |
+| `Ctrl-E` | Lista compacta de notas |
+| `Del` | Apaga a nota selecionada |
+| `Ctrl-R` | Renomeia a nota selecionada |
+| `Ctrl-X` | Exporta para `~/Documentos/Easy-Notes/` |
 
 O menu `Ctrl-K` inclui manutenção de sistema, análise e limpeza de HD, SMART, SWAP, som, vídeo/GPU, remoção de diretórios vazios, overview, monitoramento de temperatura da CPU e o item `Conversões`. O item `Conversões` oferece vídeo→vídeo, imagem→imagem, imagens→PDF, PDF→imagem, PDF→texto e PDF→HTML; PDFs também podem ser abertos diretamente com `Enter`, e imagens aguardam uma pausa antes do retorno ao navegador.
 
