@@ -1,3 +1,8 @@
+## 3.0-15 — Gerenciador de notas rápidas
+
+- Ctrl-E abre uma lista compacta centralizada com as notas.
+- Del apaga, Ctrl-R renomeia e Ctrl-X exporta para `~/Documentos/Easy-Notes/`.
+
 ## 3.0-14 — Editor de notas rápidas
 
 - Ctrl-N abre a última nota ou cria `nota.txt`.

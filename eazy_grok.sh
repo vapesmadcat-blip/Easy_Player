@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-14"
+EAZY_VERSION="3.0-15"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -785,6 +785,10 @@ FILAS, PLAYLISTS E AÇÕES
   Ctrl-U             Mover seleção para uma pasta
   Ctrl-K             Ações sobre a seleção e manutenção do sistema
   Ctrl-N             Abrir a última nota (ou criar nota.txt)
+  No editor: Ctrl-E   Lista compacta de notas no centro da tela
+  No editor: Del      Apagar a nota selecionada
+  No editor: Ctrl-R   Renomear a nota selecionada
+  No editor: Ctrl-X   Exportar para ~/Documentos/Easy-Notes/
   Ctrl-K → C         Conversões: vídeo, imagem e PDF
   PDF no Enter       Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
   Del                Remover conforme o contexto
@@ -819,7 +823,7 @@ SISTEMA, CONFIGURAÇÃO E SAÍDA
 A busca de duplicados e a limpeza/análise do HD exibem progresso.
 Imagens abertas no terminal aguardam Enter para voltar ao navegador.
 O DRY-RUN fica visível no cabeçalho e nas telas de manutenção.
-Notas rápidas: Ctrl-N abre a última nota; dentro do editor, Alt-N cria outra nota e Esc salva o conteúdo e sai.
+Notas rápidas: Ctrl-N abre a última nota; dentro do editor, Alt-N cria outra nota; Ctrl-E lista notas; Del apaga; Ctrl-R renomeia; Ctrl-X exporta para ~/Documentos/Easy-Notes/; Esc salva e sai.
 Operações com sudo pedem a senha antes de executar e restauram o terminal
 em caso de cancelamento ou erro.
 
@@ -3865,7 +3869,7 @@ caminho_absoluto() {
 # Ctrl-N abre a última nota; se ainda não houver, cria nota.txt.
 # Dentro do editor: Alt-N cria uma nota nova; Esc salva e sai.
 abrir_editor_notas() {
-    local nota rc nome nova
+    local nota rc
     mkdir -p "$NOTES_DIR" 2>/dev/null || {
         whiptail --title "Notas" --msgbox "Não foi possível criar: $NOTES_DIR" 8 60
         return 1
@@ -3886,21 +3890,84 @@ set noswapfile
 set backupcopy=yes
 let g:eazy_notes_dir = $EAZY_NOTES_DIR
 let g:eazy_last_note = $EAZY_LAST_NOTE
+let g:eazy_export_dir = $EAZY_EXPORT_DIR
 function! EazySaveLastNote() abort
   silent! call writefile([expand('%:p')], g:eazy_last_note)
 endfunction
 function! EazyNovaNota() abort
   silent update
   let l:nome = input('Nome da nova nota: ', 'nota-')
-  if empty(l:nome)
-    return
-  endif
-  if l:nome !~ '\\.'
-    let l:nome .= '.txt'
-  endif
+  if empty(l:nome) | return | endif
+  if l:nome !~ '\\.' | let l:nome .= '.txt' | endif
   let l:caminho = g:eazy_notes_dir . '/' . l:nome
   execute 'edit ' . fnameescape(l:caminho)
   call EazySaveLastNote()
+endfunction
+function! EazyExportarNota(arquivo) abort
+  if empty(a:arquivo) | return | endif
+  call mkdir(g:eazy_export_dir, 'p')
+  let l:dest = g:eazy_export_dir . '/' . fnamemodify(a:arquivo, ':t')
+  silent! execute 'write! ' . fnameescape(l:dest)
+  echo 'Exportada para ' . l:dest
+endfunction
+function! EazyNotaIndice(id) abort
+  let l:p = popup_getpos(a:id)
+  let l:linha = get(l:p, 'cursorline', 2)
+  return l:linha - 2
+endfunction
+function! EazyNotaPopupFilter(id, key) abort
+  let l:idx = EazyNotaIndice(a:id)
+  if a:key ==# "\<Del>"
+    if l:idx >= 0 && l:idx < len(g:eazy_note_files)
+      let l:arq = g:eazy_note_files[l:idx]
+      if confirm('Apagar ' . fnamemodify(l:arq, ':t') . '?', "&Apagar\n&Cancelar", 2) == 1
+        call delete(l:arq)
+        call popup_close(a:id)
+        call EazyNotasMenu()
+      endif
+    endif
+    return 1
+  elseif a:key ==# "\<C-R>"
+    if l:idx >= 0 && l:idx < len(g:eazy_note_files)
+      let l:arq = g:eazy_note_files[l:idx]
+      let l:nome = input('Novo nome: ', fnamemodify(l:arq, ':t'))
+      if !empty(l:nome)
+        if l:nome !~ '\\.' | let l:nome .= '.txt' | endif
+        call rename(l:arq, g:eazy_notes_dir . '/' . l:nome)
+      endif
+      call EazyNotasMenu()
+    endif
+    return 1
+  elseif a:key ==# "\<C-X>"
+    if l:idx >= 0 && l:idx < len(g:eazy_note_files)
+      call EazyExportarNota(g:eazy_note_files[l:idx])
+    endif
+    return 1
+  endif
+  return popup_filter_menu(a:id, a:key)
+endfunction
+function! EazyNotaPopupDone(id, result) abort
+  if a:result > 0 && a:result <= len(g:eazy_note_files)
+    let l:arq = g:eazy_note_files[a:result - 1]
+    call writefile([l:arq], g:eazy_last_note)
+    execute 'edit ' . fnameescape(l:arq)
+  endif
+endfunction
+function! EazyNotasMenu() abort
+  if !exists('*popup_menu')
+    let l:lista = split(glob(g:eazy_notes_dir . '/*.txt'), "\\n")
+    let l:escolhas = ['Escolha uma nota:'] + map(copy(l:lista), 'fnamemodify(v:val, ":t")')
+    let l:n = inputlist(l:escolhas)
+    if l:n > 0 && l:n <= len(l:lista)
+      execute 'edit ' . fnameescape(l:lista[l:n - 1])
+      call EazySaveLastNote()
+    endif
+    return
+  endif
+  let g:eazy_note_files = split(glob(g:eazy_notes_dir . '/*.txt'), "\\n")
+  let l:itens = map(copy(g:eazy_note_files), 'fnamemodify(v:val, ":t")')
+  if empty(l:itens) | let l:itens = ['nota.txt'] | endif
+  call popup_menu(l:itens, {'title': ' Notas rápidas ', 'minwidth': 34, 'maxheight': 10, 'filter': 'EazyNotaPopupFilter', 'callback': 'EazyNotaPopupDone', 'border': []})
 endfunction
 augroup eazy_notes_state
   autocmd!
@@ -3910,8 +3977,13 @@ nnoremap <silent> <Esc> :update<CR>:qa<CR>
 inoremap <silent> <Esc> <C-o>:update<CR><C-o>:qa<CR>
 nnoremap <silent> <M-n> :call EazyNovaNota()<CR>
 inoremap <silent> <M-n> <C-o>:call EazyNovaNota()<CR>
+nnoremap <silent> <C-E> :call EazyNotasMenu()<CR>
+inoremap <silent> <C-E> <C-o>:call EazyNotasMenu()<CR>
+nnoremap <silent> <C-X> :call EazyExportarNota(expand('%:p'))<CR>
+inoremap <silent> <C-X> <C-o>:call EazyExportarNota(expand('%:p'))<CR>
 VIMRC
-    EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE"; export EAZY_NOTES_DIR EAZY_LAST_NOTE
+    EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE" EAZY_EXPORT_DIR="$HOME/Documentos/Easy-Notes"
+    export EAZY_NOTES_DIR EAZY_LAST_NOTE EAZY_EXPORT_DIR
     if command -v vim >/dev/null 2>&1; then
         vim -u "$rc" -N -- "$nota"
     elif command -v nvim >/dev/null 2>&1; then
