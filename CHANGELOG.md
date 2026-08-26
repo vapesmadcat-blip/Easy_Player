@@ -1,8 +1,3 @@
-## 3.0-18 — Seleção e métricas no cabeçalho
-
-- Espaço e Tab marcam e desmarcam itens no navegador sem alimentar o filtro.
-- O cabeçalho mostra a quantidade de arquivos selecionados e o total de bytes ocupados.
-
 ## 3.0-17 — Última nota editada
 
 - O Ctrl-N agora abre sempre o último arquivo realmente salvo ou editado.

@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-18"
+EAZY_VERSION="3.0-17"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -5686,23 +5686,15 @@ while true; do
     fi
 
     FZF_DUP_SELECT_BINDS=()
-    FZF_SELECTION_BINDS=()
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
         FZF_DUP_SELECT_BINDS=(
             --bind='tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+down+transform-header(eazy_status_header)'
             --bind='shift-tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+up+transform-header(eazy_status_header)'
-                        --bind='space:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
-        )
-    else
-        # No navegador normal, Espaço e Tab marcam/desmarcam; não entram no filtro.
-        # {+} entrega ao cabeçalho todas as linhas marcadas pelo fzf.
-        FZF_SELECTION_BINDS=(
-            --bind='space:toggle+transform-header(eazy_status_header {+})'
-            --bind='tab:toggle+transform-header(eazy_status_header {+})'
+            --bind='space:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
         )
     fi
-    saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
 
+    saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
@@ -5724,7 +5716,6 @@ while true; do
         --preview-window="${PREVIEW_WIN}" \
         --bind="change:reload:eazy_lista_filtrada '{q}'" \
         "${FZF_DUP_SELECT_BINDS[@]}" \
-        "${FZF_SELECTION_BINDS[@]}" \
         --bind="$CTRL_A_BIND" \
         --bind="$CTRL_X_BIND" \
         --bind="$CTRL_R_BIND" \
