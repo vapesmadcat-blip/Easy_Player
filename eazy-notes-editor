@@ -218,6 +218,9 @@ apagar_esquerda() {
 
 salvar_atual() {
     printf '%s' "$BUFFER" > "$ARQUIVO_ATUAL"
+    if [ -n "${EAZY_LAST_NOTE:-}" ]; then
+        printf '%s\n' "$ARQUIVO_ATUAL" > "$EAZY_LAST_NOTE"
+    fi
 }
 
 restaurar_raw() {
@@ -407,13 +410,13 @@ while true; do
 
     case "$codigo" in
         14)
-            printf '%s' "$BUFFER" > "$ARQUIVO_ATUAL"
+            salvar_atual
             ARQUIVO_ATUAL=$(gerar_nome)
             BUFFER=""
             CURSOR_POS=0
             ;;
         19)
-            printf '%s' "$BUFFER" > "$ARQUIVO_ATUAL"
+            salvar_atual
             ARQUIVO_ATUAL=$(gerar_nome)
             BUFFER=""
             CURSOR_POS=0
@@ -444,7 +447,7 @@ while true; do
 
             # ESC sozinho (sem bytes seguintes) → salva e sai
             if [[ -z "$b2" ]]; then
-                printf "%s" "$BUFFER" > "$ARQUIVO_ATUAL"
+                salvar_atual
                 stty sane 2>/dev/null || true
                 clear
                 printf "\n  \033[1;36mEditor finalizado.\033[0m\n"

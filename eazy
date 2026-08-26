@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-16"
+EAZY_VERSION="3.0-17"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -3897,12 +3897,17 @@ abrir_editor_notas() {
         cd "$NOTES_DIR" || exit 1
         EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE" EAZY_EXPORT_DIR="$HOME/Documentos/Easy-Notes" "$EAZY_NOTES_EDITOR" "$nota"
     )
-    if [ -f "$nota" ]; then
-        printf '%s\n' "$nota" > "$LAST_NOTE_FILE"
-    else
-        local criada
-        criada=$(find "$NOTES_DIR" -maxdepth 1 -type f -name '*.txt' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)
-        [ -n "$criada" ] && printf '%s\n' "$criada" > "$LAST_NOTE_FILE"
+    local ultima_salva
+    ultima_salva=""
+    [ -s "$LAST_NOTE_FILE" ] && ultima_salva=$(head -n1 "$LAST_NOTE_FILE")
+    if [ -z "$ultima_salva" ] || [ ! -f "$ultima_salva" ]; then
+        if [ -f "$nota" ]; then
+            printf '%s\n' "$nota" > "$LAST_NOTE_FILE"
+        else
+            local criada
+            criada=$(find "$NOTES_DIR" -maxdepth 1 -type f -name '*.txt' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)
+            [ -n "$criada" ] && printf '%s\n' "$criada" > "$LAST_NOTE_FILE"
+        fi
     fi
 }
 

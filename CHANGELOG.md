@@ -1,3 +1,8 @@
+## 3.0-17 — Última nota editada
+
+- O Ctrl-N agora abre sempre o último arquivo realmente salvo ou editado.
+- A seleção, renomeação e criação de notas atualizam a persistência do último caminho.
+
 ## 3.0-16 — Mini editor visual de notas
 
 - Substitui o editor baseado em Vim pelo mini editor visual Bash incluído no projeto.
