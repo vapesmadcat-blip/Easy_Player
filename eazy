@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-48"
+EAZY_VERSION="3.0-49"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2495,8 +2495,14 @@ eazy_busca_cancelar_iniciar() {
 eazy_busca_cancelar_parar() {
     local pid
     pid=$(cat "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true)
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    if [ -n "$pid" ]; then
+        kill "$pid" 2>/dev/null || true
+        # Espera o trap do monitor restaurar o terminal antes de abrir o fzf.
+        wait "$pid" 2>/dev/null || true
+    fi
     rm -f "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
+    # Garantia adicional: a lista deve receber o terminal em modo normal.
+    stty sane < /dev/tty 2>/dev/null || true
 }
 
 eazy_busca_cancelada() {
