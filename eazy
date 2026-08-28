@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-52"
+EAZY_VERSION="3.0-53"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2223,6 +2223,8 @@ selecionar_extensoes() {
         "nao" "Não — só filtrar por extensão/tamanho" "ON" \
         "sim" "Sim — digitar texto a buscar" "OFF" \
         3>&1 1>&2 2>&3)
+    # whiptail devolve o tag entre aspas; sem normalizar, o teste com `sim` falha.
+    quer_conteudo=$(printf '%s' "$quer_conteudo" | tr -d '"')
     if [ "$quer_conteudo" = "sim" ]; then
         BUSCA_CONTEUDO=$(whiptail --title "Texto no conteúdo" \
             --inputbox "Texto a buscar dentro dos arquivos (case-insensitive):\nEx: password, TODO, error" 11 65 \

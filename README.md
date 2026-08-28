@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-52/eazy_3.0-52_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-52/eazy_3.0-52_all.deb.sha256
-sha256sum -c eazy_3.0-52_all.deb.sha256
-sudo apt install ./eazy_3.0-52_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-53/eazy_3.0-53_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-53/eazy_3.0-53_all.deb.sha256
+sha256sum -c eazy_3.0-53_all.deb.sha256
+sudo apt install ./eazy_3.0-53_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-52_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-53_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
