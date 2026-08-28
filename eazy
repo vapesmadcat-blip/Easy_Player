@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-17"
+EAZY_VERSION="3.0-19"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -19,6 +19,8 @@ EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
 CONFIG_FILE="$CONFIG_DIR/config"
+LAST_COPY_DEST_FILE="$CONFIG_DIR/last_copy_destination"
+LAST_MOVE_DEST_FILE="$CONFIG_DIR/last_move_destination"
 DOWNLOAD_QUEUE="$CONFIG_DIR/download_queue"
 DOWNLOAD_PASSWORDS="$CONFIG_DIR/download_passwords"
 HISTORY_FILE="$CONFIG_DIR/history"
@@ -5330,8 +5332,10 @@ menu_acoes_selecao() {
 escolher_destino() {
     local titulo="${1:-Destino}"
     local nitens="${2:-0}"
+    local preferido="${3:-}"
     local cursor dir escolha nome nova dig
     cursor="$(pwd)"
+    [ -d "$preferido" ] && cursor="$(cd -- "$preferido" && pwd -P)"
 
     while true; do
         dir="$cursor"
@@ -5417,8 +5421,11 @@ copiar_arquivos() {
         return
     }
 
-    dest=$(escolher_destino "Copiar" "$n") || return
+    local ultimo_destino=""
+    [ -s "$LAST_COPY_DEST_FILE" ] && ultimo_destino=$(head -n1 "$LAST_COPY_DEST_FILE")
+    dest=$(escolher_destino "Copiar" "$n" "$ultimo_destino") || return
     [ -z "$dest" ] || [ ! -d "$dest" ] && return
+    printf '%s\n' "$dest" > "$LAST_COPY_DEST_FILE"
 
     local detalhe necessario
     detalhe=$(printf '%s\n' "$itens" | montar_detalhe_espaco)
@@ -5455,8 +5462,11 @@ mover_arquivos() {
         return
     }
 
-    dest=$(escolher_destino "Mover" "$n") || return
+    local ultimo_destino=""
+    [ -s "$LAST_MOVE_DEST_FILE" ] && ultimo_destino=$(head -n1 "$LAST_MOVE_DEST_FILE")
+    dest=$(escolher_destino "Mover" "$n" "$ultimo_destino") || return
     [ -z "$dest" ] || [ ! -d "$dest" ] && return
+    printf '%s\n' "$dest" > "$LAST_MOVE_DEST_FILE"
 
     # Move entre filesystems diferentes precisa do mesmo espaço que cópia
     local src_dev dst_dev
@@ -5836,13 +5846,14 @@ Depois use:
             salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
             DIRETORIO_ANTERIOR="$dir_atual"
             MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
-            rm -f "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE"
-            : > "$SELECTED_FILE"
+            rm -f "$DUP_MANUAL_FILE"
+            # Troca de diretório: filtro limpo, seleção preservada, cursor em `..`.
+            FZF_QUERY=""
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
             cd -- "$destino_anterior" || continue
             ULTIMO_ARQUIVO=""
-            carregar_posicao_dir "$(pwd -P)"
+            TMP=1
             ALVO="$(pwd -P)"
             ULTIMO_DIR="$(pwd -P)"
             registrar_status
@@ -6567,9 +6578,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
     if [[ "$primeiro_caminho" =~ \.\.$ ]]; then
         # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)
-        # Mudança de pasta → zera seleção (só persiste até limpar ou mudar de pasta)
-        : > "$SELECTED_FILE"
-        : > "$DUP_SELECTED_FILE" 2>/dev/null || true
+        # Mudança de pasta: limpa o filtro, mantém a seleção e posiciona em `..`.
+        FZF_QUERY=""
         rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true
         local_dir_antes=$(pwd)
         local_nome=$(basename -- "$local_dir_antes")
@@ -6577,8 +6587,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         DIRETORIO_ANTERIOR="$local_dir_antes"
         cd .. || true
         carregar_posicao_dir "$(pwd)"
-        # Preferência: cursor no diretório filho de onde viemos
-        ULTIMO_ARQUIVO="$local_nome"
+        # Regra solicitada: ao mudar de pasta, o cursor fica em `..`.
+        ULTIMO_ARQUIVO=""
+        TMP=1
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status
@@ -6588,16 +6599,15 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
     if [ -d "$primeiro_caminho" ]; then
         # Salva posição atual; entra; restaura posição salva da pasta destino
-        # Mudança de pasta → zera seleção (só persiste até limpar ou mudar de pasta)
-        : > "$SELECTED_FILE"
-        : > "$DUP_SELECTED_FILE" 2>/dev/null || true
+        # Mudança de pasta: limpa o filtro, mantém a seleção e posiciona em `..`.
+        FZF_QUERY=""
         rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true
         dir_atual_antes="$(pwd -P)"
         salvar_posicao_dir "$dir_atual_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
         DIRETORIO_ANTERIOR="$dir_atual_antes"
         cd "$primeiro_caminho" || true
         ULTIMO_ARQUIVO=""
-        carregar_posicao_dir "$(pwd)"
+        TMP=1
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status

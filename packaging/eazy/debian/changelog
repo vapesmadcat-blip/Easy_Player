@@ -1,3 +1,10 @@
+eazy (3.0-19) unstable; urgency=medium
+
+  * Clear filter and reset cursor to parent entry on directory changes while preserving selection.
+  * Persist last copy and move destinations.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 06:00:00 +0000
+
 eazy (3.0-17) unstable; urgency=medium
 
   * Persist the last note edited by the bundled visual notes editor.

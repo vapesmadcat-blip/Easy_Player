@@ -1,3 +1,8 @@
+## 3.0-19 — Navegação e destinos persistentes
+
+- Ao mudar de diretório, o filtro é limpo, o cursor vai para `..` e a seleção permanece.
+- Os últimos destinos de copiar e mover ficam persistentes.
+
 ## 3.0-17 — Última nota editada
 
 - O Ctrl-N agora abre sempre o último arquivo realmente salvo ou editado.
