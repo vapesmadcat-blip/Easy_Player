@@ -1,4 +1,10 @@
-## 3.0-41 — Validação de integridade
+## 3.0-42 — Correção de referências ausentes
+
+- A validação agora pergunta se o usuário deseja corrigir referências ausentes.
+- A correção remove somente entradas quebradas das estruturas selecionadas.
+- Nenhum arquivo de mídia é apagado.
+
+## 3.0-42 — Validação de integridade
 
 - Removida a opção antiga Validar .M3U do menu de ações.
 - Adicionada validação detalhada de playlists, listas temporárias e pesquisas no modo de manutenção.

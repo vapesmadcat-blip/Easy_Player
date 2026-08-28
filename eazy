@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-41"
+EAZY_VERSION="3.0-42"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1216,16 +1216,54 @@ manutencao_dados_eazy() {
     whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
 }
 
+eazy_limpar_playlist_ausentes() {
+    local arquivo="$1" linha candidato tmp
+    [ -f "$arquivo" ] || return
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-playlist-fix.XXXXXX") || return
+    while IFS= read -r linha || [ -n "$linha" ]; do
+        linha="${linha%%$'\r'}"
+        [ -z "$linha" ] && continue
+        [[ "$linha" =~ ^[[:space:]]*# ]] && { printf '%s\n' "$linha" >> "$tmp"; continue; }
+        [[ "$linha" =~ ^https?:// ]] && { printf '%s\n' "$linha" >> "$tmp"; continue; }
+        candidato="$linha"
+        [[ "$candidato" != /* ]] && candidato="$(dirname "$arquivo")/$candidato"
+        [ -e "$candidato" ] && printf '%s\n' "$linha" >> "$tmp"
+    done < "$arquivo"
+    mv -f -- "$tmp" "$arquivo"
+}
+
+eazy_limpar_lista_ausentes() {
+    local arquivo="$1" linha tmp
+    [ -f "$arquivo" ] || return
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-list-fix.XXXXXX") || return
+    while IFS= read -r linha || [ -n "$linha" ]; do
+        [ -n "$linha" ] && [ -e "$linha" ] && printf '%s\n' "$linha" >> "$tmp"
+    done < "$arquivo"
+    mv -f -- "$tmp" "$arquivo"
+}
+
+eazy_limpar_snapshot_ausentes() {
+    local arquivo="$1" linha caminho tmp
+    [ -f "$arquivo" ] || return
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-snapshot-fix.XXXXXX") || return
+    while IFS= read -r linha || [ -n "$linha" ]; do
+        caminho="${linha##*$'\t'}"
+        [ -n "$caminho" ] && [ -e "$caminho" ] && printf '%s\n' "$linha" >> "$tmp"
+    done < "$arquivo"
+    mv -f -- "$tmp" "$arquivo"
+}
+
 validar_dados_eazy() {
-    local selecionados item rel alvo ok falha total=0 validos=0 invalidos=0 report
+    local selecionados item rel alvo ok falha total=0 validos=0 invalidos=0 report targets
     report=$(mktemp "${TMPDIR:-/tmp}/eazy-validacao.XXXXXX") || return 1
+    targets=$(mktemp "${TMPDIR:-/tmp}/eazy-validacao-targets.XXXXXX") || { rm -f "$report"; return 1; }
     selecionados=$(whiptail --title "🔎 Validação do eazy" --checklist \
         "Escolha o que verificar:" 16 82 6 \
         "playlists" "Playlists .M3U/.M3U8/.PLS e referências" ON \
         "listas" "Filas 1-3, listas temporárias e duplicados" ON \
         "pesquisas" "Pesquisas salvas e snapshots de resultados" ON \
-        --separate-output 3>&1 1>&2 2>&3) || { rm -f "$report"; return; }
-    [ -n "$selecionados" ] || { rm -f "$report"; return; }
+        --separate-output 3>&1 1>&2 2>&3) || { rm -f "$report" "$targets"; return; }
+    [ -n "$selecionados" ] || { rm -f "$report" "$targets"; return; }
 
     {
         printf '\033[1;36m╔══════════════════════════════════════════════════════════════════════════════╗\033[0m\n'
@@ -1240,6 +1278,7 @@ validar_dados_eazy() {
                 printf '\033[1;35m▶ PLAYLISTS\033[0m\n' >> "$report"
                 while IFS= read -r alvo; do
                     [ -f "$alvo" ] || continue
+                    printf '%s\n' "$alvo" >> "$targets"
                     case "${alvo##*.}" in m3u|M3U|m3u8|M3U8|pls|PLS) ;; *) continue ;; esac
                     printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
                     while IFS= read -r rel; do
@@ -1258,6 +1297,7 @@ validar_dados_eazy() {
                 printf '\033[1;35m▶ LISTAS TEMPORÁRIAS\033[0m\n' >> "$report"
                 while IFS= read -r alvo; do
                     [ -f "$alvo" ] || continue
+                    printf '%s\n' "$alvo" >> "$targets"
                     printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
                     while IFS= read -r rel; do
                         rel="${rel%%$'\r'}"; [ -z "$rel" ] && continue
@@ -1273,6 +1313,7 @@ validar_dados_eazy() {
                     [ -f "$alvo" ] || continue
                     printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
                     snapshot="${alvo%.search}.results.tsv"
+                    printf '%s\n' "$snapshot" >> "$targets"
                     if [ -f "$snapshot" ]; then
                         while IFS=$'\t' read -r _ _ _ _ rel; do
                             [ -z "$rel" ] && continue
@@ -1298,10 +1339,25 @@ validar_dados_eazy() {
     } >> "$report"
     clear
     cat "$report"
+    if [ "$invalidos" -gt 0 ]; then
+        if whiptail --title "⚠️ Referências ausentes" --yesno \
+            "Foram encontradas $invalidos referência(s) ausente(s).\n\nDeseja corrigir agora?\n\nA correção removerá somente entradas quebradas das playlists, listas temporárias e snapshots. Arquivos do disco não serão apagados." 12 78; then
+            while IFS= read -r alvo; do
+                [ -f "$alvo" ] || continue
+                case "$alvo" in
+                    *.m3u|*.M3U|*.m3u8|*.M3U8|*.pls|*.PLS) eazy_limpar_playlist_ausentes "$alvo" ;;
+                    *.results.tsv) eazy_limpar_snapshot_ausentes "$alvo" ;;
+                    *) eazy_limpar_lista_ausentes "$alvo" ;;
+                esac
+            done < "$targets"
+            whiptail --title "✅ Correção concluída" --msgbox "Entradas ausentes removidas das estruturas selecionadas.\n\nNenhum arquivo do disco foi apagado." 10 72
+        fi
+    fi
     local tecla
+    printf '\nPressione Enter para voltar ou Esc para cancelar.\n'
     IFS= read -r -n1 -s tecla || true
     printf '\n'
-    rm -f "$report"
+    rm -f "$report" "$targets"
     [ "$tecla" = $'\e' ] && return 1
     return 0
 }
