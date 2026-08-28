@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-46"
+EAZY_VERSION="3.0-47"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2126,14 +2126,23 @@ construir_iname_array() {
 
     _saida_ref=()
     local primeiro=1
-    local ext
-    for ext in $lista; do
+    local ext padrao
+    local -a lista_tokens=()
+    read -r -a lista_tokens <<< "$lista"
+    for ext in "${lista_tokens[@]}"; do
         [ -z "$ext" ] && continue
+        # Token sem ponto/coringa = extensão (mp4 → *.mp4).
+        # Token com ponto ou coringa = padrão completo (filme.mov, vid*, movie.*).
+        if [[ "$ext" == *.* || "$ext" == *\** || "$ext" == *\?* || "$ext" == *\[* ]]; then
+            padrao="$ext"
+        else
+            padrao="*.${ext#.}"
+        fi
         if [ "$primeiro" -eq 1 ]; then
-            _saida_ref+=("-iname" "*.${ext}")
+            _saida_ref+=("-iname" "$padrao")
             primeiro=0
         else
-            _saida_ref+=("-o" "-iname" "*.${ext}")
+            _saida_ref+=("-o" "-iname" "$padrao")
         fi
     done
 }
@@ -2147,7 +2156,7 @@ selecionar_extensoes() {
     dialog_args+=("TODOS_AUDIOS" "[ ATALHO: TODOS OS ÁUDIOS ]" "OFF")
     dialog_args+=("TODAS_IMGS" "[ ATALHO: TODAS AS IMAGENS ]" "OFF")
     dialog_args+=("TODOS_COMPACTADOS" "[ ATALHO: TODOS OS COMPACTADOS ]" "OFF")
-    dialog_args+=("DIGITAR" "[ DIGITAR extensões livres ]" "OFF")
+    dialog_args+=("DIGITAR" "[ DIGITAR extensões ou nomes com curingas ]" "OFF")
 
     for ext in "${TODAS_EXT[@]}"; do
         dialog_args+=("$ext" "Formato .$ext" "OFF")
@@ -2155,7 +2164,7 @@ selecionar_extensoes() {
 
     local resultado
     resultado=$(whiptail --title "Seleção de Extensões" \
-        --checklist "Espaço marca, Enter confirma.\nDIGITAR = escrever extensões livres (ex: iso srt nfo)." \
+        --checklist "Espaço marca, Enter confirma.\nDIGITAR = padrões separados por espaço.\nExtensão: mp4 sh | Lista: mp4 mov pdf | Nome: vid* filme.mov movie.*" \
         0 0 0 \
         "${dialog_args[@]}" 3>&1 1>&2 2>&3)
 
@@ -2191,14 +2200,18 @@ selecionar_extensoes() {
     if echo "$resultado" | grep -q "DIGITAR" || [ -n "$lista_expandida" ]; then
         local extras
         extras=$(whiptail --title "Extensões extras (opcional)" \
-            --inputbox "Digite extensões separadas por espaço (sem ponto):\nEx: iso nfo srt ass ts vob\nDeixe em branco para pular." 12 60 \
+            --inputbox "Digite extensões, nomes ou curingas separados por espaço:\nExtensão: mp4 sh\nLista: mp4 mov pdf\nNome/padrão: vid* filme.mov movie.*\nDeixe em branco para pular." 12 60 \
             3>&1 1>&2 2>&3)
-        for ext in $extras; do
-            ext=$(echo "$ext" | tr -d '.')
+        extras=$(printf '%s' "$extras" | tr ',' ' ')
+        local -a extras_tokens=()
+        read -r -a extras_tokens <<< "$extras"
+        for ext in "${extras_tokens[@]}"; do
             [ -z "$ext" ] && continue
-            if ! echo "$lista_expandida" | grep -qw "$ext"; then
-                lista_expandida="$lista_expandida $ext"
-            fi
+            if [[ "$ext" == .* && "$ext" != *.* ]]; then ext="${ext#.}"; fi
+            case " $lista_expandida " in
+                *" $ext "*) ;;
+                *) lista_expandida="$lista_expandida $ext" ;;
+            esac
         done
     fi
 
