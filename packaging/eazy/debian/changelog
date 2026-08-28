@@ -1,3 +1,9 @@
+eazy (3.0-40) unstable; urgency=medium
+
+  * Add direct maintenance mode with eazy -m.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 20:30:00 +0000
+
 eazy (3.0-39) unstable; urgency=medium
 
   * Add selective cleanup manager for eazy application data.

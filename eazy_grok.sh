@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-39"
+EAZY_VERSION="3.0-40"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1216,6 +1216,20 @@ manutencao_dados_eazy() {
     whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
 }
 
+menu_manutencao_direta() {
+    local opcao
+    opcao=$(whiptail --title "🛠️ Manutenção do eazy" --menu \
+        "Escolha o tipo de manutenção:" 14 78 4 \
+        "1" "🧹 Dados do próprio eazy (sem sudo)" \
+        "2" "🖥️ Manutenção do sistema (sudo quando necessário)" \
+        "0" "Voltar" 3>&1 1>&2 2>&3) || return
+    case "$opcao" in
+        1) manutencao_dados_eazy ;;
+        2) menu_manutencao ;;
+        0|*) return ;;
+    esac
+}
+
 menu_manutencao() {
     while true; do
         local opcao dry_status="DESLIGADO"
@@ -1261,6 +1275,12 @@ menu_manutencao() {
 
 
 # --- TRATAMENTO DE ARGUMENTOS INICIAIS ---
+
+# -m abre diretamente o gerenciador de manutenção, sem iniciar o navegador.
+if [ "$1" = "-m" ] || [ "$1" = "--maintenance" ]; then
+    menu_manutencao_direta
+    exit $?
+fi
 
 # Verificação de proteção com senha (ao iniciar)
 if [ -f "$PASTA_PROTEGIDA_CONFIG" ] 2>/dev/null; then

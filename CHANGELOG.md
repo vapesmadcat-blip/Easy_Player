@@ -1,3 +1,8 @@
+## 3.0-40 — Modo de manutenção direto
+
+- Adicionado `eazy -m`.
+- Separa manutenção dos dados próprios, sem sudo, da manutenção do sistema, com sudo sob demanda.
+
 ## 3.0-39 — Manutenção seletiva dos dados do eazy
 
 - Incluído checklist para apagar playlists, filas, pesquisas, notas, histórico, downloads, cache, estado e backups.

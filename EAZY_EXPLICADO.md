@@ -138,7 +138,17 @@ O `Esc` encerra o modo de pesquisa e retorna ao navegador normal. Durante a busc
 
 O sistema utiliza cache temporário durante a pesquisa para evitar trabalho repetido na mesma sessão. Esse cache fica em `/tmp` e não é tratado como dado permanente do usuário. O snapshot permanente de cada pesquisa fica junto do arquivo `.search`, com extensão `.results.tsv`, dentro de `~/.config/eazy/saved_searches/`.
 
-## 11. Manutenção dos dados do próprio eazy
+## 11. Acesso direto à manutenção
+
+O comando `eazy -m` abre diretamente o modo de manutenção, sem iniciar o navegador de arquivos. A primeira tela separa duas áreas: `Dados do próprio eazy (sem sudo)` e `Manutenção do sistema (sudo quando necessário)`.
+
+A área própria trabalha apenas nos dados do usuário e não precisa de senha administrativa. Ela permite selecionar playlists, filas temporárias, pesquisas salvas, snapshots, notas, histórico, downloads, cache, estado, backups e scripts auxiliares para limpeza seletiva.
+
+A área do sistema reúne diagnósticos e ações de manutenção de CPU, memória, discos, SMART, SWAP, rede, áudio, vídeo, sensores e limpeza do sistema. As ações que precisam de privilégios solicitam sudo no momento da execução; as leituras e diagnósticos que não precisam de privilégio são executados sem sudo.
+
+Também é possível acessar a manutenção pelo navegador com `Ctrl-K`. O `eazy -m` é apenas um atalho direto para a mesma separação de funções.
+
+## 12. Manutenção dos dados do próprio eazy
 
 No menu `Ctrl-K` existe a opção `Limpar dados do próprio eazy`. Ela não apaga dados automaticamente: abre um checklist para o usuário escolher as categorias. O eazy mostra uma estimativa de espaço, pede confirmação explícita e só então executa a limpeza.
 
@@ -146,7 +156,7 @@ As categorias são playlists salvas em `~/Playlists`; filas 1, 2 e 3, listas tem
 
 A limpeza respeita o `DRY-RUN`. Com esse modo ligado, o eazy calcula e informa o que seria removido, mas não executa `rm` nem altera os dados. O arquivo principal de configuração não é apagado por essa opção, evitando que preferências do usuário sejam perdidas sem uma escolha específica.
 
-## 12. Pesquisas salvas
+## 13. Pesquisas salvas
 
 Uma pesquisa configurada pode ser salva com um nome. O eazy armazena extensão, tamanho mínimo, tamanho máximo, conteúdo pesquisado e demais parâmetros necessários para reabrir o mesmo filtro posteriormente. Além dos parâmetros, ele grava um **snapshot do resultado encontrado** no momento do salvamento.
 
