@@ -1,3 +1,9 @@
+eazy (3.0-37) unstable; urgency=medium
+
+  * Cancel active find and grep processes when Esc is pressed during search.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 17:30:00 +0000
+
 eazy (3.0-36) unstable; urgency=medium
 
   * Add Esc cancellation for searches, readers, previews and dialogs.

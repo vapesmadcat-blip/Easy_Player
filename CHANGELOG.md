@@ -1,3 +1,8 @@
+## 3.0-37 — Esc durante a busca
+
+- Esc agora é monitorado durante find e grep.
+- Subprocessos ativos são encerrados e temporários removidos.
+
 ## 3.0-36 — Cancelamento por Esc
 
 - Esc cancela buscas, leituras, previews, escolhas de arquivos, conversões, diagnósticos e diálogos interrompíveis.

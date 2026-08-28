@@ -134,7 +134,7 @@ O `Ctrl-F` abre a pesquisa recursiva. Ela pode localizar arquivos por extensão,
 
 A pesquisa mostra o tipo, o nome, o tamanho e o caminho encontrado. Os resultados podem ser selecionados individualmente ou em múltiplos itens para reprodução, cópia, movimentação, exclusão e inclusão em filas.
 
-O `Esc` encerra o modo de pesquisa e retorna ao navegador normal. O mesmo princípio vale para telas de leitura, preview, escolha de arquivo, conversões, diagnósticos e diálogos: quando a tela está aguardando interação ou oferece cancelamento, `Esc` interrompe a operação e retorna ao contexto anterior. O resultado não precisa ser digitado manualmente: a seleção é transformada em caminhos reais pelo eazy.
+O `Esc` encerra o modo de pesquisa e retorna ao navegador normal. Durante a busca, ele é monitorado em tempo real: ao ser pressionado, os processos `find` e `grep` ativos são encerrados, os temporários são removidos e o navegador é restaurado. O mesmo princípio vale para telas de leitura, preview, escolha de arquivo, conversões, diagnósticos e diálogos: quando a tela está aguardando interação ou oferece cancelamento, `Esc` interrompe a operação e retorna ao contexto anterior. O resultado não precisa ser digitado manualmente: a seleção é transformada em caminhos reais pelo eazy.
 
 O sistema utiliza cache temporário durante a pesquisa para evitar trabalho repetido na mesma sessão. Esse cache fica em `/tmp` e não é tratado como dado permanente do usuário. O snapshot permanente de cada pesquisa fica junto do arquivo `.search`, com extensão `.results.tsv`, dentro de `~/.config/eazy/saved_searches/`.
 

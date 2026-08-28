@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-36"
+EAZY_VERSION="3.0-37"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2168,6 +2168,52 @@ eazy_busca_msg() {
     { printf "%s\n" "$msg" > /dev/tty; } 2>/dev/null || printf "%s\n" "$msg" >&2
 }
 
+# Monitor de cancelamento: durante a varredura, Esc cria um sinal no /tmp.
+eazy_busca_cancelar_iniciar() {
+    EAZY_BUSCA_CANCEL_FILE="${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}"
+    EAZY_BUSCA_CANCEL_PID_FILE="${EAZY_BUSCA_CANCEL_PID_FILE:-/tmp/eazy_search_cancel_pid_$$}"
+    rm -f "$EAZY_BUSCA_CANCEL_FILE" "$EAZY_BUSCA_CANCEL_PID_FILE"
+    (
+        [ -r /dev/tty ] || exit 0
+        old_stty=$(stty -g < /dev/tty 2>/dev/null || true)
+        stty -icanon -echo min 0 time 1 < /dev/tty 2>/dev/null || exit 0
+        trap '[ -n "$old_stty" ] && stty "$old_stty" < /dev/tty 2>/dev/null || true' EXIT HUP INT TERM
+        while :; do
+            tecla=""
+            IFS= read -r -n1 -s -t 0.10 tecla < /dev/tty || true
+            if [ "$tecla" = $'\\e' ]; then
+                : > "$EAZY_BUSCA_CANCEL_FILE"
+                break
+            fi
+        done
+    ) &
+    printf '%s\n' "$!" > "$EAZY_BUSCA_CANCEL_PID_FILE"
+}
+
+eazy_busca_cancelar_parar() {
+    local pid
+    pid=$(cat "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true)
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    rm -f "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
+}
+
+eazy_busca_cancelada() {
+    [ -e "${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}" ]
+}
+
+eazy_busca_esperar_pid() {
+    local pid="$1"
+    while kill -0 "$pid" 2>/dev/null; do
+        if eazy_busca_cancelada; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+            return 130
+        fi
+        sleep 0.08
+    done
+    wait "$pid" 2>/dev/null
+}
+
 # Linha de status: HD livre/total + seleção (para header do fzf)
 # Uso: eazy_status_header [caminho1 caminho2 ...]
 # Preserva atalhos em EAZY_HEADER_HINT (exportado antes do fzf)
@@ -3747,6 +3793,7 @@ obter_lista_rapida() {
             BUSCA_REMAKE=0
 
             # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
+            eazy_busca_cancelar_iniciar
             local letras=({0..9} {A..Z})
             local total_seg=$((${#letras[@]} + 1))
             local idx=0 total_achados=0
@@ -3767,7 +3814,13 @@ obter_lista_rapida() {
                 eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
                 seg_tmp="/tmp/eazy_busca_seg_$$"
                 find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
-                    -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+                    -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp" &
+                find_pid=$!
+                if ! eazy_busca_esperar_pid "$find_pid"; then
+                    rm -f "$seg_tmp"
+                    eazy_busca_cancelar_parar
+                    return 130
+                fi
                 n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
                 n_seg=${n_seg:-0}
                 cat "$seg_tmp" >> "$tmp_busca"
@@ -3783,7 +3836,13 @@ obter_lista_rapida() {
             seg_tmp="/tmp/eazy_busca_seg_$$"
             find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                 ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
-                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp" &
+            find_pid=$!
+            if ! eazy_busca_esperar_pid "$find_pid"; then
+                rm -f "$seg_tmp"
+                eazy_busca_cancelar_parar
+                return 130
+            fi
             n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
             n_seg=${n_seg:-0}
             cat "$seg_tmp" >> "$tmp_busca"
@@ -3805,9 +3864,20 @@ obter_lista_rapida() {
                 while IFS=$'\t' read -r bytes mtime tipo nome caminho; do
                     gi=$((gi + 1))
                     [ -z "$caminho" ] && continue
-                    if grep -ilFq -- "$BUSCA_CONTEUDO" "$caminho" 2>/dev/null; then
+                    if eazy_busca_cancelada; then
+                        rm -f "$tmp_filtro"
+                        eazy_busca_cancelar_parar
+                        return 130
+                    fi
+                    grep -ilFq -- "$BUSCA_CONTEUDO" "$caminho" 2>/dev/null &
+                    grep_pid=$!
+                    if eazy_busca_esperar_pid "$grep_pid"; then
                         printf "%s\t%s\t%s\t%s\t%s\n" "$bytes" "$mtime" "$tipo" "$nome" "$caminho" >> "$tmp_filtro"
                         n_grep=$((n_grep + 1))
+                    elif eazy_busca_cancelada; then
+                        rm -f "$tmp_filtro"
+                        eazy_busca_cancelar_parar
+                        return 130
                     fi
                     if [ $((gi % 15)) -eq 0 ] || [ "$gi" -eq "$n_total" ]; then
                         eazy_busca_progresso "$((gi * 100 / n_total))" "grep" "$n_grep" "$gi" "/$n_total"
@@ -3817,6 +3887,13 @@ obter_lista_rapida() {
                 eazy_busca_msg ""
                 eazy_busca_msg $'\033[1;32m'"✓ Conteúdo — $n_grep hit(s)"$'\033[0m'
                 eazy_busca_msg ""
+            fi
+
+            eazy_busca_cancelar_parar
+            if eazy_busca_cancelada; then
+                eazy_busca_msg ""
+                eazy_busca_msg $'\033[1;33mBusca cancelada por Esc.\033[0m'
+                return 130
             fi
 
             # Grava no buffer da sessão
@@ -5888,6 +5965,14 @@ while true; do
     # Remove .. / Voltar de seleções múltiplas (Ctrl-A, TAB, espaço…)
     # Mas preserva se for SÓ navegação (Enter em ".." / Voltar deve funcionar)
     escolha=$(printf '%s\n' "$escolha_raw" | eazy_sem_navegacao)
+    if [ -e "${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}" ]; then
+        rm -f "${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}" "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
+        MODO_BUSCA=0
+        BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
+        TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+        whiptail --title "Pesquisa" --msgbox "Pesquisa interrompida por Esc." 8 55 2>/dev/null || true
+        continue
+    fi
     if [ -z "$escolha" ] && [ -n "$escolha_raw" ]; then
         n_raw=$(printf '%s\n' "$escolha_raw" | grep -c '^' 2>/dev/null || echo 0)
         n_raw=$(echo "$n_raw" | tr -cd '0-9'); n_raw=${n_raw:-0}
