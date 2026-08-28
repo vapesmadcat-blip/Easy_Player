@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-28"
+EAZY_VERSION="3.0-29"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -3561,15 +3561,15 @@ obter_lista_rapida() {
             # Normaliza ./
             item_res="${item_res//\/\.\//\/}"
 
-            local tamanho=0
+                        local tamanho=0
             local mb="-- MB"
             local tipo_icone="🎬"
             local existe=0
-
             if [ -e "$item_res" ]; then
                 existe=1
-                tamanho=$(stat -c%s "$item_res" 2>/dev/null || echo 0)
+                tamanho=$(tamanho_caminho "$item_res")
                 mb=$(awk -v b="$tamanho" 'BEGIN {printf "%.1f", b / 1048576}')
+                [ -d "$item_res" ] && tipo_icone="📁"
             else
                 mb="?"
             fi
@@ -3587,7 +3587,9 @@ obter_lista_rapida() {
             local ext="${item_res##*.}"
             ext=$(echo "$ext" | tr '[:upper:]' '[:lower:]')
 
-            if [[ "$ext" =~ ^(mp3|m4a|wav|flac)$ ]]; then
+            if [ "$existe" -eq 1 ] && [ -d "$item_res" ]; then
+                tipo_icone="📁"
+            elif [[ "$ext" =~ ^(mp3|m4a|wav|flac)$ ]]; then
                 tipo_icone="🎵"
             elif [[ "$ext" =~ ^(webp|jpg|jpeg|png|gif)$ ]]; then
                 tipo_icone="🖼️"
@@ -6592,6 +6594,22 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             registrar_status; continue
         fi
 
+        # Diretório dentro de qualquer lista: entra na pasta, não toca como arquivo.
+        total_escolha_playlist=$(printf '%s\n' "$escolha" | grep -c '^' 2>/dev/null || echo 0)
+        total_escolha_playlist=$(printf '%s' "$total_escolha_playlist" | tr -cd '0-9'); total_escolha_playlist=${total_escolha_playlist:-0}
+        if [ "$total_escolha_playlist" -eq 1 ] && [ -d "$primeiro_caminho" ]; then
+            salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "$primeiro_caminho"
+            if cd -- "$primeiro_caminho"; then
+                MODO_PLAYLIST=0
+                ARQUIVO_PLAYLIST_ABERTO=""
+                FZF_QUERY=""
+                TMP=1; ALVO="$(pwd -P)"; ULTIMO_DIR="$(pwd -P)"; ULTIMO_ARQUIVO=""
+                registrar_status
+            else
+                whiptail --title "Erro" --msgbox "Não foi possível entrar no diretório:\n$primeiro_caminho" 8 60
+            fi
+            continue
+        fi
         # Seleção normal: toca só o que foi marcado / o item sob o cursor
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
@@ -6600,6 +6618,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
             [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
+            # Diretórios não são mídia: só entram quando selecionados sozinhos para navegação.
+            [ -d "$p" ] && continue
             # Já vem resolvido (absoluto) da listagem
             printf '%s\n' "$p" >> "$playlist_sel"
             printf '%s\n' "$p" >> "$SELECTED_FILE"

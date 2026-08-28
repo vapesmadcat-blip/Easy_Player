@@ -1,3 +1,8 @@
+## 3.0-29 — Diretórios nas listas temporárias
+
+- Diretórios nas filas e listas personalizadas são reconhecidos como pastas, com tamanho recursivo e navegação.
+- Diretórios não são enviados ao player como arquivos de mídia.
+
 ## 3.0-28 — Tab seleciona e avança
 
 - Tab marca somente o item atual e avança para o próximo item.
