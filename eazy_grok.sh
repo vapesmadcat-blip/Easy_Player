@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-25"
+EAZY_VERSION="3.0-26"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -5619,7 +5619,13 @@ while true; do
         TEXTO_PROMPT=" 📥 FILA DE DOWNLOADS ($TOTAL_DL itens) ❯ "
         EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Remover | [F10]: Ajuda "
     elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
-        if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
+        if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_custom_* ]]; then
+            TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
+            TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9'); TOTAL_FILA=${TOTAL_FILA:-0}
+            NOME_LISTA_CTRL_P="${ARQUIVO_PLAYLIST_ABERTO##*temp_playlist_custom_}"
+            TEXTO_PROMPT=" 📋 $NOME_LISTA_CTRL_P ($TOTAL_FILA itens)  [CTRL-P]: Próx. lista ❯ "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da lista | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. lista | [Q]: Sair "
+        elif [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9')
             TOTAL_FILA=${TOTAL_FILA:-0}
@@ -6180,7 +6186,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         while IFS= read -r custom_arq; do
             [ -f "$custom_arq" ] || continue
             custom_nome="${custom_arq##*temp_playlist_custom_}"
-            custom_menu_args+=("C_$custom_nome" "$custom_nome" OFF)
+            custom_count=$(grep -c '^' "$custom_arq" 2>/dev/null || echo 0)
+            custom_count=$(printf '%s' "$custom_count" | tr -cd '0-9'); custom_count=${custom_count:-0}
+            custom_menu_args+=("C_$custom_nome" "$custom_nome ($custom_count itens)" OFF)
         done < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
         dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
             "Para qual lista enviar os itens?\n(Espaço marca, Enter confirma)" 16 65 4 \

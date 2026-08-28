@@ -1,3 +1,7 @@
+## 3.0-26 — Rótulos das listas temporárias
+
+- Insert e Ctrl-P mostram o nome real da lista e a quantidade de itens, sem C_ ou Fila 1.
+
 ## 3.0-25 — Nomes das listas temporárias
 
 - Todas as listas personalizadas aparecem no Insert e no Ctrl-P com o nome informado.
