@@ -1,55 +1,61 @@
-## 3.0-50 — Progresso sincronizado
+## 3.0-51 — Fluxo de pesquisa baseado na v18
+
+- Removido o `wait` bloqueante do encerramento do monitor de Esc.
+- A pesquisa normal agora libera a lista sem depender de pressionar Esc.
+- O monitor é encerrado sem bloquear a entrega dos resultados, preservando o cancelamento durante a varredura.
+
+## 3.0-51 — Progresso sincronizado
 
 - Removida a barra artificial exibida antes da pesquisa real.
 - A etapa de nomes mostra apenas o estado de pesquisa até o `find` terminar.
 - A barra percentual aparece somente na etapa real de conteúdo ou ao concluir a varredura.
 
-## 3.0-50 — Retorno automático para a lista
+## 3.0-51 — Retorno automático para a lista
 
 - Corrigida a corrida na restauração do modo do terminal após a pesquisa.
 - O encerramento normal agora entrega os resultados diretamente ao fzf, sem pressionar Esc.
 - Esc permanece reservado para cancelar a busca em andamento.
 
-## 3.0-50 — Busca mais rápida
+## 3.0-51 — Busca mais rápida
 
 - A pesquisa recursiva deixou de repetir a varredura para cada letra.
 - Agora todos os padrões são pesquisados em uma única passada, reduzindo a espera antes da exibição dos resultados.
 - A barra de progresso e o cancelamento por Esc continuam ativos.
 
-## 3.0-50 — Pesquisa por nomes e curingas
+## 3.0-51 — Pesquisa por nomes e curingas
 
 - O campo de extensões extras aceita extensões, listas separadas por espaço ou vírgula e padrões de nome.
 - Exemplos: `sh mp4 vid* filme.mov movie.*`.
 - Extensões simples viram `*.ext`; padrões com ponto ou curingas são usados como nomes completos.
 
-## 3.0-50 — Índice do cursor na lista filtrada
+## 3.0-51 — Índice do cursor na lista filtrada
 
 - Ao voltar com filtro, o cursor agora localiza o mesmo caminho dentro da lista visível.
 - A posição é recalculada após o filtro: um arquivo que era 10 pode ser restaurado na posição 2 filtrada.
 
-## 3.0-50 — Restauração correta do cursor com filtro
+## 3.0-51 — Restauração correta do cursor com filtro
 
 - No retorno ao diretório anterior, o filtro é carregado antes da posição do cursor.
 - A posição passa a ser recalculada sobre a lista filtrada visível.
 
-## 3.0-50 — Persistência do filtro ao retornar
+## 3.0-51 — Persistência do filtro ao retornar
 
 - O filtro é salvo por diretório junto com a posição do cursor.
 - Ao retornar por Ctrl-Backspace ou `..`, filtro e cursor são restaurados.
 - Ao avançar para um novo diretório, o filtro continua sendo zerado.
 
-## 3.0-50 — Pergunta de correção no terminal
+## 3.0-51 — Pergunta de correção no terminal
 
 - A validação permanece na tela escura, sem caixa de diálogo para referências ausentes.
 - A pergunta `CORRIGIR? (S/N)` exige resposta explícita, sem valor padrão.
 
-## 3.0-50 — Correção de referências ausentes
+## 3.0-51 — Correção de referências ausentes
 
 - A validação agora pergunta se o usuário deseja corrigir referências ausentes.
 - A correção remove somente entradas quebradas das estruturas selecionadas.
 - Nenhum arquivo de mídia é apagado.
 
-## 3.0-50 — Validação de integridade
+## 3.0-51 — Validação de integridade
 
 - Removida a opção antiga Validar .M3U do menu de ações.
 - Adicionada validação detalhada de playlists, listas temporárias e pesquisas no modo de manutenção.
