@@ -7,10 +7,24 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-20"
+EAZY_VERSION="3.0-21"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
+# --- Alertas sonoros ---
+# Usa o sino do terminal, sem exigir beep/paplay; erros também tentam o sino visual.
+eazy_beep() {
+    printf '\a' > /dev/tty 2>/dev/null || printf '\a' >&2
+}
+whiptail() {
+    local texto="$*" rc
+    command whiptail "$@"
+    rc=$?
+    case "$texto" in
+        *Erro*|*erro*|*Falha*|*falha*|"*não encontrado*"|"*Não foi possível*"|"*inválid*") eazy_beep ;;
+    esac
+    return "$rc"
+}
 # --- DIRETÓRIOS E ARQUIVOS DE CONFIGURAÇÃO ---
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/eazy"
 NOTES_DIR="$CONFIG_DIR/notas"
@@ -5851,7 +5865,11 @@ Depois use:
             FZF_QUERY=""
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
-            cd -- "$destino_anterior" || continue
+            if ! cd -- "$destino_anterior"; then
+                eazy_beep
+                continue
+            fi
+            eazy_beep
             # Retorno ao diretório anterior: restaura a posição salva nele.
             carregar_posicao_dir "$(pwd -P)"
             ALVO="$(pwd -P)"
@@ -6585,7 +6603,11 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         local_nome=$(basename -- "$local_dir_antes")
         salvar_posicao_dir "$local_dir_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
         DIRETORIO_ANTERIOR="$local_dir_antes"
-        cd .. || true
+        if ! cd ..; then
+            eazy_beep
+            continue
+        fi
+        eazy_beep
         carregar_posicao_dir "$(pwd)"
         # Regra solicitada: ao mudar de pasta, o cursor fica em `..`.
         ULTIMO_ARQUIVO=""
@@ -6605,7 +6627,11 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         dir_atual_antes="$(pwd -P)"
         salvar_posicao_dir "$dir_atual_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
         DIRETORIO_ANTERIOR="$dir_atual_antes"
-        cd "$primeiro_caminho" || true
+        if ! cd "$primeiro_caminho"; then
+            eazy_beep
+            continue
+        fi
+        eazy_beep
         ULTIMO_ARQUIVO=""
         TMP=1
         ALVO="$(pwd)"

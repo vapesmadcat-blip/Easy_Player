@@ -1,3 +1,8 @@
+## 3.0-21 — Alertas sonoros
+
+- Emite beep ao mudar de diretório.
+- Emite beep nos diálogos de erro e falha.
+
 ## 3.0-20 — Posição do cursor na navegação
 
 - Ctrl-Backspace restaura a posição salva do diretório anterior.
