@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-31"
+EAZY_VERSION="3.0-32"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -3565,12 +3565,16 @@ obter_lista_rapida() {
                         local tamanho=0
             local mb="-- MB"
             local tipo_icone="🎬"
+            local tipo_cor="$C_VID"
             local existe=0
             if [ -e "$item_res" ]; then
                 existe=1
                 tamanho=$(tamanho_caminho "$item_res")
                 mb=$(awk -v b="$tamanho" 'BEGIN {printf "%.1f", b / 1048576}')
-                [ -d "$item_res" ] && tipo_icone="📁"
+                if [ -d "$item_res" ]; then
+                    tipo_icone="📁"
+                    tipo_cor="$C_DIR"
+                fi
             else
                 mb="?"
             fi
@@ -3590,6 +3594,7 @@ obter_lista_rapida() {
 
             if [ "$existe" -eq 1 ] && [ -d "$item_res" ]; then
                 tipo_icone="📁"
+                tipo_cor="$C_DIR"
             elif [[ "$ext" =~ ^(mp3|m4a|wav|flac)$ ]]; then
                 tipo_icone="🎵"
             elif [[ "$ext" =~ ^(webp|jpg|jpeg|png|gif)$ ]]; then
@@ -3600,7 +3605,7 @@ obter_lista_rapida() {
 
             # Guarda o caminho resolvido (absoluto) no campo final para play/delete
             printf "%015d\t%b%s %-40s%b\t%b[%s MB]%b\t%s\n" \
-                "$tamanho" "$C_VID" "$tipo_icone" "$nome_exib" "$C_RESET" "$C_SIZE" "$mb" "$C_RESET" "$item_res"
+                "$tamanho" "$tipo_cor" "$tipo_icone" "$nome_exib" "$C_RESET" "$C_SIZE" "$mb" "$C_RESET" "$item_res"
         done < "$ARQUIVO_PLAYLIST_ABERTO"
         return
     fi

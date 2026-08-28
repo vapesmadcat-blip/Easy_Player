@@ -1,3 +1,7 @@
+## 3.0-32 — Identificação visual de diretórios
+
+- Diretórios nas listas temporárias usam ícone e cor de pasta, mantendo tamanho e navegação.
+
 ## 3.0-31 — Nome limpo das listas
 
 - O Insert exibe somente o nome da lista e a quantidade de itens, ocultando o identificador interno.

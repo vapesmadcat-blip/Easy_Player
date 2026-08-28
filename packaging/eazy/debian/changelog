@@ -1,3 +1,9 @@
+eazy (3.0-32) unstable; urgency=medium
+
+  * Make directories visibly distinct from media files in temporary lists.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 12:30:00 +0000
+
 eazy (3.0-31) unstable; urgency=medium
 
   * Hide internal custom-list identifiers in the Insert menu.
