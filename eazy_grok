@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-26"
+EAZY_VERSION="3.0-27"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -5556,7 +5556,7 @@ mover_arquivos() {
 registrar_status
 
 # Preview precisa estar exportado para o subprocess do fzf
-export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_normalize_fixed eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert eazy_dup_amostra_f12 eazy_dup_select_fixed eazy_dup_refresh_lista eazy_dup_salvar_lista eazy_dup_carregar_lista eazy_dup_lista_tem_itens eazy_dup_limpar_lista contar_dup_lista selecionar_um_duplicado_por_grupo 2>/dev/null || true
+export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho somar_selecao_bytes info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_normalize_fixed eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert eazy_dup_amostra_f12 eazy_dup_select_fixed eazy_dup_refresh_lista eazy_dup_salvar_lista eazy_dup_carregar_lista eazy_dup_lista_tem_itens eazy_dup_limpar_lista contar_dup_lista selecionar_um_duplicado_por_grupo 2>/dev/null || true
 
 # fzf mais novo diferencia Ctrl+Backspace; versões antigas o reportam como Ctrl+H.
 EAZY_FZF_BACKSPACE_EXPECT=""
@@ -5755,14 +5755,21 @@ while true; do
     fi
 
     FZF_DUP_SELECT_BINDS=()
+    FZF_NORMAL_SELECT_BINDS=()
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
         FZF_DUP_SELECT_BINDS=(
             --bind='tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+down+transform-header(eazy_status_header)'
             --bind='shift-tab:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+up+transform-header(eazy_status_header)'
             --bind='space:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
+                )
+    else
+        # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
+        FZF_NORMAL_SELECT_BINDS=(
+            --bind='space:toggle+transform-header(eazy_status_header {+})'
+            --bind='tab:toggle+transform-header(eazy_status_header {+})'
+            --bind='shift-tab:toggle+transform-header(eazy_status_header {+})'
         )
     fi
-
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
         --print-query \
@@ -5785,6 +5792,7 @@ while true; do
         --preview-window="${PREVIEW_WIN}" \
         --bind="change:reload:eazy_lista_filtrada '{q}'" \
         "${FZF_DUP_SELECT_BINDS[@]}" \
+        "${FZF_NORMAL_SELECT_BINDS[@]}" \
         --bind="$CTRL_A_BIND" \
         --bind="$CTRL_X_BIND" \
         --bind="$CTRL_R_BIND" \

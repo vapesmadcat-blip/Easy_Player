@@ -1,3 +1,8 @@
+## 3.0-27 — Seleção de diretórios e bytes
+
+- Espaço e Tab selecionam arquivos e diretórios sem limpar a seleção.
+- O cabeçalho mostra quantidade e bytes selecionados, com tamanho recursivo para diretórios.
+
 ## 3.0-26 — Rótulos das listas temporárias
 
 - Insert e Ctrl-P mostram o nome real da lista e a quantidade de itens, sem C_ ou Fila 1.
