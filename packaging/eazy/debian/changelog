@@ -1,3 +1,9 @@
+eazy (3.0-22) unstable; urgency=medium
+
+  * Restore cursor position on all previous-directory return paths.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 07:30:00 +0000
+
 eazy (3.0-21) unstable; urgency=medium
 
   * Add terminal bell on directory changes and error dialogs.

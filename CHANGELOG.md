@@ -1,3 +1,8 @@
+## 3.0-22 — Retorno com posição persistente
+
+- A posição salva é restaurada ao voltar pelo atalho, clique ou `Enter` em `..`.
+- O mecanismo do fzf volta a usar o estado persistente original.
+
 ## 3.0-21 — Alertas sonoros
 
 - Emite beep ao mudar de diretório.

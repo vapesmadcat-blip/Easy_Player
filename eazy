@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-21"
+EAZY_VERSION="3.0-22"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -6609,9 +6609,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         eazy_beep
         carregar_posicao_dir "$(pwd)"
-        # Regra solicitada: ao mudar de pasta, o cursor fica em `..`.
-        ULTIMO_ARQUIVO=""
-        TMP=1
+        # Retorno por `..`: restaura a posição salva no diretório pai.
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status
@@ -6633,7 +6631,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         eazy_beep
         ULTIMO_ARQUIVO=""
-        TMP=1
+        carregar_posicao_dir "$(pwd)"
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status
