@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-23"
+EAZY_VERSION="3.0-24"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -6227,9 +6227,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
         MODO_BUSCA=0; MODO_DOWNLOAD=0
-        touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
+                touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
         touch "$DUP_LISTA" 2>/dev/null || true
-
+        custom_lista_ctrlp=$(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort | head -n1)
         local_onde="dir"
         if [ "${MODO_DUP:-0}" -eq 1 ]; then
             local_onde="dup"
@@ -6238,6 +6238,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 *temp_playlist_1) local_onde="1" ;;
                 *temp_playlist_2) local_onde="2" ;;
                 *temp_playlist_3) local_onde="3" ;;
+                *temp_playlist_custom_*) local_onde="custom" ;;
                 *) local_onde="outra" ;;
             esac
         fi
@@ -6271,7 +6272,28 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
                 ;;
             3)
-                # Fila 3 → Duplicados (lista tmp)
+                if [ -n "$custom_lista_ctrlp" ] && [ -f "$custom_lista_ctrlp" ]; then
+                    # Fila 3 → primeira lista temporária personalizada.
+                    MODO_DUP=0
+                    FILA_ATUAL=1
+                    atualizar_fila_atual
+                    MODO_PLAYLIST=1
+                    ARQUIVO_PLAYLIST_ABERTO="$custom_lista_ctrlp"
+                    TMP=1; ULTIMO_ARQUIVO=""
+                    carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
+                else
+                    # Sem listas personalizadas: Fila 3 → Duplicados.
+                    MODO_PLAYLIST=0
+                    ARQUIVO_PLAYLIST_ABERTO=""
+                    eazy_dup_carregar_lista || : > "$DUP_FILE"
+                    : > "$DUP_SELECTED_FILE"
+                    rm -f "$DUP_MANUAL_FILE"
+                    MODO_DUP=1; export MODO_DUP
+                    TMP=2; ULTIMO_ARQUIVO=""
+                fi
+                ;;
+            custom)
+                # Lista personalizada → Duplicados.
                 MODO_PLAYLIST=0
                 ARQUIVO_PLAYLIST_ABERTO=""
                 eazy_dup_carregar_lista || : > "$DUP_FILE"

@@ -1,3 +1,9 @@
+eazy (3.0-24) unstable; urgency=medium
+
+  * Include custom temporary lists in the Ctrl-P cycle.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 08:30:00 +0000
+
 eazy (3.0-23) unstable; urgency=medium
 
   * Add named saved searches and custom temporary lists from Insert.

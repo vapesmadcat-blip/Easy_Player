@@ -1,3 +1,7 @@
+## 3.0-24 — Listas temporárias no Ctrl-P
+
+- Listas criadas pelo Insert agora aparecem no ciclo do Ctrl-P.
+
 ## 3.0-23 — Pesquisas salvas e listas temporárias
 
 - Ctrl-S salva a pesquisa ativa com nome.
