@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-30"
+EAZY_VERSION="3.0-31"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -6199,7 +6199,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             custom_nome="${custom_arq##*temp_playlist_custom_}"
             custom_count=$(grep -c '^' "$custom_arq" 2>/dev/null || echo 0)
             custom_count=$(printf '%s' "$custom_count" | tr -cd '0-9'); custom_count=${custom_count:-0}
-            custom_menu_args+=("C_$custom_nome" "$custom_nome ($custom_count itens)" OFF)
+            custom_menu_args+=("$custom_nome" "$custom_count itens" OFF)
         done < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
         dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
             "Para qual lista enviar os itens?\n(Espaço marca, Enter confirma)" 16 65 4 \
@@ -6210,8 +6210,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             "${custom_menu_args[@]}" \
             3>&1 1>&2 2>&3)
         [ -z "$dest_fila" ] && continue
-        if [[ "$dest_fila" == C_* ]]; then
-            nome_lista="${dest_fila#C_}"
+        if [ -f "$CONFIG_DIR/temp_playlist_custom_$dest_fila" ]; then
+            nome_lista="$dest_fila"
             dest_file="$CONFIG_DIR/temp_playlist_custom_$nome_lista"
             dest_label="$nome_lista"
         elif [ "$dest_fila" = "N" ]; then

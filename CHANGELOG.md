@@ -1,3 +1,7 @@
+## 3.0-31 — Nome limpo das listas
+
+- O Insert exibe somente o nome da lista e a quantidade de itens, ocultando o identificador interno.
+
 ## 3.0-30 — Retorno de diretórios em listas
 
 - Diretórios nas listas temporárias aparecem como pastas.

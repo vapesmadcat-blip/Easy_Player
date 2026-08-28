@@ -1,3 +1,9 @@
+eazy (3.0-31) unstable; urgency=medium
+
+  * Hide internal custom-list identifiers in the Insert menu.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 12:00:00 +0000
+
 eazy (3.0-30) unstable; urgency=medium
 
   * Preserve temporary-list context when entering and leaving directories.
