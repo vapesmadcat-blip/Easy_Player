@@ -1,3 +1,8 @@
+## 3.0-41 — Validação de integridade
+
+- Removida a opção antiga Validar .M3U do menu de ações.
+- Adicionada validação detalhada de playlists, listas temporárias e pesquisas no modo de manutenção.
+
 ## 3.0-40 — Modo de manutenção direto
 
 - Adicionado `eazy -m`.

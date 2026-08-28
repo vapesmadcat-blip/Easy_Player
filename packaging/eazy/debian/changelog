@@ -1,3 +1,10 @@
+eazy (3.0-41) unstable; urgency=medium
+
+  * Add illustrated integrity validation for playlists, temporary lists and saved searches.
+  * Remove obsolete M3U validation action entry.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 21:30:00 +0000
+
 eazy (3.0-40) unstable; urgency=medium
 
   * Add direct maintenance mode with eazy -m.

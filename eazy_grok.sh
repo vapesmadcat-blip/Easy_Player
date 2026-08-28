@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-40"
+EAZY_VERSION="3.0-41"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1216,6 +1216,110 @@ manutencao_dados_eazy() {
     whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
 }
 
+validar_dados_eazy() {
+    local selecionados item rel alvo ok falha total=0 validos=0 invalidos=0 report
+    report=$(mktemp "${TMPDIR:-/tmp}/eazy-validacao.XXXXXX") || return 1
+    selecionados=$(whiptail --title "🔎 Validação do eazy" --checklist \
+        "Escolha o que verificar:" 16 82 6 \
+        "playlists" "Playlists .M3U/.M3U8/.PLS e referências" ON \
+        "listas" "Filas 1-3, listas temporárias e duplicados" ON \
+        "pesquisas" "Pesquisas salvas e snapshots de resultados" ON \
+        --separate-output 3>&1 1>&2 2>&3) || { rm -f "$report"; return; }
+    [ -n "$selecionados" ] || { rm -f "$report"; return; }
+
+    {
+        printf '\033[1;36m╔══════════════════════════════════════════════════════════════════════════════╗\033[0m\n'
+        printf '\033[1;36m║                 VALIDAÇÃO DE INTEGRIDADE DO EAZY                           ║\033[0m\n'
+        printf '\033[1;36m╚══════════════════════════════════════════════════════════════════════════════╝\033[0m\n\n'
+        printf '\033[0;90mInício: %s\nConfiguração: %s\033[0m\n\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$CONFIG_DIR"
+    } > "$report"
+
+    while IFS= read -r item; do
+        case "$item" in
+            playlists)
+                printf '\033[1;35m▶ PLAYLISTS\033[0m\n' >> "$report"
+                while IFS= read -r alvo; do
+                    [ -f "$alvo" ] || continue
+                    case "${alvo##*.}" in m3u|M3U|m3u8|M3U8|pls|PLS) ;; *) continue ;; esac
+                    printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
+                    while IFS= read -r rel; do
+                        rel="${rel%%$'\r'}"
+                        [ -z "$rel" ] && continue
+                        [[ "$rel" =~ ^[[:space:]]*# ]] && continue
+                        [[ "$rel" =~ ^https?:// ]] && { printf '    \033[1;33m⚠ URL\033[0m %s\n' "$rel" >> "$report"; continue; }
+                        if [[ "$rel" != /* ]]; then rel="$(dirname "$alvo")/$rel"; fi
+                        total=$((total+1))
+                        if [ -e "$rel" ]; then validos=$((validos+1)); printf '    \033[1;32m✓\033[0m %s\n' "$rel" >> "$report"; else invalidos=$((invalidos+1)); printf '    \033[1;31m✗ AUSENTE\033[0m %s\n' "$rel" >> "$report"; fi
+                    done < "$alvo"
+                done < <(find "$PLAYLIST_DIR_PADRAO" "$CONFIG_DIR" -maxdepth 1 -type f \( -iname '*.m3u' -o -iname '*.m3u8' -o -iname '*.pls' \) -print 2>/dev/null | sort -u)
+                printf '\n' >> "$report"
+                ;;
+            listas)
+                printf '\033[1;35m▶ LISTAS TEMPORÁRIAS\033[0m\n' >> "$report"
+                while IFS= read -r alvo; do
+                    [ -f "$alvo" ] || continue
+                    printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
+                    while IFS= read -r rel; do
+                        rel="${rel%%$'\r'}"; [ -z "$rel" ] && continue
+                        total=$((total+1))
+                        if [ -e "$rel" ]; then validos=$((validos+1)); printf '    \033[1;32m✓\033[0m %s\n' "$rel" >> "$report"; else invalidos=$((invalidos+1)); printf '    \033[1;31m✗ AUSENTE\033[0m %s\n' "$rel" >> "$report"; fi
+                    done < "$alvo"
+                done < <(printf '%s\n' "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA"; find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
+                printf '\n' >> "$report"
+                ;;
+            pesquisas)
+                printf '\033[1;35m▶ PESQUISAS SALVAS\033[0m\n' >> "$report"
+                while IFS= read -r alvo; do
+                    [ -f "$alvo" ] || continue
+                    printf '  \033[1;34m%s\033[0m\n' "$alvo" >> "$report"
+                    snapshot="${alvo%.search}.results.tsv"
+                    if [ -f "$snapshot" ]; then
+                        while IFS=$'\t' read -r _ _ _ _ rel; do
+                            [ -z "$rel" ] && continue
+                            total=$((total+1))
+                            if [ -e "$rel" ]; then validos=$((validos+1)); printf '    \033[1;32m✓\033[0m %s\n' "$rel" >> "$report"; else invalidos=$((invalidos+1)); printf '    \033[1;31m✗ AUSENTE\033[0m %s\n' "$rel" >> "$report"; fi
+                        done < "$snapshot"
+                    else
+                        printf '    \033[1;33m⚠ SNAPSHOT AUSENTE\033[0m\n' >> "$report"
+                    fi
+                done < <(find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print 2>/dev/null | sort)
+                printf '\n' >> "$report"
+                ;;
+        esac
+    done <<< "$selecionados"
+    {
+        printf '\033[1;36m──────────────────────────────────────────────────────────────────────────────\033[0m\n'
+        printf '\033[1;37mRESUMO\033[0m\n'
+        printf '  Referências verificadas : %s\n' "$total"
+        printf '  \033[1;32m✓ Existentes             : %s\033[0m\n' "$validos"
+        printf '  \033[1;31m✗ Ausentes               : %s\033[0m\n' "$invalidos"
+        [ "$invalidos" -eq 0 ] && printf '\n\033[1;32mSTATUS: ÍNTEGRO — nenhuma referência ausente encontrada.\033[0m\n' || printf '\n\033[1;31mSTATUS: ATENÇÃO — existem referências ausentes.\033[0m\n'
+        printf '\n\033[0;90mPressione Enter para voltar ou Esc para cancelar.\033[0m\n'
+    } >> "$report"
+    clear
+    cat "$report"
+    local tecla
+    IFS= read -r -n1 -s tecla || true
+    printf '\n'
+    rm -f "$report"
+    [ "$tecla" = $'\e' ] && return 1
+    return 0
+}
+
+menu_manutencao_eazy() {
+    local opcao
+    opcao=$(whiptail --title "🧰 Manutenção do próprio eazy" --menu \
+        "Operações sem sudo:" 14 78 4 \
+        "1" "🧹 Limpeza seletiva de dados" \
+        "2" "🔎 Validar playlists, listas e pesquisas" \
+        "0" "Voltar" 3>&1 1>&2 2>&3) || return
+    case "$opcao" in
+        1) manutencao_dados_eazy ;;
+        2) validar_dados_eazy ;;
+        0|*) return ;;
+    esac
+}
+
 menu_manutencao_direta() {
     local opcao
     opcao=$(whiptail --title "🛠️ Manutenção do eazy" --menu \
@@ -1224,7 +1328,7 @@ menu_manutencao_direta() {
         "2" "🖥️ Manutenção do sistema (sudo quando necessário)" \
         "0" "Voltar" 3>&1 1>&2 2>&3) || return
     case "$opcao" in
-        1) manutencao_dados_eazy ;;
+        1) menu_manutencao_eazy ;;
         2) menu_manutencao ;;
         0|*) return ;;
     esac
@@ -5481,7 +5585,6 @@ menu_acoes_selecao() {
         "8" "📁 Mover para pasta..." \
         "9" "➕ Adicionar à Fila (INSERT)" \
         "M" "🛠️  Manutenção" \
-        "V" "✔️  Validar .M3U" \
         "P" "🔒 Proteção" \
         "C" "🔄 Conversões" \
         "S" "🖥️  Sistema" \
@@ -5521,11 +5624,6 @@ menu_acoes_selecao() {
             ;;
         M)
             menu_manutencao
-            ;;
-        V)
-            # Validar playlist
-            arquivo=$(whiptail --inputbox "Arquivo .M3U:" 10 60 "$PLAYLIST_1" 3>&1 1>&2 2>&3)
-            [ -n "$arquivo" ] && validar_e_limpar_m3u "$arquivo"
             ;;
         C)
             menu_conversoes
