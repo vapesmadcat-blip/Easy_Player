@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-54"
+EAZY_VERSION="3.0-55"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2218,12 +2218,13 @@ selecionar_extensoes() {
     # Conteúdo do arquivo (grep dentro)
     BUSCA_CONTEUDO=""
     local quer_conteudo
-    quer_conteudo=$(whiptail --title "Busca por conteúdo" --radiolist \
-        "Procurar texto DENTRO dos arquivos?\n(grep -i nos arquivos encontrados)" 12 60 2 \
-        "nao" "Não — só filtrar por extensão/tamanho" "ON" \
-        "sim" "Sim — digitar texto a buscar" "OFF" \
+    quer_conteudo=$(whiptail --title "Busca por conteúdo" --menu \
+        "Procurar texto DENTRO dos arquivos?\nEscolha uma opção e pressione Enter." 12 72 2 \
+        "nao" "Não — só filtrar por extensão/tamanho" \
+        "sim" "Sim — digitar uma ou mais palavras-chave" \
         3>&1 1>&2 2>&3)
-    # whiptail devolve o tag entre aspas; sem normalizar, o teste com `sim` falha.
+    # No menu, a opção é confirmada diretamente com Enter; removemos aspas
+    # para manter compatibilidade com versões que as imprimem.
     quer_conteudo=$(printf '%s' "$quer_conteudo" | tr -d '"')
     if [ "$quer_conteudo" = "sim" ]; then
         BUSCA_CONTEUDO=$(whiptail --title "Texto no conteúdo" \
@@ -6588,7 +6589,12 @@ Depois use:
                         TMP=2; registrar_status; continue
                     fi
                 fi
-                EXT_BUSCA=$(selecionar_extensoes)
+                # Não usar EXT_BUSCA=$(selecionar_extensoes): a command substitution
+                # roda a função em subshell e perde BUSCA_CONTEUDO.
+                _ext_busca_tmp="/tmp/eazy_ext_busca_$$"
+                selecionar_extensoes > "$_ext_busca_tmp"
+                EXT_BUSCA=$(cat "$_ext_busca_tmp" 2>/dev/null || true)
+                rm -f "$_ext_busca_tmp"
                 if [ -n "$EXT_BUSCA" ]; then
                     if selecionar_tamanho_busca; then
                         MODO_BUSCA=1; TMP=2; registrar_status
