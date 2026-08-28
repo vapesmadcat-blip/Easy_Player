@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-49"
+EAZY_VERSION="3.0-50"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -4115,8 +4115,7 @@ obter_lista_rapida() {
             eazy_busca_msg ""
             eazy_busca_msg $'\033[1;36m'"$titulo"$'\033[0m'
             eazy_busca_msg $'\033[0;90m'"   varredura única com extensões e padrões de nome"$'\033[0m'
-            eazy_busca_progresso 1 "scan" "..." 0 "em andamento..."
-
+                        eazy_busca_msg $'\033[0;90m'"   pesquisando agora... aguarde"$'\033[0m'
             find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                 -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$tmp_busca" &
             find_pid=$!
@@ -4126,12 +4125,16 @@ obter_lista_rapida() {
                 return 130
             fi
             total_achados=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
-            total_achados=${total_achados:-0}
-            eazy_busca_progresso 100 "fim" "$total_achados" "$total_achados" "ok"
-            eazy_busca_msg ""
-            eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
-            eazy_busca_msg ""
-
+                        total_achados=${total_achados:-0}
+            if [ -n "${BUSCA_CONTEUDO:-}" ]; then
+                eazy_busca_msg $'\033[1;32m'"✓ Arquivos encontrados — $total_achados"$'\033[0m'
+                eazy_busca_msg $'\033[0;36m'"   iniciando agora a pesquisa dentro do conteúdo..."$'\033[0m'
+            else
+                eazy_busca_progresso 100 "fim" "$total_achados" "$total_achados" "concluído"
+                eazy_busca_msg ""
+                eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
+                eazy_busca_msg ""
+            fi
             # Filtro por conteúdo (grep) com barra própria
             if [ -n "${BUSCA_CONTEUDO:-}" ]; then
                 local tmp_filtro="/tmp/eazy_busca_grep_$$"
@@ -4140,6 +4143,7 @@ obter_lista_rapida() {
                 n_total=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
                 n_total=${n_total:-1}
                 [ "$n_total" -lt 1 ] && n_total=1
+                eazy_busca_progresso 0 "grep" 0 "$n_total" "iniciando..."
                 while IFS=$'\t' read -r bytes mtime tipo nome caminho; do
                     gi=$((gi + 1))
                     [ -z "$caminho" ] && continue
