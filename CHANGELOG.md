@@ -1,3 +1,8 @@
+## 3.0-36 — Cancelamento por Esc
+
+- Esc cancela buscas, leituras, previews, escolhas de arquivos, conversões, diagnósticos e diálogos interrompíveis.
+- O terminal é restaurado ao retornar ao navegador.
+
 ## 3.0-35 — Pesquisas salvas com resultado congelado
 
 - Pesquisas salvas agora preservam o resultado encontrado.

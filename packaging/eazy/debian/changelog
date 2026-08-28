@@ -1,3 +1,9 @@
+eazy (3.0-36) unstable; urgency=medium
+
+  * Add Esc cancellation for searches, readers, previews and dialogs.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 16:30:00 +0000
+
 eazy (3.0-35) unstable; urgency=medium
 
   * Save frozen search results and add explicit remake control.

@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-35"
+EAZY_VERSION="3.0-36"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -4041,19 +4041,22 @@ eh_arquivo_texto() {
 }
 
 mostrar_texto() {
-    local f="$1"
+    local f="$1" rc
     [ ! -f "$f" ] && return 1
     clear
-    echo -e "\033[1;36m═══ $(basename "$f") ═══\033[0m  (somente leitura — q para sair)\n"
-    if command -v less &>/dev/null; then
-        less -R -FX -- "$f"
-    elif command -v more &>/dev/null; then
-        more -- "$f"
-    else
-        cat -- "$f"
-        echo ""
-        read -p "Pressione Enter para voltar..."
+    if command -v whiptail &>/dev/null; then
+        whiptail --title "$(basename "$f") — leitura" --textbox "$f" 28 100 --scrolltext
+        rc=$?
+        restaurar_terminal
+        return "$rc"
     fi
+    cat -- "$f"
+    printf '\nPressione Enter para voltar ou Esc para cancelar... '
+    local tecla
+    IFS= read -r -n1 -s tecla || true
+    printf '\n'
+    [ "$tecla" = $'\e' ] && return 1
+    return 0
 }
 
 # Preview do fzf (caminho = último campo da linha TAB)
@@ -5084,10 +5087,22 @@ mostrar_imagem_com_pausa() {
     if command -v chafa >/dev/null 2>&1; then
         chafa --format symbols --size "${COLUMNS:-100}x${LINES:-30}" -- "$img" 2>/dev/null || true
         printf '\nImagem: %s\n' "$img"
-        read -r -p 'Pressione Enter para voltar ao navegador... ' _
+        printf '\nPressione Enter para voltar ou Esc para cancelar... '
+        local tecla
+        IFS= read -r -n1 -s tecla || true
+        printf '\n'
+        [ "$tecla" = $'\e' ] && return 1
     elif command -v xdg-open >/dev/null 2>&1; then
+        local pid tecla
         xdg-open "$img" >/dev/null 2>&1 &
-        read -r -p 'Imagem aberta. Pressione Enter para voltar ao navegador... ' _
+        pid=$!
+        printf 'Imagem aberta. Pressione Enter para voltar ou Esc para fechar... '
+        IFS= read -r -n1 -s tecla || true
+        printf '\n'
+        if [ "$tecla" = $'\e' ]; then
+            kill "$pid" 2>/dev/null || true
+            return 1
+        fi
     else
         whiptail --title 'Imagem' --msgbox "Nenhum visualizador disponível. Instale chafa ou use xdg-open." 9 70
     fi
