@@ -1,3 +1,8 @@
+## 3.0-28 — Tab seleciona e avança
+
+- Tab marca somente o item atual e avança para o próximo item.
+- Espaço continua marcando no lugar.
+
 ## 3.0-27 — Seleção de diretórios e bytes
 
 - Espaço e Tab selecionam arquivos e diretórios sem limpar a seleção.

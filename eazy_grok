@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-27"
+EAZY_VERSION="3.0-28"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -5766,8 +5766,8 @@ while true; do
         # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
         FZF_NORMAL_SELECT_BINDS=(
             --bind='space:toggle+transform-header(eazy_status_header {+})'
-            --bind='tab:toggle+transform-header(eazy_status_header {+})'
-            --bind='shift-tab:toggle+transform-header(eazy_status_header {+})'
+            --bind='tab:toggle+down+transform-header(eazy_status_header {+})'
+            --bind='shift-tab:toggle+up+transform-header(eazy_status_header {+})'
         )
     fi
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
