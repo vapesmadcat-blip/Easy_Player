@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-43"
+EAZY_VERSION="3.0-44"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -48,6 +48,7 @@ CUSTOM_LISTS_DIR="$CONFIG_DIR"
 FILA_ATUAL=1   # 1, 2 ou 3
 SESSION_FILE="$CONFIG_DIR/session"
 POSITIONS_FILE="$CONFIG_DIR/dir_positions"
+FILTER_POSITIONS_FILE="$CONFIG_DIR/filter_positions"
 MARK_DELETE_FILE="$CONFIG_DIR/marked_delete"
 MPV_SCRIPT_DIR="$CONFIG_DIR/mpv_scripts"
 SCRIPTS_DIR="${CONFIG_DIR}/scripts"
@@ -1798,6 +1799,30 @@ carregar_posicao_dir() {
     pos=$(echo "${pos:-1}" | tr -cd '0-9'); pos=${pos:-1}
     TMP="$pos"
     [ -n "$item" ] && ULTIMO_ARQUIVO="$item"
+}
+
+salvar_filtro_dir() {
+    local dir="$1" filtro="${2:-}"
+    [ -n "$dir" ] || return
+    dir=$(readlink -f -- "$dir" 2>/dev/null || echo "$dir")
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    touch "$FILTER_POSITIONS_FILE"
+    awk -F '\t' -v d="$dir" '$1 != d' "$FILTER_POSITIONS_FILE" 2>/dev/null > "${FILTER_POSITIONS_FILE}.tmp" || true
+    printf '%s\t%s\n' "$dir" "$filtro" >> "${FILTER_POSITIONS_FILE}.tmp"
+    tail -n 500 "${FILTER_POSITIONS_FILE}.tmp" > "$FILTER_POSITIONS_FILE"
+    rm -f "${FILTER_POSITIONS_FILE}.tmp"
+}
+
+carregar_filtro_dir() {
+    local dir="$1" linha
+    [ -n "$dir" ] || return
+    dir=$(readlink -f -- "$dir" 2>/dev/null || echo "$dir")
+    linha=$(awk -F '\t' -v d="$dir" '$1 == d {line=$0} END {print line}' "$FILTER_POSITIONS_FILE" 2>/dev/null)
+    if [ -n "$linha" ]; then
+        FZF_QUERY="${linha#*$'\t'}"
+    else
+        FZF_QUERY=""
+    fi
 }
 
 # Salva sessão completa (ao sair ou periodicamente)
@@ -6331,11 +6356,11 @@ Depois use:
                 posicao_origem="$ARQUIVO_PLAYLIST_ABERTO"
             fi
             salvar_posicao_dir "$posicao_origem" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+            salvar_filtro_dir "$dir_atual" "${FZF_QUERY:-}"
             DIRETORIO_ANTERIOR="$dir_atual"
             MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
             rm -f "$DUP_MANUAL_FILE"
-            # Troca de diretório: filtro limpo, seleção preservada, cursor em `..`.
-            FZF_QUERY=""
+            # Retorno ao diretório anterior: filtro e cursor serão restaurados.
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
             if ! cd -- "$destino_anterior"; then
@@ -6345,6 +6370,7 @@ Depois use:
             eazy_beep
             # Retorno ao diretório anterior: restaura a posição salva nele.
             carregar_posicao_dir "$(pwd -P)"
+            carregar_filtro_dir "$(pwd -P)"
             ALVO="$(pwd -P)"
             ULTIMO_DIR="$(pwd -P)"
             registrar_status
@@ -7179,13 +7205,12 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             salvar_sessao
             continue
         fi
-        # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)
-        # Mudança de pasta: limpa o filtro, mantém a seleção e posiciona em `..`.
-        FZF_QUERY=""
+        # Salva posição e filtro desta pasta; sobe; restaura ambos no pai.
         rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true
         local_dir_antes=$(pwd)
         local_nome=$(basename -- "$local_dir_antes")
         salvar_posicao_dir "$local_dir_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
+        salvar_filtro_dir "$local_dir_antes" "${FZF_QUERY:-}"
         DIRETORIO_ANTERIOR="$local_dir_antes"
         if ! cd ..; then
             eazy_beep
@@ -7193,7 +7218,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         eazy_beep
         carregar_posicao_dir "$(pwd)"
-        # Retorno por `..`: restaura a posição salva no diretório pai.
+        carregar_filtro_dir "$(pwd)"
+        # Retorno por `..`: restaura posição e filtro salvos no diretório pai.
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status
@@ -7202,12 +7228,12 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
     fi
 
     if [ -d "$primeiro_caminho" ]; then
-        # Salva posição atual; entra; restaura posição salva da pasta destino
-        # Mudança de pasta: limpa o filtro, mantém a seleção e posiciona em `..`.
-        FZF_QUERY=""
+        # Salva posição e filtro atuais; ao avançar, o filtro da nova pasta começa vazio.
         rm -f "$DUP_MANUAL_FILE" 2>/dev/null || true
         dir_atual_antes="$(pwd -P)"
         salvar_posicao_dir "$dir_atual_antes" "${TMP:-1}" "${ULTIMO_ARQUIVO:-$primeiro_caminho}"
+        salvar_filtro_dir "$dir_atual_antes" "${FZF_QUERY:-}"
+        FZF_QUERY=""
         DIRETORIO_ANTERIOR="$dir_atual_antes"
         if ! cd "$primeiro_caminho"; then
             eazy_beep
