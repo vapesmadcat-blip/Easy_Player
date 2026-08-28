@@ -1,3 +1,9 @@
+eazy (3.0-39) unstable; urgency=medium
+
+  * Add selective cleanup manager for eazy application data.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 19:30:00 +0000
+
 eazy (3.0-38) unstable; urgency=medium
 
   * Fix live ESC detection during find and grep search operations.

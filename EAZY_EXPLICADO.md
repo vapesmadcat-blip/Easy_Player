@@ -138,7 +138,15 @@ O `Esc` encerra o modo de pesquisa e retorna ao navegador normal. Durante a busc
 
 O sistema utiliza cache temporário durante a pesquisa para evitar trabalho repetido na mesma sessão. Esse cache fica em `/tmp` e não é tratado como dado permanente do usuário. O snapshot permanente de cada pesquisa fica junto do arquivo `.search`, com extensão `.results.tsv`, dentro de `~/.config/eazy/saved_searches/`.
 
-## 11. Pesquisas salvas
+## 11. Manutenção dos dados do próprio eazy
+
+No menu `Ctrl-K` existe a opção `Limpar dados do próprio eazy`. Ela não apaga dados automaticamente: abre um checklist para o usuário escolher as categorias. O eazy mostra uma estimativa de espaço, pede confirmação explícita e só então executa a limpeza.
+
+As categorias são playlists salvas em `~/Playlists`; filas 1, 2 e 3, listas temporárias nomeadas e a lista temporária de duplicados; pesquisas salvas e seus snapshots; notas rápidas; histórico de reprodução; fila e credenciais de downloads; cache temporário de pesquisas e previews; estado transitório, incluindo sessão, posições, destinos de copiar/mover e marcações; além de backups e scripts auxiliares do aplicativo. Diretórios de configuração necessários são recriados após a limpeza quando aplicável.
+
+A limpeza respeita o `DRY-RUN`. Com esse modo ligado, o eazy calcula e informa o que seria removido, mas não executa `rm` nem altera os dados. O arquivo principal de configuração não é apagado por essa opção, evitando que preferências do usuário sejam perdidas sem uma escolha específica.
+
+## 12. Pesquisas salvas
 
 Uma pesquisa configurada pode ser salva com um nome. O eazy armazena extensão, tamanho mínimo, tamanho máximo, conteúdo pesquisado e demais parâmetros necessários para reabrir o mesmo filtro posteriormente. Além dos parâmetros, ele grava um **snapshot do resultado encontrado** no momento do salvamento.
 

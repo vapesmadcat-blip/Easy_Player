@@ -1,3 +1,8 @@
+## 3.0-39 — Manutenção seletiva dos dados do eazy
+
+- Incluído checklist para apagar playlists, filas, pesquisas, notas, histórico, downloads, cache, estado e backups.
+- Confirmação explícita e proteção DRY-RUN.
+
 ## 3.0-38 — Correção do Esc durante a busca
 
 - Corrigida a detecção do byte ESC real.

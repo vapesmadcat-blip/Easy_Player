@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-38"
+EAZY_VERSION="3.0-39"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1148,6 +1148,74 @@ limpeza_auto() {
     read -r -p "Enter para continuar..."
 }
 
+manutencao_dados_eazy() {
+    local selecionados confirmacao item total_bytes=0
+    local -a itens=()
+    local -a caminhos=()
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+
+    selecionados=$(whiptail --title "🧹 Dados do eazy" --checklist \
+        "Escolha o que deseja apagar. Nada será removido sem confirmação:" 20 86 10 \
+        "playlists" "Playlists salvas em ~/Playlists" OFF \
+        "listas" "Filas 1-3, listas personalizadas e listas de duplicados" OFF \
+        "pesquisas" "Pesquisas salvas e snapshots de resultados" OFF \
+        "notas" "Todas as notas rápidas" OFF \
+        "historico" "Histórico de arquivos reproduzidos" OFF \
+        "downloads" "Fila e credenciais de downloads" OFF \
+        "cache" "Cache temporário de pesquisas e previews" OFF \
+        "estado" "Sessão, posições, destinos e marcações temporárias" OFF \
+        "backups" "Backups e scripts auxiliares criados pelo eazy" OFF \
+        --separate-output 3>&1 1>&2 2>&3) || return
+    [ -n "$selecionados" ] || return
+
+    while IFS= read -r item; do
+        [ -z "$item" ] && continue
+        itens+=("$item")
+        case "$item" in
+            playlists) caminhos+=("$PLAYLIST_DIR_PADRAO") ;;
+            listas) caminhos+=("$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$CONFIG_DIR"/temp_playlist_custom_*) ;;
+            pesquisas) caminhos+=("$SAVED_SEARCHES_DIR") ;;
+            notas) caminhos+=("$NOTES_DIR") ;;
+            historico) caminhos+=("$HISTORY_FILE") ;;
+            downloads) caminhos+=("$DOWNLOAD_QUEUE" "$DOWNLOAD_PASSWORDS") ;;
+            cache) caminhos+=("$BUSCA_CACHE_DIR") ;;
+            estado) caminhos+=("$SESSION_FILE" "$POSITIONS_FILE" "$LAST_COPY_DEST_FILE" "$LAST_MOVE_DEST_FILE" "$MARK_DELETE_FILE") ;;
+            backups) caminhos+=("$BACKUPS_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR") ;;
+        esac
+    done <<< "$selecionados"
+
+    local caminho bytes
+    for caminho in "${caminhos[@]}"; do
+        [ -e "$caminho" ] || continue
+        bytes=$(du -sb -- "$caminho" 2>/dev/null | awk '{print $1}')
+        total_bytes=$((total_bytes + ${bytes:-0}))
+    done
+    if ! whiptail --title "⚠️ Confirmar limpeza" --yesno \
+        "Categorias selecionadas: ${#itens[@]}\n\nEspaço estimado: $(formatar_bytes_label "$total_bytes")\n\nA operação não pode ser desfeita. Continuar?" 12 76; then
+        return
+    fi
+
+    if eazy_dry_run_bloquear "limpeza dos dados próprios do eazy"; then
+        whiptail --title "DRY-RUN" --msgbox "Simulação concluída. Nada foi apagado.\n\nEspaço que seria liberado: $(formatar_bytes_label "$total_bytes")" 10 76
+        return
+    fi
+
+    for item in "${itens[@]}"; do
+        case "$item" in
+            playlists) find "$PLAYLIST_DIR_PADRAO" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true ;;
+            listas) rm -f -- "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$CONFIG_DIR"/temp_playlist_custom_* 2>/dev/null || true ;;
+            pesquisas) rm -rf -- "$SAVED_SEARCHES_DIR" 2>/dev/null || true; mkdir -p "$SAVED_SEARCHES_DIR" ;;
+            notas) rm -rf -- "$NOTES_DIR" 2>/dev/null || true; mkdir -p "$NOTES_DIR" ;;
+            historico) rm -f -- "$HISTORY_FILE" ;;
+            downloads) rm -f -- "$DOWNLOAD_QUEUE" "$DOWNLOAD_PASSWORDS" ;;
+            cache) rm -rf -- "$BUSCA_CACHE_DIR" 2>/dev/null || true; mkdir -p "$BUSCA_CACHE_DIR" ;;
+            estado) rm -f -- "$SESSION_FILE" "$POSITIONS_FILE" "$LAST_COPY_DEST_FILE" "$LAST_MOVE_DEST_FILE" "$MARK_DELETE_FILE" ;;
+            backups) rm -rf -- "$BACKUPS_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" 2>/dev/null || true; mkdir -p "$BACKUPS_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" ;;
+        esac
+    done
+    whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
+}
+
 menu_manutencao() {
     while true; do
         local opcao dry_status="DESLIGADO"
@@ -1164,6 +1232,7 @@ menu_manutencao() {
             "7" "🔍 Overview completo" \
             "8" "🖥️  Menu sistema (CPU/RAM/logs)" \
             "9" "🔄 Alternar DRY RUN ($dry_status)" \
+            "10" "🧹 Limpar dados do próprio eazy" \
             "0" "Voltar" \
             3>&1 1>&2 2>&3) || return
 
@@ -1177,6 +1246,7 @@ menu_manutencao() {
             7) mostrar_overview_sistema_completo ;;
             8) menu_manutencao_sistema ;;
             9) toggle_dry_run ;;
+            10) manutencao_dados_eazy ;;
             0) return ;;
             *) return ;;
         esac
