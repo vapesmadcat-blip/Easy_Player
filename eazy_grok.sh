@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-44"
+EAZY_VERSION="3.0-45"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -6368,9 +6368,9 @@ Depois use:
                 continue
             fi
             eazy_beep
-            # Retorno ao diretório anterior: restaura a posição salva nele.
-            carregar_posicao_dir "$(pwd -P)"
+            # Retorno ao diretório anterior: primeiro restaura o filtro, depois a posição.
             carregar_filtro_dir "$(pwd -P)"
+            carregar_posicao_dir "$(pwd -P)"
             ALVO="$(pwd -P)"
             ULTIMO_DIR="$(pwd -P)"
             registrar_status
@@ -7217,9 +7217,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             continue
         fi
         eazy_beep
-        carregar_posicao_dir "$(pwd)"
         carregar_filtro_dir "$(pwd)"
-        # Retorno por `..`: restaura posição e filtro salvos no diretório pai.
+        carregar_posicao_dir "$(pwd)"
+        # Retorno por `..`: restaura primeiro o filtro e depois a posição no diretório pai.
         ALVO="$(pwd)"
         ULTIMO_DIR="$(pwd)"
         registrar_status

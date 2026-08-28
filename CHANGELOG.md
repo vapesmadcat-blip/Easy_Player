@@ -1,21 +1,26 @@
-## 3.0-44 — Persistência do filtro ao retornar
+## 3.0-45 — Restauração correta do cursor com filtro
+
+- No retorno ao diretório anterior, o filtro é carregado antes da posição do cursor.
+- A posição passa a ser recalculada sobre a lista filtrada visível.
+
+## 3.0-45 — Persistência do filtro ao retornar
 
 - O filtro é salvo por diretório junto com a posição do cursor.
 - Ao retornar por Ctrl-Backspace ou `..`, filtro e cursor são restaurados.
 - Ao avançar para um novo diretório, o filtro continua sendo zerado.
 
-## 3.0-44 — Pergunta de correção no terminal
+## 3.0-45 — Pergunta de correção no terminal
 
 - A validação permanece na tela escura, sem caixa de diálogo para referências ausentes.
 - A pergunta `CORRIGIR? (S/N)` exige resposta explícita, sem valor padrão.
 
-## 3.0-44 — Correção de referências ausentes
+## 3.0-45 — Correção de referências ausentes
 
 - A validação agora pergunta se o usuário deseja corrigir referências ausentes.
 - A correção remove somente entradas quebradas das estruturas selecionadas.
 - Nenhum arquivo de mídia é apagado.
 
-## 3.0-44 — Validação de integridade
+## 3.0-45 — Validação de integridade
 
 - Removida a opção antiga Validar .M3U do menu de ações.
 - Adicionada validação detalhada de playlists, listas temporárias e pesquisas no modo de manutenção.
