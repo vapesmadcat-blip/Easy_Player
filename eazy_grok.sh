@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-29"
+EAZY_VERSION="3.0-30"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1469,7 +1469,8 @@ ALVO=""
 ULTIMO_ARQUIVO=""
 ULTIMO_DIR=""
 DIRETORIO_ANTERIOR=""
-
+DIR_LISTA_ORIGEM=""
+ARQUIVO_LISTA_ORIGEM=""
 # --- Persistência: posição por diretório ---
 salvar_posicao_dir() {
     local dir="$1" pos="$2" item="${3:-}"
@@ -6599,6 +6600,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         total_escolha_playlist=$(printf '%s' "$total_escolha_playlist" | tr -cd '0-9'); total_escolha_playlist=${total_escolha_playlist:-0}
         if [ "$total_escolha_playlist" -eq 1 ] && [ -d "$primeiro_caminho" ]; then
             salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "$primeiro_caminho"
+            ARQUIVO_LISTA_ORIGEM="$ARQUIVO_PLAYLIST_ABERTO"
+            DIR_LISTA_ORIGEM="$(readlink -f -- "$primeiro_caminho" 2>/dev/null || echo "$primeiro_caminho")"
             if cd -- "$primeiro_caminho"; then
                 MODO_PLAYLIST=0
                 ARQUIVO_PLAYLIST_ABERTO=""
@@ -6746,6 +6749,19 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
     fi
 
     if [[ "$primeiro_caminho" =~ \.\.$ ]]; then
+        if [ -n "${DIR_LISTA_ORIGEM:-}" ] && [ "$(readlink -f -- "$(pwd -P)" 2>/dev/null || pwd -P)" = "$DIR_LISTA_ORIGEM" ] && [ -f "${ARQUIVO_LISTA_ORIGEM:-}" ]; then
+            MODO_PLAYLIST=1
+            ARQUIVO_PLAYLIST_ABERTO="$ARQUIVO_LISTA_ORIGEM"
+            DIR_LISTA_ORIGEM=""
+            ARQUIVO_LISTA_ORIGEM=""
+            FZF_QUERY=""
+            TMP=1; ULTIMO_ARQUIVO=""
+            carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
+            ALVO="$(pwd -P)"; ULTIMO_DIR="$(pwd -P)"
+            registrar_status
+            salvar_sessao
+            continue
+        fi
         # Salva posição desta pasta; sobe; restaura posição do pai (fica no dir de onde saiu)
         # Mudança de pasta: limpa o filtro, mantém a seleção e posiciona em `..`.
         FZF_QUERY=""

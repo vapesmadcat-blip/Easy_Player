@@ -1,3 +1,8 @@
+## 3.0-30 — Retorno de diretórios em listas
+
+- Diretórios nas listas temporárias aparecem como pastas.
+- Entrar em uma pasta e pressionar `..` retorna à lista de origem.
+
 ## 3.0-29 — Diretórios nas listas temporárias
 
 - Diretórios nas filas e listas personalizadas são reconhecidos como pastas, com tamanho recursivo e navegação.
