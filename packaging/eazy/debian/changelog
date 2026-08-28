@@ -1,3 +1,10 @@
+eazy (3.0-20) unstable; urgency=medium
+
+  * Restore saved cursor position when returning to the previous directory.
+  * Keep parent navigation positioned at the top `..` entry.
+
+ -- vapesmadcat-blip <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 06:30:00 +0000
+
 eazy (3.0-19) unstable; urgency=medium
 
   * Clear filter and reset cursor to parent entry on directory changes while preserving selection.

@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-19"
+EAZY_VERSION="3.0-20"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -5852,8 +5852,8 @@ Depois use:
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
             cd -- "$destino_anterior" || continue
-            ULTIMO_ARQUIVO=""
-            TMP=1
+            # Retorno ao diretório anterior: restaura a posição salva nele.
+            carregar_posicao_dir "$(pwd -P)"
             ALVO="$(pwd -P)"
             ULTIMO_DIR="$(pwd -P)"
             registrar_status

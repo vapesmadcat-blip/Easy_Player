@@ -1,3 +1,8 @@
+## 3.0-20 — Posição do cursor na navegação
+
+- Ctrl-Backspace restaura a posição salva do diretório anterior.
+- Subir por `..` posiciona o cursor no topo, em `..`.
+
 ## 3.0-19 — Navegação e destinos persistentes
 
 - Ao mudar de diretório, o filtro é limpo, o cursor vai para `..` e a seleção permanece.
