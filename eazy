@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-32"
+EAZY_VERSION="3.0-33"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1274,9 +1274,9 @@ if [ "$1" = "--install" ]; then
 
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapt\033[0m"
-        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget axel aria2 unzip p7zip-full rar yt-dlp
-        echo -e "\033[0;90mOpcionais: sudo apt install -y chafa ffmpeg vlc\033[0m"
-        echo -e "\033[0;90mNota: pacote 'rar' (non-free) — RAR oficial; não usamos unrar.\033[0m"
+        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
+        instalar_pkgs apt inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils
+        echo -e "\033[0;90mRAR oficial é opcional e depende do repositório non-free; a leitura de listas .rar continua disponível.\033[0m"
     elif command -v pacman &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mpacman\033[0m"
         # Arch: rar costuma estar no AUR; 7z como fallback na extração
@@ -1300,16 +1300,29 @@ if [ "$1" = "--install" ]; then
     DESTINO="/usr/local/bin/eazy"
     SCRIPT_DIR="$(dirname -- "$SCRIPT_ATUAL")"
     DESKTOP_SRC="$SCRIPT_DIR/eazy.desktop"
+    [ -f "$DESKTOP_SRC" ] || DESKTOP_SRC="$(dirname -- "$SCRIPT_ATUAL")/../share/applications/eazy.desktop"
+    EDITOR_SRC="$SCRIPT_DIR/eazy-notes-editor"
+    [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+    # Estrutura completa de dados do usuário; o cache de busca continua temporário.
+    mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$HOME/Documentos/Easy-Notes"
+    touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE"
 
     echo -e "\033[1;34mInstalando comando global em $DESTINO...\033[0m"
-    if sudo cp "$SCRIPT_ATUAL" "$DESTINO" && sudo chmod +x "$DESTINO"; then
+    if sudo install -Dm755 "$SCRIPT_ATUAL" "$DESTINO"; then
         echo -e "\033[1;32m✓\033[0m Comando: \033[1;37meazy\033[0m"
     else
         echo -e "\033[1;31m✗\033[0m Falha ao copiar para $DESTINO" >&2
-        exit 1
+                exit 1
     fi
-
+    if [ -f "$EDITOR_SRC" ]; then
+        if sudo install -Dm755 "$EDITOR_SRC" /usr/lib/eazy/eazy-notes-editor; then
+            echo -e "\033[1;32m✓\033[0m Editor de notas: /usr/lib/eazy/eazy-notes-editor"
+        else
+            echo -e "\033[1;31m✗\033[0m Falha ao instalar o editor de notas" >&2
+            exit 1
+        fi
+    fi
     if [ -f "$DESKTOP_SRC" ]; then
         mkdir -p "$DESKTOP_DIR"
         cp "$DESKTOP_SRC" "$DESKTOP_DIR/eazy.desktop"

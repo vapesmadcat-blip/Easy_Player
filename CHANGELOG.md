@@ -1,3 +1,9 @@
+## 3.0-33 — Instalador completo e documentação
+
+- O `--install` instala as ferramentas necessárias para reprodução, PDF, conversão, preview e diagnóstico.
+- O instalador cria toda a estrutura inicial de configuração, filas, notas, playlists e exportação.
+- Incluído `EAZY_EXPLICADO.md`, com funcionamento e vantagens do projeto.
+
 ## 3.0-32 — Identificação visual de diretórios
 
 - Diretórios nas listas temporárias usam ícone e cor de pasta, mantendo tamanho e navegação.

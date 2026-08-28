@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-32/eazy_3.0-32_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-32/eazy_3.0-32_all.deb.sha256
-sha256sum -c eazy_3.0-32_all.deb.sha256
-sudo apt install ./eazy_3.0-32_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-33/eazy_3.0-33_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-33/eazy_3.0-33_all.deb.sha256
+sha256sum -c eazy_3.0-33_all.deb.sha256
+sudo apt install ./eazy_3.0-33_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-32_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-33_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
@@ -43,10 +43,14 @@ sudo apt install ./packaging/eazy/dist/eazy_3.0-32_all.deb
 ```bash
 sudo apt update && sudo apt install -y \
   fzf mpv mplayer gawk sed findutils whiptail wget \
-  axel aria2 unzip p7zip-full rar yt-dlp lm-sensors poppler-utils img2pdf
+  axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils \
+  inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager \
+  upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils file curl
 ```
 
-Opcionais: `chafa`, `ffmpeg`, `vlc`, `smartmontools`, `pciutils`, `lshw`, `inxi`, `dmidecode`, `usbutils`, `mesa-utils` e `vulkan-tools`.
+O `--install` também cria `~/.config/eazy/`, `notas/`, `saved_searches/`, `mpv_scripts/`, `scripts/`, `backups/`, `~/Playlists/` e `~/Documentos/Easy-Notes/`, além das três filas, histórico e lista de duplicados. O cache de busca permanece temporário em `/tmp`.
+
+O pacote `rar` oficial é opcional e depende do repositório `non-free`; não é necessário para instalar o eazy.
 
 ## Uso
 
@@ -117,3 +121,7 @@ Os dados de usuário ficam em `~/.config/eazy/`, incluindo configuração, sess�
 ## Licença
 
 Uso livre. Sem garantias.
+
+## Funcionamento e vantagens
+
+A explicação completa dos recursos, do funcionamento, da persistência, das filas, das notas, do modo DRY-RUN e das vantagens do projeto está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md). Após a instalação Debian, o arquivo também fica disponível em `/usr/share/doc/eazy/EAZY_EXPLICADO.md`.

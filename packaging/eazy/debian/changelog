@@ -1,3 +1,10 @@
+eazy (3.0-33) unstable; urgency=medium
+
+  * Complete installer dependencies and initialize all user directories.
+  * Add the explanatory project guide.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 13:30:00 +0000
+
 eazy (3.0-32) unstable; urgency=medium
 
   * Make directories visibly distinct from media files in temporary lists.
