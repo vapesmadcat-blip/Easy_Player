@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-22"
+EAZY_VERSION="3.0-23"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -43,6 +43,8 @@ PLAYLIST_1="$CONFIG_DIR/temp_playlist_1"
 PLAYLIST_2="$CONFIG_DIR/temp_playlist_2"
 PLAYLIST_3="$CONFIG_DIR/temp_playlist_3"
 DUP_LISTA="$CONFIG_DIR/temp_duplicados"  # lista tmp de duplicados (persiste até limpar)
+SAVED_SEARCHES_DIR="$CONFIG_DIR/saved_searches"
+CUSTOM_LISTS_DIR="$CONFIG_DIR"
 FILA_ATUAL=1   # 1, 2 ou 3
 SESSION_FILE="$CONFIG_DIR/session"
 POSITIONS_FILE="$CONFIG_DIR/dir_positions"
@@ -1423,6 +1425,43 @@ contar_fila() {
 
 MODO_PLAYLIST=0
 MODO_BUSCA=0
+
+salvar_pesquisa_atual() {
+    [ "${MODO_BUSCA:-0}" -eq 1 ] || { whiptail --title "Pesquisa" --msgbox "Ative uma pesquisa antes de salvá-la." 8 50; return; }
+    mkdir -p "$SAVED_SEARCHES_DIR" 2>/dev/null || true
+    local nome arquivo
+    nome=$(whiptail --title "Salvar pesquisa" --inputbox "Nome da pesquisa:" 9 60 "minha-pesquisa" 3>&1 1>&2 2>&3) || return
+    [ -n "$nome" ] || return
+    nome=$(printf '%s' "$nome" | tr '/\\:*?"<>|' '_' | tr -s ' ' '_' | cut -c1-80)
+    arquivo="$SAVED_SEARCHES_DIR/$nome.search"
+    {
+        printf 'EXT_BUSCA=%q\n' "${EXT_BUSCA:-}"
+        printf 'BUSCA_TAM_MIN=%q\n' "${BUSCA_TAM_MIN:-}"
+        printf 'BUSCA_TAM_MAX=%q\n' "${BUSCA_TAM_MAX:-}"
+        printf 'BUSCA_TAM_LABEL=%q\n' "${BUSCA_TAM_LABEL:-}"
+        printf 'BUSCA_CONTEUDO=%q\n' "${BUSCA_CONTEUDO:-}"
+        printf 'FZF_QUERY=%q\n' "${FZF_QUERY:-}"
+    } > "$arquivo"
+    whiptail --title "Pesquisa salva" --msgbox "Pesquisa salva como:\n$nome" 8 55
+}
+carregar_pesquisa_salva() {
+    [ -d "$SAVED_SEARCHES_DIR" ] || return 1
+    local opcoes=() arq escolha nome
+    while IFS= read -r arq; do
+        [ -f "$arq" ] || continue
+        nome=$(basename "$arq" .search)
+        opcoes+=("$nome" "Pesquisa salva")
+    done < <(find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print 2>/dev/null | sort)
+    [ "${#opcoes[@]}" -gt 0 ] || return 1
+    escolha=$(whiptail --title "Pesquisas salvas" --menu "Escolha uma pesquisa:" 18 70 8 "${opcoes[@]}" 3>&1 1>&2 2>&3) || return 1
+    [ -n "$escolha" ] || return 1
+    arq="$SAVED_SEARCHES_DIR/$escolha.search"
+    # Arquivos são gerados pelo próprio eazy; carregam apenas variáveis de busca.
+    # shellcheck disable=SC1090
+    source "$arq" 2>/dev/null || return 1
+    MODO_BUSCA=1
+    return 0
+}
 MODO_DUP=0
 MODO_DOWNLOAD=0
 ARQUIVO_PLAYLIST_ABERTO=""
@@ -6056,6 +6095,12 @@ Depois use:
                 BUSCA_CONTEUDO=""
                 TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
             else
+                if [ -d "$SAVED_SEARCHES_DIR" ] && find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print -quit 2>/dev/null | grep -q .; then
+                    escolha_busca=$(whiptail --title "Pesquisa" --menu "Escolha uma opção:" 12 60 2 "N" "Nova pesquisa" "S" "Abrir pesquisa salva" 3>&1 1>&2 2>&3) || continue
+                    if [ "$escolha_busca" = "S" ] && carregar_pesquisa_salva; then
+                        TMP=2; registrar_status; continue
+                    fi
+                fi
                 EXT_BUSCA=$(selecionar_extensoes)
                 if [ -n "$EXT_BUSCA" ]; then
                     if selecionar_tamanho_busca; then
@@ -6115,7 +6160,11 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         continue
     elif [ "$tecla" = "ctrl-s" ]; then
-        salvar_playlist
+        if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+            salvar_pesquisa_atual
+        else
+            salvar_playlist
+        fi
         continue
     elif [ "$tecla" = "insert" ]; then
         itens_para_fila=$(printf '%s\n' "$escolha" | awk -F '\t' 'NF {print $NF}')
@@ -6124,17 +6173,28 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 --msgbox "Nenhum arquivo selecionado.\nUse TAB ou ESPAÇO para marcar." 8 50
             continue
         fi
-        # Pergunta em qual das 3 filas colocar
+        # Pergunta em qual fila colocar ou cria uma lista temporária nova.
         n1=$(contar_fila 1); n2=$(contar_fila 2); n3=$(contar_fila 3)
-        dest_fila=""; dest_file=""
+        dest_fila=""; dest_file=""; dest_label=""
         dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
-            "Para qual fila enviar os itens?\n(Espaço marca, Enter confirma)" 14 55 3 \
+            "Para qual lista enviar os itens?\n(Espaço marca, Enter confirma)" 16 65 4 \
             "1" "Fila 1  ($n1 itens)" $( [ "$FILA_ATUAL" = "1" ] && echo ON || echo OFF ) \
             "2" "Fila 2  ($n2 itens)" $( [ "$FILA_ATUAL" = "2" ] && echo ON || echo OFF ) \
             "3" "Fila 3  ($n3 itens)" $( [ "$FILA_ATUAL" = "3" ] && echo ON || echo OFF ) \
+            "N" "Criar nova lista temporária..." OFF \
             3>&1 1>&2 2>&3)
         [ -z "$dest_fila" ] && continue
-        dest_file="$CONFIG_DIR/temp_playlist_${dest_fila}"
+        if [ "$dest_fila" = "N" ]; then
+            nome_lista=$(whiptail --title "Nova lista temporária" --inputbox "Nome da nova lista:" 9 60 "lista-nova" 3>&1 1>&2 2>&3) || continue
+            [ -n "$nome_lista" ] || continue
+            nome_lista=$(printf '%s' "$nome_lista" | tr '/\\:*?"<>|' '_' | tr -s ' ' '_' | cut -c1-80)
+            mkdir -p "$CUSTOM_LISTS_DIR" 2>/dev/null || true
+            dest_file="$CUSTOM_LISTS_DIR/temp_playlist_custom_$nome_lista"
+            dest_label="$nome_lista"
+        else
+            dest_file="$CONFIG_DIR/temp_playlist_${dest_fila}"
+            dest_label="Fila $dest_fila"
+        fi
         touch "$dest_file"
         quantidade_adicionada=0
         while IFS= read -r item; do
@@ -6146,11 +6206,14 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 quantidade_adicionada=$((quantidade_adicionada + 1))
             fi
         done <<< "$itens_para_fila"
-        total_fila=$(contar_fila "$dest_fila")
-        FILA_ATUAL="$dest_fila"
-        atualizar_fila_atual
-        whiptail --title "✓ Fila $dest_fila" \
-            --msgbox "Adicionados: $quantidade_adicionada\nTotal na Fila $dest_fila: $total_fila" 10 45
+        total_fila=$(grep -c '^' "$dest_file" 2>/dev/null || echo 0)
+        total_fila=$(printf '%s' "$total_fila" | tr -cd '0-9'); total_fila=${total_fila:-0}
+        if [[ "$dest_fila" =~ ^[123]$ ]]; then
+            FILA_ATUAL="$dest_fila"
+            atualizar_fila_atual
+        fi
+        whiptail --title "✓ $dest_label" \
+            --msgbox "Adicionados: $quantidade_adicionada\nTotal em $dest_label: $total_fila" 10 50
         continue
     elif [ "$tecla" = "ctrl-p" ]; then
         # CTRL-P: diretório → Fila1 → Fila2 → Fila3 → Duplicados → diretório

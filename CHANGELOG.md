@@ -1,3 +1,9 @@
+## 3.0-23 — Pesquisas salvas e listas temporárias
+
+- Ctrl-S salva a pesquisa ativa com nome.
+- Ctrl-F permite abrir uma pesquisa salva.
+- Insert permite criar uma nova lista temporária nomeada.
+
 ## 3.0-22 — Retorno com posição persistente
 
 - A posição salva é restaurada ao voltar pelo atalho, clique ou `Enter` em `..`.
