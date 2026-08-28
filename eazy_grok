@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-37"
+EAZY_VERSION="3.0-38"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2181,7 +2181,7 @@ eazy_busca_cancelar_iniciar() {
         while :; do
             tecla=""
             IFS= read -r -n1 -s -t 0.10 tecla < /dev/tty || true
-            if [ "$tecla" = $'\\e' ]; then
+            if [ "$tecla" = $'\e' ]; then
                 : > "$EAZY_BUSCA_CANCEL_FILE"
                 break
             fi
@@ -3792,7 +3792,7 @@ obter_lista_rapida() {
             : > "$tmp_busca"
             BUSCA_REMAKE=0
 
-            # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
+            # Segmentos: 0-9, A-Z, outros — monitor ativo antes do primeiro find.
             eazy_busca_cancelar_iniciar
             local letras=({0..9} {A..Z})
             local total_seg=$((${#letras[@]} + 1))
@@ -5892,9 +5892,12 @@ while true; do
     FZF_BIND_T=()
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
     FZF_BIND_ESC=()
+    FZF_SEARCH_ESC_BIND=()
     if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         FZF_EXPECT="${FZF_EXPECT},esc,alt-r"
-        FZF_BIND_ESC=(--bind='esc:accept')
+        # O fzf recebe Esc, grava o sinal e aborta; a busca detecta o arquivo e mata find/grep.
+        EAZY_BUSCA_CANCEL_FILE="${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}"
+        FZF_SEARCH_ESC_BIND=(--bind="esc:execute-silent(touch -- ${EAZY_BUSCA_CANCEL_FILE})+abort")
     fi
 
     FZF_DUP_SELECT_BINDS=()
@@ -5941,6 +5944,7 @@ while true; do
         --bind="$CTRL_R_BIND" \
         "${FZF_BIND_T[@]}" \
         "${FZF_BIND_ESC[@]}" \
+        "${FZF_SEARCH_ESC_BIND[@]}" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '

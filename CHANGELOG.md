@@ -1,3 +1,9 @@
+## 3.0-38 — Correção do Esc durante a busca
+
+- Corrigida a detecção do byte ESC real.
+- Monitor permanece ativo durante find e grep.
+- Processos ativos são encerrados ao cancelar.
+
 ## 3.0-37 — Esc durante a busca
 
 - Esc agora é monitorado durante find e grep.
