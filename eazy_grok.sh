@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-55"
+EAZY_VERSION="3.0-56"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2215,8 +2215,73 @@ selecionar_extensoes() {
         done
     fi
 
-    # Conteúdo do arquivo (grep dentro)
-    BUSCA_CONTEUDO=""
+# Avalia uma expressão de conteúdo no arquivo informado.
+# Sintaxe: palavras/frases entre aspas, AND, OR e NOT.
+# Exemplo: "erro grave" AND (não suportado) — use "erro grave" AND NOT debug.
+eazy_conteudo_match() {
+    local expressao="$1" arquivo="$2"
+    local -a tokens=() quoted_tokens=()
+    local token="" ch em_aspas=0 escapado=0 i
+    local tem_token=0 token_entre_aspas=0
+    for ((i=0; i<${#expressao}; i++)); do
+        ch="${expressao:i:1}"
+        if [ "$escapado" -eq 1 ]; then
+            token+="$ch"; escapado=0; continue
+        fi
+        if [ "$ch" = "\\" ] && [ "$em_aspas" -eq 1 ]; then
+            escapado=1; continue
+        fi
+        if [ "$ch" = '"' ]; then
+            em_aspas=$((1 - em_aspas)); tem_token=1; token_entre_aspas=1; continue
+        fi
+        if [[ "$ch" =~ [[:space:]] ]] && [ "$em_aspas" -eq 0 ]; then
+            if [ "$tem_token" -eq 1 ]; then
+                tokens+=("$token"); quoted_tokens+=("$token_entre_aspas")
+                token=""; tem_token=0; token_entre_aspas=0
+            fi
+        else
+            token+="$ch"; tem_token=1
+        fi
+    done
+    if [ "$tem_token" -eq 1 ]; then
+        tokens+=("$token"); quoted_tokens+=("$token_entre_aspas")
+    fi
+    [ "${#tokens[@]}" -gt 0 ] || return 1
+
+    local grupo_ok=1 algum_grupo_ok=0 termo negado achou ti
+    for ti in "${!tokens[@]}"; do
+        token="${tokens[$ti]}"
+        if [ "${quoted_tokens[$ti]:-0}" -eq 1 ]; then
+            : # Frase entre aspas: nunca interpretar AND/OR/NOT como operador.
+        else
+            case "${token^^}" in
+            AND) continue ;;
+            OR)
+                [ "$grupo_ok" -eq 1 ] && algum_grupo_ok=1
+                grupo_ok=1
+                continue
+                ;;
+            NOT)
+                negado=1
+                continue
+                ;;
+            esac
+        fi
+        achou=0
+        grep -ilFq -- "$token" "$arquivo" 2>/dev/null && achou=1
+        if [ "${negado:-0}" -eq 1 ]; then
+            [ "$achou" -eq 1 ] && grupo_ok=0
+            negado=0
+        else
+            [ "$achou" -eq 1 ] || grupo_ok=0
+        fi
+    done
+    [ "$grupo_ok" -eq 1 ] && algum_grupo_ok=1
+    [ "$algum_grupo_ok" -eq 1 ]
+}
+
+# Conteúdo do arquivo (grep dentro)
+BUSCA_CONTEUDO=""
     local quer_conteudo
     quer_conteudo=$(whiptail --title "Busca por conteúdo" --menu \
         "Procurar texto DENTRO dos arquivos?\nEscolha uma opção e pressione Enter." 12 72 2 \
@@ -2228,7 +2293,7 @@ selecionar_extensoes() {
     quer_conteudo=$(printf '%s' "$quer_conteudo" | tr -d '"')
     if [ "$quer_conteudo" = "sim" ]; then
         BUSCA_CONTEUDO=$(whiptail --title "Texto no conteúdo" \
-            --inputbox "Palavras-chave para buscar dentro dos arquivos (case-insensitive).\nSepare por espaços; TODAS devem aparecer no mesmo arquivo.\nEx: password TODO error" 11 65 \
+            --inputbox "Busca no conteúdo: use palavras, frases entre aspas e AND/OR/NOT.\nAND exige todos; OR aceita um grupo; NOT exclui.\nEx: \"erro grave\" AND NOT debug OR falha" 12 75 \
             3>&1 1>&2 2>&3)
     fi
 
@@ -4171,13 +4236,10 @@ obter_lista_rapida() {
                         eazy_busca_cancelar_parar
                         return 130
                     fi
-                    local conteudo_ok=1 palavra
-                    local -a palavras_conteudo=()
-                    read -r -a palavras_conteudo <<< "$BUSCA_CONTEUDO"
-                    for palavra in "${palavras_conteudo[@]}"; do
-                        [ -z "$palavra" ] && continue
-                        grep -ilFq -- "$palavra" "$caminho" 2>/dev/null || { conteudo_ok=0; break; }
-                    done
+                    local conteudo_ok=0
+                    if eazy_conteudo_match "$BUSCA_CONTEUDO" "$caminho"; then
+                        conteudo_ok=1
+                    fi
                     if [ "$conteudo_ok" -eq 1 ]; then
                         printf "%s\t%s\t%s\t%s\t%s\n" "$bytes" "$mtime" "$tipo" "$nome" "$caminho" >> "$tmp_filtro"
                         n_grep=$((n_grep + 1))
