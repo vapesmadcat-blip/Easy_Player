@@ -1,3 +1,7 @@
+## 3.0-25 — Nomes das listas temporárias
+
+- Todas as listas personalizadas aparecem no Insert e no Ctrl-P com o nome informado.
+
 ## 3.0-24 — Listas temporárias no Ctrl-P
 
 - Listas criadas pelo Insert agora aparecem no ciclo do Ctrl-P.
