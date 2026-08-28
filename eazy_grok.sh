@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-45"
+EAZY_VERSION="3.0-46"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -6126,9 +6126,20 @@ while true; do
         [ "$TOTAL_LINHAS" -gt 0 ] && [ "$TMP" -gt "$TOTAL_LINHAS" ] && TMP="$TOTAL_LINHAS"
     fi
 
-    # Se temos um último arquivo tocado, força o ponteiro nele (seleção/posição persiste após sair do player)
-    if [ -n "${ULTIMO_ARQUIVO:-}" ] && [ -n "$lista_preparada" ]; then
-        pos_ultimo=$(encontrar_posicao "$ULTIMO_ARQUIVO" "$lista_preparada")
+    # A posição numérica depende da lista visível: com filtro, o mesmo arquivo
+    # pode mudar, por exemplo, da posição 10 para a posição 2.
+    lista_para_posicao="$lista_preparada"
+    if [ -n "${FZF_QUERY:-}" ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+        lista_filtrada_posicao=$(eazy_lista_filtrada "$FZF_QUERY" <<< "$lista_preparada")
+        if [ -n "$linha_voltar" ]; then
+            lista_para_posicao=$(printf '%s\n%s' "$linha_voltar" "$lista_filtrada_posicao")
+        else
+            lista_para_posicao="$lista_filtrada_posicao"
+        fi
+    fi
+    # Se temos um último arquivo tocado/posicionado, localiza-o na lista visível.
+    if [ -n "${ULTIMO_ARQUIVO:-}" ] && [ -n "$lista_para_posicao" ]; then
+        pos_ultimo=$(encontrar_posicao "$ULTIMO_ARQUIVO" "$lista_para_posicao")
         if [ -n "$pos_ultimo" ] && [ "$pos_ultimo" -ge 1 ]; then
             TMP="$pos_ultimo"
         fi
