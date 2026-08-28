@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-34"
+EAZY_VERSION="3.0-35"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1438,6 +1438,8 @@ contar_fila() {
 
 MODO_PLAYLIST=0
 MODO_BUSCA=0
+BUSCA_SNAPSHOT_FILE=""
+BUSCA_REMAKE=0
 
 salvar_pesquisa_atual() {
     [ "${MODO_BUSCA:-0}" -eq 1 ] || { whiptail --title "Pesquisa" --msgbox "Ative uma pesquisa antes de salvá-la." 8 50; return; }
@@ -1454,8 +1456,18 @@ salvar_pesquisa_atual() {
         printf 'BUSCA_TAM_LABEL=%q\n' "${BUSCA_TAM_LABEL:-}"
         printf 'BUSCA_CONTEUDO=%q\n' "${BUSCA_CONTEUDO:-}"
         printf 'FZF_QUERY=%q\n' "${FZF_QUERY:-}"
+        printf 'BUSCA_RESULTADO_FILE=%q\n' "${arquivo%.search}.results.tsv"
     } > "$arquivo"
-    whiptail --title "Pesquisa salva" --msgbox "Pesquisa salva como:\n$nome" 8 55
+    # Congela o resultado que já foi calculado nesta sessão; abrir depois não refaz a busca.
+    local chave_cache cache_resultado
+    chave_cache=$(chave_cache_busca 2>/dev/null || true)
+    cache_resultado="${BUSCA_CACHE_DIR}/${chave_cache}.tsv"
+    if [ -f "$cache_resultado" ]; then
+        cp -f "$cache_resultado" "${arquivo%.search}.results.tsv"
+    else
+        : > "${arquivo%.search}.results.tsv"
+    fi
+    whiptail --title "Pesquisa salva" --msgbox "Pesquisa salva como:\n$nome\n\nResultado congelado para reabrir sem refazer a busca." 9 65
 }
 carregar_pesquisa_salva() {
     [ -d "$SAVED_SEARCHES_DIR" ] || return 1
@@ -1469,9 +1481,17 @@ carregar_pesquisa_salva() {
     escolha=$(whiptail --title "Pesquisas salvas" --menu "Escolha uma pesquisa:" 18 70 8 "${opcoes[@]}" 3>&1 1>&2 2>&3) || return 1
     [ -n "$escolha" ] || return 1
     arq="$SAVED_SEARCHES_DIR/$escolha.search"
-    # Arquivos são gerados pelo próprio eazy; carregam apenas variáveis de busca.
+    # Arquivos são gerados pelo próprio eazy; carregam as variáveis e o snapshot.
     # shellcheck disable=SC1090
     source "$arq" 2>/dev/null || return 1
+    BUSCA_SNAPSHOT_FILE="${BUSCA_RESULTADO_FILE:-${arq%.search}.results.tsv}"
+    BUSCA_REMAKE=0
+    if whiptail --title "Pesquisa salva" --yesno "Abrir o resultado salvo sem refazer a pesquisa?\n\nSim = usar o resultado congelado\nNão = refazer agora (remake)" 12 70; then
+        :
+    else
+        BUSCA_SNAPSHOT_FILE=""
+        BUSCA_REMAKE=1
+    fi
     MODO_BUSCA=1
     return 0
 }
@@ -3704,8 +3724,17 @@ obter_lista_rapida() {
         cache_file="${BUSCA_CACHE_DIR}/${cache_key}.tsv"
         tmp_busca="/tmp/eazy_busca_raw_$$"
 
+        # Pesquisa salva: usa o resultado congelado até o usuário pedir remake.
+        if [ -n "${BUSCA_SNAPSHOT_FILE:-}" ] && [ "${BUSCA_REMAKE:-0}" -ne 1 ] && [ -f "$BUSCA_SNAPSHOT_FILE" ]; then
+            local n_snapshot
+            n_snapshot=$(wc -l < "$BUSCA_SNAPSHOT_FILE" 2>/dev/null | tr -cd '0-9')
+            n_snapshot=${n_snapshot:-0}
+            eazy_busca_msg ""
+            eazy_busca_msg $'\033[1;33m'"📌 Resultado salvo — $n_snapshot arquivo(s) (sem remake)"$'\033[0m'
+            eazy_busca_msg ""
+            cp -f "$BUSCA_SNAPSHOT_FILE" "$tmp_busca" 2>/dev/null || cat "$BUSCA_SNAPSHOT_FILE" > "$tmp_busca"
         # Buffer de busca: reutiliza resultado enquanto o eazy estiver aberto
-        if [ -s "$cache_file" ]; then
+        elif [ -s "$cache_file" ] && [ "${BUSCA_REMAKE:-0}" -ne 1 ]; then
             local n_cache
             n_cache=$(wc -l < "$cache_file" 2>/dev/null | tr -cd '0-9')
             n_cache=${n_cache:-0}
@@ -3715,6 +3744,7 @@ obter_lista_rapida() {
             cp -f "$cache_file" "$tmp_busca" 2>/dev/null || cat "$cache_file" > "$tmp_busca"
         else
             : > "$tmp_busca"
+            BUSCA_REMAKE=0
 
             # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
             local letras=({0..9} {A..Z})
@@ -5771,7 +5801,7 @@ while true; do
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
     FZF_BIND_ESC=()
     if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
-        FZF_EXPECT="${FZF_EXPECT},esc"
+        FZF_EXPECT="${FZF_EXPECT},esc,alt-r"
         FZF_BIND_ESC=(--bind='esc:accept')
     fi
 
@@ -5860,6 +5890,13 @@ while true; do
         IFS='|' read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PLAYLIST < "$TMP_FILE"
         TMP=$(echo "$TMP" | LC_ALL=C tr -cd '0-9')
         TMP=${TMP:-1}
+    fi
+
+    if [ "$tecla" = "alt-r" ] && [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        BUSCA_SNAPSHOT_FILE=""
+        BUSCA_REMAKE=1
+        whiptail --title "Pesquisa" --msgbox "Remake solicitado. A pesquisa será refeita agora." 8 60
+        continue
     fi
 
     if [ "$tecla" = "esc" ] && [ "${MODO_BUSCA:-0}" -eq 1 ]; then

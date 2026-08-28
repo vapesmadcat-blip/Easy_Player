@@ -1,3 +1,9 @@
+## 3.0-35 — Pesquisas salvas com resultado congelado
+
+- Pesquisas salvas agora preservam o resultado encontrado.
+- `Alt-R` refaz a pesquisa somente quando solicitado.
+- A abertura de uma pesquisa pergunta se o usuário deseja refazê-la.
+
 ## 3.0-34 — Documentação completa
 
 - Expandida a documentação com todas as funções, menus, ações, filas, listas temporárias, playlists, pesquisas, histórico, downloads, duplicados, manutenção, conversões, notas, persistência, instalação e exemplos.

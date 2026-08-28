@@ -136,11 +136,13 @@ A pesquisa mostra o tipo, o nome, o tamanho e o caminho encontrado. Os resultado
 
 O `Esc` encerra o modo de pesquisa e retorna ao navegador normal. O resultado não precisa ser digitado manualmente: a seleção é transformada em caminhos reais pelo eazy.
 
-O sistema utiliza cache temporário durante a pesquisa para evitar trabalho repetido na mesma sessão. Esse cache fica em `/tmp` e não é tratado como dado permanente do usuário.
+O sistema utiliza cache temporário durante a pesquisa para evitar trabalho repetido na mesma sessão. Esse cache fica em `/tmp` e não é tratado como dado permanente do usuário. O snapshot permanente de cada pesquisa fica junto do arquivo `.search`, com extensão `.results.tsv`, dentro de `~/.config/eazy/saved_searches/`.
 
 ## 11. Pesquisas salvas
 
-Uma pesquisa configurada pode ser salva com um nome. O eazy armazena extensão, tamanho mínimo, tamanho máximo, conteúdo pesquisado e demais parâmetros necessários para reabrir o mesmo filtro posteriormente.
+Uma pesquisa configurada pode ser salva com um nome. O eazy armazena extensão, tamanho mínimo, tamanho máximo, conteúdo pesquisado e demais parâmetros necessários para reabrir o mesmo filtro posteriormente. Além dos parâmetros, ele grava um **snapshot do resultado encontrado** no momento do salvamento.
+
+Ao abrir uma pesquisa salva, o resultado congelado é mostrado imediatamente e a busca não é refeita. Isso preserva o resultado original mesmo que arquivos tenham sido criados, movidos ou alterados depois. Dentro da lista, `Alt-R` solicita um **remake**, descartando o snapshot e executando novamente a pesquisa. Na tela de escolha de uma pesquisa salva, o usuário também pode confirmar que deseja refazê-la.
 
 As pesquisas ficam em:
 
