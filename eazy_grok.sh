@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-42"
+EAZY_VERSION="3.0-43"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1340,18 +1340,32 @@ validar_dados_eazy() {
     clear
     cat "$report"
     if [ "$invalidos" -gt 0 ]; then
-        if whiptail --title "⚠️ Referências ausentes" --yesno \
-            "Foram encontradas $invalidos referência(s) ausente(s).\n\nDeseja corrigir agora?\n\nA correção removerá somente entradas quebradas das playlists, listas temporárias e snapshots. Arquivos do disco não serão apagados." 12 78; then
-            while IFS= read -r alvo; do
-                [ -f "$alvo" ] || continue
-                case "$alvo" in
-                    *.m3u|*.M3U|*.m3u8|*.M3U8|*.pls|*.PLS) eazy_limpar_playlist_ausentes "$alvo" ;;
-                    *.results.tsv) eazy_limpar_snapshot_ausentes "$alvo" ;;
-                    *) eazy_limpar_lista_ausentes "$alvo" ;;
-                esac
-            done < "$targets"
-            whiptail --title "✅ Correção concluída" --msgbox "Entradas ausentes removidas das estruturas selecionadas.\n\nNenhum arquivo do disco foi apagado." 10 72
-        fi
+        local resposta=''
+        while :; do
+            printf '\n\033[1;33mForam encontradas %s referência(s) ausente(s).\033[0m\n' "$invalidos"
+            printf '\033[1;33mA correção removerá somente as entradas quebradas. Nenhum arquivo do disco será apagado.\033[0m\n'
+            printf '\n\033[1;37mCORRIGIR? (S/N): \033[0m'
+            IFS= read -r -n1 resposta || resposta=''
+            printf '\n'
+            resposta="${resposta^^}"
+            case "$resposta" in
+                S)
+                    while IFS= read -r alvo; do
+                        [ -f "$alvo" ] || continue
+                        case "$alvo" in
+                            *.m3u|*.M3U|*.m3u8|*.M3U8|*.pls|*.PLS) eazy_limpar_playlist_ausentes "$alvo" ;;
+                            *.results.tsv) eazy_limpar_snapshot_ausentes "$alvo" ;;
+                            *) eazy_limpar_lista_ausentes "$alvo" ;;
+                        esac
+                    done < "$targets"
+                    printf '\n\033[1;32m✓ CORREÇÃO CONCLUÍDA: entradas ausentes removidas.\033[0m\n'
+                    printf '\033[1;32m  Nenhum arquivo do disco foi apagado.\033[0m\n'
+                    break
+                    ;;
+                N) printf '\n\033[1;36mCorreção não aplicada.\033[0m\n'; break ;;
+                *) printf '\a\033[1;31mDigite S ou N. A resposta é obrigatória: \033[0m' ;;
+            esac
+        done
     fi
     local tecla
     printf '\nPressione Enter para voltar ou Esc para cancelar.\n'

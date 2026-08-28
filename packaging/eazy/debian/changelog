@@ -1,4 +1,4 @@
-eazy (3.0-42) unstable; urgency=medium
+eazy (3.0-43) unstable; urgency=medium
 
   * Add illustrated integrity validation for playlists, temporary lists and saved searches.
   * Remove obsolete M3U validation action entry.
