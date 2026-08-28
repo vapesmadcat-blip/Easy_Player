@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-51"
+EAZY_VERSION="3.0-52"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -4101,41 +4101,54 @@ obter_lista_rapida() {
             : > "$tmp_busca"
             BUSCA_REMAKE=0
 
-            # Uma única varredura: os padrões já combinam extensões e nomes.
-            # A versão anterior repetia o find para 0-9, A-Z e outros, atrasando
-            # a exibição final sem necessidade.
-            eazy_busca_cancelar_iniciar
-            local total_achados=0 pct=0
+            # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
+            local letras=({0..9} {A..Z})
+            local total_seg=$((${#letras[@]} + 1))
+            local idx=0 total_achados=0
+            local let seg_tmp n_seg pct
             local size_args=()
             [ -n "${BUSCA_TAM_MIN:-}" ] && size_args+=("-size" "+${BUSCA_TAM_MIN}c")
             [ -n "${BUSCA_TAM_MAX:-}" ] && size_args+=("-size" "-${BUSCA_TAM_MAX}c")
 
-            local titulo="🔍 Busca recursiva [${EXT_BUSCA:-todas}]"
+            local titulo="🔍 Busca segmentada [${EXT_BUSCA:-todas}]"
             [ -n "${BUSCA_TAM_LABEL:-}" ] && titulo="$titulo  tam:$BUSCA_TAM_LABEL"
             [ -n "${BUSCA_CONTEUDO:-}" ] && titulo="$titulo  txt:«${BUSCA_CONTEUDO:0:16}»"
             eazy_busca_msg ""
             eazy_busca_msg $'\033[1;36m'"$titulo"$'\033[0m'
-            eazy_busca_msg $'\033[0;90m'"   varredura única com extensões e padrões de nome"$'\033[0m'
-                        eazy_busca_msg $'\033[0;90m'"   pesquisando agora... aguarde"$'\033[0m'
+            eazy_busca_msg $'\033[0;90m'"   segmentos: 0-9 → A-Z → outros"$'\033[0m'
+
+            for let in "${letras[@]}"; do
+                pct=$((idx * 100 / total_seg))
+                eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
+                seg_tmp="/tmp/eazy_busca_seg_$$"
+                find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+                    -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+                n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
+                n_seg=${n_seg:-0}
+                cat "$seg_tmp" >> "$tmp_busca"
+                rm -f "$seg_tmp"
+                total_achados=$((total_achados + n_seg))
+                idx=$((idx + 1))
+                pct=$((idx * 100 / total_seg))
+                eazy_busca_progresso "$pct" "$let" "$n_seg" "$total_achados" "ok"
+            done
+
+            pct=$((idx * 100 / total_seg))
+            eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..."
+            seg_tmp="/tmp/eazy_busca_seg_$$"
             find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
-                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$tmp_busca" &
-            find_pid=$!
-            if ! eazy_busca_esperar_pid "$find_pid"; then
-                rm -f "$tmp_busca"
-                eazy_busca_cancelar_parar
-                return 130
-            fi
-            total_achados=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
-                        total_achados=${total_achados:-0}
-            if [ -n "${BUSCA_CONTEUDO:-}" ]; then
-                eazy_busca_msg $'\033[1;32m'"✓ Arquivos encontrados — $total_achados"$'\033[0m'
-                eazy_busca_msg $'\033[0;36m'"   iniciando agora a pesquisa dentro do conteúdo..."$'\033[0m'
-            else
-                eazy_busca_progresso 100 "fim" "$total_achados" "$total_achados" "concluído"
-                eazy_busca_msg ""
-                eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
-                eazy_busca_msg ""
-            fi
+                ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
+                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+            n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
+            n_seg=${n_seg:-0}
+            cat "$seg_tmp" >> "$tmp_busca"
+            rm -f "$seg_tmp"
+            total_achados=$((total_achados + n_seg))
+            eazy_busca_progresso 100 "outros" "$n_seg" "$total_achados" "ok"
+            eazy_busca_msg ""
+            eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
+            eazy_busca_msg ""
+
             # Filtro por conteúdo (grep) com barra própria
             if [ -n "${BUSCA_CONTEUDO:-}" ]; then
                 local tmp_filtro="/tmp/eazy_busca_grep_$$"
@@ -4173,7 +4186,6 @@ obter_lista_rapida() {
                 eazy_busca_msg ""
             fi
 
-            eazy_busca_cancelar_parar
             if eazy_busca_cancelada; then
                 eazy_busca_msg ""
                 eazy_busca_msg $'\033[1;33mBusca cancelada por Esc.\033[0m'
