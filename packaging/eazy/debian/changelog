@@ -1,3 +1,9 @@
+eazy (3.0-34) unstable; urgency=medium
+
+  * Expand project documentation with the complete feature and workflow reference.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 26 Aug 2026 14:30:00 +0000
+
 eazy (3.0-33) unstable; urgency=medium
 
   * Complete installer dependencies and initialize all user directories.

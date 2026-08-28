@@ -1,3 +1,7 @@
+## 3.0-34 — Documentação completa
+
+- Expandida a documentação com todas as funções, menus, ações, filas, listas temporárias, playlists, pesquisas, histórico, downloads, duplicados, manutenção, conversões, notas, persistência, instalação e exemplos.
+
 ## 3.0-33 — Instalador completo e documentação
 
 - O `--install` instala as ferramentas necessárias para reprodução, PDF, conversão, preview e diagnóstico.

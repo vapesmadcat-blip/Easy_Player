@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-33"
+EAZY_VERSION="3.0-34"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
