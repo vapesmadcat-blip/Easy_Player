@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-53"
+EAZY_VERSION="3.0-54"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2227,7 +2227,7 @@ selecionar_extensoes() {
     quer_conteudo=$(printf '%s' "$quer_conteudo" | tr -d '"')
     if [ "$quer_conteudo" = "sim" ]; then
         BUSCA_CONTEUDO=$(whiptail --title "Texto no conteúdo" \
-            --inputbox "Texto a buscar dentro dos arquivos (case-insensitive):\nEx: password, TODO, error" 11 65 \
+            --inputbox "Palavras-chave para buscar dentro dos arquivos (case-insensitive).\nSepare por espaços; TODAS devem aparecer no mesmo arquivo.\nEx: password TODO error" 11 65 \
             3>&1 1>&2 2>&3)
     fi
 
@@ -4070,6 +4070,8 @@ obter_lista_rapida() {
     fi
 
     if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        # Cada execução começa sem sinal residual de cancelamento.
+        rm -f "${EAZY_BUSCA_CANCEL_FILE:-/tmp/eazy_search_cancel_$$}" "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
         printf "000000000000000\t%b📁 %-40s%b\t%b[%-6s]%b\t..\n" \
             "$C_DIR" "◀ Voltar (Sair da Busca)" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
 
@@ -4168,9 +4170,14 @@ obter_lista_rapida() {
                         eazy_busca_cancelar_parar
                         return 130
                     fi
-                    grep -ilFq -- "$BUSCA_CONTEUDO" "$caminho" 2>/dev/null &
-                    grep_pid=$!
-                    if eazy_busca_esperar_pid "$grep_pid"; then
+                    local conteudo_ok=1 palavra
+                    local -a palavras_conteudo=()
+                    read -r -a palavras_conteudo <<< "$BUSCA_CONTEUDO"
+                    for palavra in "${palavras_conteudo[@]}"; do
+                        [ -z "$palavra" ] && continue
+                        grep -ilFq -- "$palavra" "$caminho" 2>/dev/null || { conteudo_ok=0; break; }
+                    done
+                    if [ "$conteudo_ok" -eq 1 ]; then
                         printf "%s\t%s\t%s\t%s\t%s\n" "$bytes" "$mtime" "$tipo" "$nome" "$caminho" >> "$tmp_filtro"
                         n_grep=$((n_grep + 1))
                     elif eazy_busca_cancelada; then
