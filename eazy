@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-58"
+EAZY_VERSION="3.0-59"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1128,6 +1128,8 @@ limpeza_auto() {
         return
     fi
 
+    # A execução começa em uma tela limpa, sem misturar a prévia com o progresso.
+    clear 2>/dev/null || printf '\033c'
     echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA — acima de $dias dias${NC}"
     echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}\n"
     progresso_hd="/tmp/eazy-hd-clean-progress-$$"; concluido_hd="/tmp/eazy-hd-clean-done-$$"
@@ -1488,11 +1490,10 @@ menu_manutencao() {
 
 
 # --- TRATAMENTO DE ARGUMENTOS INICIAIS ---
-
-# -m abre diretamente o gerenciador de manutenção, sem iniciar o navegador.
-if [ "$1" = "-m" ] || [ "$1" = "--maintenance" ]; then
-    menu_manutencao_direta
-    exit $?
+# O despacho de -m ocorre depois das definições de função, no início do fluxo principal.
+EAZY_OPEN_MAINTENANCE=0
+if [ "${1:-}" = "-m" ] || [ "${1:-}" = "--maintenance" ]; then
+    EAZY_OPEN_MAINTENANCE=1
 fi
 
 # Verificação de proteção com senha (ao iniciar)
@@ -5934,6 +5935,8 @@ menu_acoes_selecao() {
             whiptail --title "Fila" --msgbox "Adicionados: $quantidade_adicionada\nTotal na fila: $total_fila" 9 45
             ;;
     esac
+    printf '\n'
+    read -r -p "Pressione Enter para voltar ao menu de ações..." _ || true
 }
 
 # Copia arquivos selecionados para um destino
@@ -6110,6 +6113,11 @@ mover_arquivos() {
     echo -e "\033[1;32mMovidos: $ok\033[0m | \033[1;31mFalhas: $falha\033[0m"
     sleep 1.5
 }
+
+if [ "${EAZY_OPEN_MAINTENANCE:-0}" = "1" ]; then
+    menu_manutencao_direta
+    exit $?
+fi
 
 registrar_status
 

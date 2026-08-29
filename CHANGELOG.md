@@ -1,3 +1,9 @@
+## 3.0-59 — Manutenção Linux e pausas no menu
+
+- Corrigido o modo `eazy -m` para executar somente depois que todas as funções de manutenção foram carregadas.
+- Adicionada limpeza da tela antes do início da limpeza automática, após a prévia e a confirmação final.
+- O menu de ações agora pausa ao final de cada ação para que o resultado de aplicativos externos possa ser lido.
+
 ## 3.0-58 — Limpeza automática com prévia e idade configurável
 
 - A limpeza automática agora pergunta quantos dias devem ser usados como critério.

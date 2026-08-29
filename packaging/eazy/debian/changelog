@@ -1,3 +1,11 @@
+eazy (3.0-59) unstable; urgency=medium
+
+
+
+  * Fix -m maintenance dispatch, clear screen before automatic cleanup, and pause after menu actions.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 29 Aug 2026 00:30:00 +0000
+
 eazy (3.0-58) unstable; urgency=medium
 
 
