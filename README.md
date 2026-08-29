@@ -54,14 +54,14 @@ O pacote `rar` oficial é opcional e depende do repositório `non-free`; não é
 
 ## Versão Windows em Python
 
-A versão para Windows fica separada na pasta [`windows/`](windows/), sem misturar os arquivos Bash/Linux. Consulte [`windows/README.md`](windows/README.md) para requisitos e comandos. A execução básica é:
+A versão para Windows fica separada na pasta [`windows/`](windows/), sem misturar os arquivos Bash/Linux. Você pode escolher livremente qual versão instalar: use o pacote `.deb` para Linux ou `windows/install.ps1` para Windows. Consulte [`windows/README.md`](windows/README.md) para requisitos e comandos. A execução básica, sem instalação, é:
 
 ```powershell
 cd windows
 py eazy.py
 ```
 
-Também é possível iniciar com duplo clique em `windows/eazy.bat`.
+Também é possível iniciar com duplo clique em `windows/eazy.bat`. Para instalar somente a versão Windows, execute `Set-ExecutionPolicy -Scope Process Bypass` e depois `.\\install.ps1` dentro da pasta `windows`. Para removê-la, use `.\\uninstall.ps1`. Esses scripts não alteram a versão Linux/Bash.
 
 ## Uso
 

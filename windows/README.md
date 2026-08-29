@@ -12,6 +12,25 @@ Para confirmar:
 py --version
 ```
 
+## Instalação independente
+
+A instalação Windows fica separada da versão Bash/Linux. No PowerShell, dentro da pasta `windows`, execute:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\\install.ps1
+```
+
+O instalador copia a versão Python para `%LOCALAPPDATA%\\eazy`, cria o comando `eazy` e adiciona somente essa pasta ao PATH do usuário. Feche e abra o PowerShell novamente depois da instalação.
+
+Para remover apenas a versão Windows:
+
+```powershell
+.\\uninstall.ps1
+```
+
+A instalação Linux/Bash não é modificada por esses scripts.
+
 ## Execução
 
 Abra o PowerShell dentro da pasta `windows` e execute:
