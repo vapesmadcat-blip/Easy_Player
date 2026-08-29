@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-56"
+EAZY_VERSION="3.0-57"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1691,6 +1691,17 @@ atualizar_fila_atual() {
         3) PLAYLIST_FILE="$PLAYLIST_3" ;;
         *) FILA_ATUAL=1; PLAYLIST_FILE="$PLAYLIST_1" ;;
     esac
+}
+
+# Retorna o arquivo que está realmente aberto na tela.
+# Em listas personalizadas, PLAYLIST_FILE continua sendo apenas o buffer
+# da fila padrão; por isso ele não pode ser usado diretamente.
+arquivo_playlist_ativo() {
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
+        printf '%s\n' "$ARQUIVO_PLAYLIST_ABERTO"
+    else
+        printf '%s\n' "$PLAYLIST_FILE"
+    fi
 }
 
 # Conta itens de uma fila (1/2/3)
@@ -4942,10 +4953,7 @@ salvar_playlist() {
     # Ctrl-S dentro de uma playlist deve salvar a lista que está aberta.
     # PLAYLIST_FILE pode continuar apontando para a fila padrão quando a
     # navegação veio de uma lista temporária personalizada.
-    lista_origem="$PLAYLIST_FILE"
-    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
-        lista_origem="$ARQUIVO_PLAYLIST_ABERTO"
-    fi
+    lista_origem=$(arquivo_playlist_ativo)
     if [ ! -s "$lista_origem" ]; then
         whiptail --title "Salvar Playlist" --msgbox "A playlist temporária está vazia.\nUse INSERT para adicionar arquivos antes de salvar." 8 60
         return

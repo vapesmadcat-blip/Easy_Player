@@ -8,7 +8,8 @@ DEBIAN_DIR="$SCRIPT_DIR/debian"
 PKGROOT="$SCRIPT_DIR/pkgroot"
 DIST_DIR="$SCRIPT_DIR/dist"
 PACKAGE="eazy"
-VERSION="3.0-56"
+VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$DEBIAN_DIR/control" | head -n1)"
+[ -n "$VERSION" ] || { printf 'Erro: versão ausente em %s\n' "$DEBIAN_DIR/control" >&2; exit 1; }
 ARCH="all"
 OUTPUT="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 

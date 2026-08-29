@@ -5,7 +5,8 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 TMP_TEST=$(mktemp -d)
 trap 'rm -rf "$TMP_TEST"' EXIT
 
-awk '/^salvar_playlist\(\) \{/{on=1} on{print} /^confirmar_e_excluir\(\) \{/{exit}' "$ROOT/eazy" | sed '$d' > "$TMP_TEST/function.sh"
+awk '/^arquivo_playlist_ativo\(\) \{/{on=1} on{if (/^contar_fila\(\) \{/) exit; print}' "$ROOT/eazy" > "$TMP_TEST/function.sh"
+awk '/^salvar_playlist\(\) \{/{on=1} on{print} /^confirmar_e_excluir\(\) \{/{exit}' "$ROOT/eazy" | sed '$d' >> "$TMP_TEST/function.sh"
 
 MOCK_COUNT_FILE="$TMP_TEST/mock-count"
 whiptail() {

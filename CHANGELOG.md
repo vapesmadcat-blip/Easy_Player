@@ -1,3 +1,10 @@
+## 3.0-57 — Ctrl-S salva a lista temporária ativa
+
+- Corrigido o salvamento de playlists quando o usuário está dentro de uma fila ou lista temporária.
+- `Ctrl-S` agora usa o arquivo realmente aberto em `ARQUIVO_PLAYLIST_ABERTO`, inclusive em listas personalizadas.
+- Adicionada a função central `arquivo_playlist_ativo` para evitar retorno indevido à fila 1.
+- Incluído teste de regressão para confirmar que a lista ativa é salva no lugar da fila 1.
+
 ## 3.0-56 — Frases e operadores lógicos na busca
 
 - Frases entre aspas são pesquisadas literalmente, preservando os espaços.
