@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-57"
+EAZY_VERSION="3.0-58"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1085,14 +1085,52 @@ diagnostico_disco_rapido() {
 }
 
 limpeza_auto() {
-    if ! whiptail --title "Limpeza Automática" --yesno \
-        "Isso irá (respeitando DRY RUN):\n\n  • Limpar caches APT/DNF/Pacman/Docker\n  • Logs > 30 dias\n  • Lixeira do usuário\n  • /tmp arquivos +30 dias\n\nDRY RUN atual: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)\nContinuar?" 18 65; then
+    local dias preview progresso_hd concluido_hd gauge_hd="" qtd_logs qtd_tmp qtd_lixeira
+    while true; do
+        dias=$(whiptail --title "Limpeza Automática" --inputbox \
+            "Remover arquivos com mais de quantos dias?\n\nDigite um número entre 1 e 3650:" 11 65 "30" 3>&1 1>&2 2>&3) || return
+        if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -ge 1 ] && [ "$dias" -le 3650 ]; then
+            break
+        fi
+        whiptail --title "Valor inválido" --msgbox "Informe somente um número inteiro entre 1 e 3650." 8 60
+    done
+
+    # Primeiro mostra a prévia. Nenhuma operação de limpeza ocorre antes desta tela.
+    preview=$(mktemp "${TMPDIR:-/tmp}/eazy-clean-preview.XXXXXX") || return 1
+    qtd_logs=$(find /var/log -type f -name '*.log' -mtime +"$dias" 2>/dev/null | wc -l)
+    qtd_tmp=$(find /tmp -type f -user "$(id -un)" -mtime +"$dias" 2>/dev/null | wc -l)
+    qtd_lixeira=$(find "$HOME/.local/share/Trash/files" -type f -mtime +"$dias" 2>/dev/null | wc -l)
+    {
+        echo "PRÉVIA DA LIMPEZA AUTOMÁTICA"
+        echo "================================"
+        echo "Critério: arquivos com mais de $dias dia(s)"
+        echo "DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)"
+        echo ""
+        echo "Serão considerados:"
+        echo "  • Logs antigos: $qtd_logs arquivo(s) em /var/log"
+        echo "  • Temporários antigos: $qtd_tmp arquivo(s) seus em /tmp"
+        echo "  • Lixeira antiga: $qtd_lixeira arquivo(s)"
+        echo "  • Cache APT/DNF/Pacman e Docker: limpeza específica do gerenciador"
+        echo "  • Journal: vacuum de ${dias}d"
+        echo ""
+        echo "A prévia não remove nada. A exclusão só começa após a confirmação."
+    } > "$preview"
+    if command -v whiptail >/dev/null 2>&1; then
+        whiptail --title "Prévia — Limpeza com mais de $dias dias" --textbox "$preview" 20 78 --scrolltext
+    else
+        cat "$preview"
+        read -r -p "Enter para continuar..."
+    fi
+    rm -f "$preview"
+
+    if ! whiptail --title "Confirmar limpeza" --yesno \
+        "Executar agora a limpeza dos itens com mais de $dias dia(s)?\n\nA ação respeitará o DRY RUN atual e não poderá ser desfeita." 12 65; then
         return
     fi
 
-    echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA${NC}"
+    echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA — acima de $dias dias${NC}"
     echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}\n"
-    local progresso_hd="/tmp/eazy-hd-clean-progress-$$" concluido_hd="/tmp/eazy-hd-clean-done-$$" gauge_hd=""
+    progresso_hd="/tmp/eazy-hd-clean-progress-$$"; concluido_hd="/tmp/eazy-hd-clean-done-$$"
     : > "$progresso_hd"; rm -f "$concluido_hd"
     if command -v whiptail >/dev/null 2>&1 && [ -t 2 ]; then
         (
@@ -1103,7 +1141,7 @@ limpeza_auto() {
                 sleep 0.15
             done
             printf '100\n'
-        ) | whiptail --gauge "Limpando HD...\nCaches, logs, lixeira e temporários." 8 70 0 2>/dev/null &
+        ) | whiptail --gauge "Limpando...\nCaches, logs, lixeira e temporários antigos." 8 70 0 2>/dev/null &
         gauge_hd=$!
     fi
     printf '10\n' >> "$progresso_hd"
@@ -1126,22 +1164,22 @@ limpeza_auto() {
     printf '55\n' >> "$progresso_hd"
     echo -e "${YELLOW}Logs /tmp / lixeira...${NC}"
     if [ "${DRY_RUN:-0}" = "1" ]; then
-        echo "  [DRY RUN] find /var/log -name '*.log' -mtime +30 -delete"
-        echo "  [DRY RUN] journalctl --vacuum-time=30d"
-        echo "  [DRY RUN] rm -rf ~/.local/share/Trash/*"
-        echo "  [DRY RUN] find /tmp -type f -mtime +30 -delete"
+        echo "  [DRY RUN] find /var/log -name '*.log' -mtime +$dias -delete"
+        echo "  [DRY RUN] journalctl --vacuum-time=${dias}d"
+        echo "  [DRY RUN] find ~/.local/share/Trash/files -type f -mtime +$dias -delete"
+        echo "  [DRY RUN] find /tmp -type f -user $(id -un) -mtime +$dias -delete"
     else
-        operacao_com_sudo "find /var/log -name '*.log' -mtime +30 -delete 2>/dev/null; true" "Logs antigos"
+        operacao_com_sudo "find /var/log -name '*.log' -mtime +$dias -delete 2>/dev/null; true" "Logs antigos"
         if command -v journalctl >/dev/null 2>&1; then
-            operacao_com_sudo "journalctl --vacuum-time=30d" "Journal vacuum"
+            operacao_com_sudo "journalctl --vacuum-time=${dias}d" "Journal vacuum"
         fi
-        rm -rf ~/.local/share/Trash/* 2>/dev/null || true
-        find /tmp -type f -mtime +30 -delete 2>/dev/null || true
-        find /tmp -type d -mtime +30 -empty -delete 2>/dev/null || true
+        find "$HOME/.local/share/Trash/files" -type f -user "$(id -un)" -mtime +"$dias" -delete 2>/dev/null || true
+        find /tmp -type f -user "$(id -un)" -mtime +"$dias" -delete 2>/dev/null || true
+        find /tmp -type d -user "$(id -un)" -mtime +"$dias" -empty -delete 2>/dev/null || true
     fi
 
     printf '90\n' >> "$progresso_hd"
-    echo -e "\n${GREEN}✅ Limpeza finalizada (DRY RUN=$([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO)).${NC}"
+    echo -e "\n${GREEN}✅ Limpeza finalizada (mais de $dias dias; DRY RUN=$([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO)).${NC}"
     printf '100\n' >> "$progresso_hd"
     touch "$concluido_hd"
     [ -n "$gauge_hd" ] && wait "$gauge_hd" 2>/dev/null || true

@@ -1,3 +1,11 @@
+## 3.0-58 — Limpeza automática com prévia e idade configurável
+
+- A limpeza automática agora pergunta quantos dias devem ser usados como critério.
+- A prévia informa quantos logs, temporários e itens da lixeira são elegíveis.
+- Nenhuma limpeza começa antes da visualização da prévia e de uma confirmação final.
+- O critério escolhido é aplicado a logs, journal, temporários e lixeira.
+- O modo DRY-RUN continua impedindo a remoção real.
+
 ## 3.0-57 — Ctrl-S salva a lista temporária ativa
 
 - Corrigido o salvamento de playlists quando o usuário está dentro de uma fila ou lista temporária.

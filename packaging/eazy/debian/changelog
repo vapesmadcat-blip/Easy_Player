@@ -1,3 +1,11 @@
+eazy (3.0-58) unstable; urgency=medium
+
+
+
+  * Add configurable cleanup age, preview, and final confirmation before deletion.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 29 Aug 2026 00:00:00 +0000
+
 eazy (3.0-57) unstable; urgency=medium
 
   * Fix Ctrl-S to save the currently open temporary playlist instead of queue 1.
