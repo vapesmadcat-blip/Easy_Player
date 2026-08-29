@@ -4938,8 +4938,15 @@ tocar_lista() {
 }
 
 salvar_playlist() {
-    local destino nome_tmp dir_destino
-    if [ ! -s "$PLAYLIST_FILE" ]; then
+    local destino nome_tmp dir_destino lista_origem
+    # Ctrl-S dentro de uma playlist deve salvar a lista que está aberta.
+    # PLAYLIST_FILE pode continuar apontando para a fila padrão quando a
+    # navegação veio de uma lista temporária personalizada.
+    lista_origem="$PLAYLIST_FILE"
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
+        lista_origem="$ARQUIVO_PLAYLIST_ABERTO"
+    fi
+    if [ ! -s "$lista_origem" ]; then
         whiptail --title "Salvar Playlist" --msgbox "A playlist temporária está vazia.\nUse INSERT para adicionar arquivos antes de salvar." 8 60
         return
     fi
@@ -4985,7 +4992,7 @@ salvar_playlist() {
             if ! grep -Fxq -- "$item_abs" "$destino" 2>/dev/null; then
                 printf '%s\n' "$item_abs" >> "$destino"
             fi
-        done < "$PLAYLIST_FILE"
+        done < "$lista_origem"
     else
         {
             printf '%s\n' '#EXTM3U'
@@ -4993,7 +5000,7 @@ salvar_playlist() {
                 [ -z "$item" ] && continue
                 [[ "$item" =~ ^# ]] && continue
                 caminho_absoluto "$item"
-            done < "$PLAYLIST_FILE"
+            done < "$lista_origem"
         } > "$destino"
     fi
 
