@@ -14,31 +14,33 @@ py --version
 
 ## Execução
 
-Abra o PowerShell na pasta do projeto e execute:
+Abra o PowerShell dentro da pasta `windows` e execute:
 
 ```powershell
-py eazy_windows.py
+py eazy.py
 ```
 
 Para iniciar em uma pasta específica:
 
 ```powershell
-py eazy_windows.py "C:\Users\SeuNome\Videos"
+py eazy.py "C:\Users\SeuNome\Videos"
 ```
 
 Para iniciar com um arquivo:
 
 ```powershell
-py eazy_windows.py "C:\Users\SeuNome\Videos\filme.mp4"
+py eazy.py "C:\Users\SeuNome\Videos\filme.mp4"
 ```
+
+Também é possível iniciar pelo arquivo `eazy.bat` com duplo clique ou pelo PowerShell.
 
 ## Comandos diretos
 
 ```powershell
-py eazy_windows.py --version
-py eazy_windows.py --help
-py eazy_windows.py --search "relatorio"
-py eazy_windows.py --duplicates "C:\Users\SeuNome\Documents"
+py eazy.py --version
+py eazy.py --help
+py eazy.py --search "relatorio"
+py eazy.py --duplicates "C:\Users\SeuNome\Documents"
 ```
 
 ## Funcionalidades incluídas

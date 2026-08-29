@@ -52,6 +52,17 @@ O `--install` também cria `~/.config/eazy/`, `notas/`, `saved_searches/`, `mpv_
 
 O pacote `rar` oficial é opcional e depende do repositório `non-free`; não é necessário para instalar o eazy.
 
+## Versão Windows em Python
+
+A versão para Windows fica separada na pasta [`windows/`](windows/), sem misturar os arquivos Bash/Linux. Consulte [`windows/README.md`](windows/README.md) para requisitos e comandos. A execução básica é:
+
+```powershell
+cd windows
+py eazy.py
+```
+
+Também é possível iniciar com duplo clique em `windows/eazy.bat`.
+
 ## Uso
 
 ```bash
