@@ -1,14 +1,14 @@
 # Instalação do eazy
 
-## Debian / Ubuntu — versão 3.0-59
+## Debian / Ubuntu — versão 3.0-60
 
 A instalação oficial usa a **Release do GitHub**, o pacote `.deb` e seu checksum SHA-256:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-59/eazy_3.0-59_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-59/eazy_3.0-59_all.deb.sha256
-sha256sum -c eazy_3.0-59_all.deb.sha256
-sudo apt install ./eazy_3.0-59_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb.sha256
+sha256sum -c eazy_3.0-60_all.deb.sha256
+sudo apt install ./eazy_3.0-60_all.deb
 eazy
 ```
 
@@ -17,7 +17,7 @@ O comando `sha256sum -c` deve informar `OK` antes da instalação. Não instale 
 Para remover os arquivos baixados depois da instalação:
 
 ```bash
-rm -f eazy_3.0-59_all.deb eazy_3.0-59_all.deb.sha256
+rm -f eazy_3.0-60_all.deb eazy_3.0-60_all.deb.sha256
 ```
 
 ## Atualização a partir do código
@@ -27,8 +27,8 @@ git clone https://github.com/vapesmadcat-blip/Easy_Player.git
 cd Easy_Player
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sha256sum packaging/eazy/dist/eazy_3.0-59_all.deb
-sudo apt install ./packaging/eazy/dist/eazy_3.0-59_all.deb
+sha256sum packaging/eazy/dist/eazy_3.0-60_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-60_all.deb
 eazy
 ```
 
@@ -56,7 +56,15 @@ sudo apt install -y fzf mpv mplayer gawk sed findutils whiptail wget \
 
 Recursos opcionais: `chafa`, `ffmpeg`, `vlc`, `smartmontools`, `pciutils`, `lshw`, `inxi`, `dmidecode`, `usbutils`, `mesa-utils` e `vulkan-tools`.
 
-## Recursos da versão 3.0-59
+### Busca avançada por nome e conteúdo
+
+No `Ctrl-F`, informe extensões, nomes e curingas separados por espaço ou vírgula. Exemplos: `sh mp4 vid* filme.mov movie.*`. Extensões simples viram `*.ext`; padrões com ponto ou curingas são tratados como nomes completos.
+
+Para filtrar o conteúdo, escolha **Sim — digitar uma ou mais palavras-chave** e informe uma expressão. Palavras simples separadas por espaço equivalem a `AND`; `OR` aceita alternativas; `NOT` exclui o termo seguinte. Frases entre aspas preservam os espaços. Exemplos: `alpha beta`, `alpha OR beta`, `"erro grave" AND NOT debug`.
+
+A ordem é: primeiro o eazy encontra os arquivos pelo nome/extensão, depois verifica a expressão no conteúdo de cada arquivo e só então mostra a lista. Pesquisas salvas preservam a expressão e o snapshot; `Alt-R` solicita uma nova execução.
+
+## Recursos da versão 3.0-60
 
 O editor de notas agora é o mini editor visual incluído no pacote, sem dependência de Vim, vi ou nano. Seus atalhos são `Ctrl-N` para nova nota, `Ctrl-S` para salvar e abrir outra, `Esc` para salvar e sair, `Enter` para nova linha e `Backspace` para apagar. O gerenciador mantém `Ctrl-E`, `Del`, `Ctrl-R` e `Ctrl-X` para listar, apagar, renomear e exportar notas.
 

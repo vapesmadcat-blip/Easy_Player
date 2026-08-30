@@ -1,3 +1,9 @@
+## 3.0-60 — Documentação consolidada da busca avançada
+
+- Atualizada toda a documentação da pesquisa por extensões, nomes e curingas.
+- Documentadas palavras múltiplas, frases entre aspas e operadores `AND`, `OR` e `NOT`.
+- Mantidos os recursos de manutenção, snapshots, validação, notas e limpeza segura das versões anteriores.
+
 ## 3.0-59 — Manutenção Linux e pausas no menu
 
 - Corrigido o modo `eazy -m` para executar somente depois que todas as funções de manutenção foram carregadas.

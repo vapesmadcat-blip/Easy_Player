@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-59/eazy_3.0-59_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-59/eazy_3.0-59_all.deb.sha256
-sha256sum -c eazy_3.0-59_all.deb.sha256
-sudo apt install ./eazy_3.0-59_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb.sha256
+sha256sum -c eazy_3.0-60_all.deb.sha256
+sudo apt install ./eazy_3.0-60_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-59_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-60_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
@@ -89,6 +89,23 @@ eazy --config
 | `Ctrl-R` | Duplicados: inverter seleção |
 | `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
 | `Q` / `X` | Sair do programa |
+
+### Pesquisa avançada por nome e conteúdo
+
+O `Ctrl-F` aceita extensões, nomes completos e curingas no mesmo campo. Exemplos: `sh mp4 vid* filme.mov movie.*`. Tokens simples são convertidos em extensões (`mp4` vira `*.mp4`); tokens com ponto ou curingas são tratados como padrões completos de nome.
+
+Para pesquisar dentro dos arquivos, escolha **Sim — digitar uma ou mais palavras-chave**. A expressão aceita palavras simples, frases entre aspas e os operadores `AND`, `OR` e `NOT`:
+
+| Expressão | Resultado |
+|---|---|
+| `alpha beta` | Exige `alpha` e `beta` no mesmo arquivo |
+| `alpha AND beta` | Exige os dois termos |
+| `alpha OR beta` | Aceita qualquer alternativa |
+| `alpha AND NOT debug` | Exige `alpha` e exclui arquivos com `debug` |
+| `"erro grave"` | Procura a frase literal, incluindo o espaço |
+| `"erro grave" AND NOT debug` | Exige a frase e exclui `debug` |
+
+O eazy primeiro filtra pelo nome/extensão e depois verifica o conteúdo dos arquivos restantes. Pesquisas salvas guardam a expressão e o snapshot do resultado; `Alt-R` executa um remake quando você quiser atualizar a pesquisa.
 
 ### Editor de notas rápidas
 
