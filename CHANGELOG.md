@@ -1,3 +1,11 @@
+## 3.0-61 — Guia rápido e manutenção revisada
+
+- Adicionado o GUIA_RAPIDO.md com exemplos práticos de busca por curingas, conteúdo, frases e operadores.
+- Limpezas agora exibem cálculo de espaço também no DRY-RUN.
+- Comandos de limpeza limpam a tela antes da execução e pausam depois do resultado.
+- Filtros restaurados são sanitizados contra CR e sequências ANSI residuais.
+- Revisada a preservação da seleção e conferida a lista de dependências do instalador.
+
 ## 3.0-60 — Documentação consolidada da busca avançada
 
 - Atualizada toda a documentação da pesquisa por extensões, nomes e curingas.

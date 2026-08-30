@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-60/eazy_3.0-60_all.deb.sha256
-sha256sum -c eazy_3.0-60_all.deb.sha256
-sudo apt install ./eazy_3.0-60_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-61/eazy_3.0-61_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-61/eazy_3.0-61_all.deb.sha256
+sha256sum -c eazy_3.0-61_all.deb.sha256
+sudo apt install ./eazy_3.0-61_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-60_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-61_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
@@ -143,4 +143,4 @@ Uso livre. Sem garantias.
 
 ## Funcionamento e vantagens
 
-A explicação completa dos recursos, do funcionamento, da persistência, das filas, das notas, do modo DRY-RUN e das vantagens do projeto está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md). Após a instalação Debian, o arquivo também fica disponível em `/usr/share/doc/eazy/EAZY_EXPLICADO.md`.
+O guia rápido de uso está em [`GUIA_RAPIDO.md`](GUIA_RAPIDO.md), com exemplos de pesquisa por curingas, conteúdo, frases, `AND`, `OR` e `NOT`. A explicação completa dos recursos, do funcionamento, da persistência, das filas, das notas, do modo DRY-RUN e das vantagens do projeto está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md). Após a instalação Debian, esses arquivos ficam disponíveis em `/usr/share/doc/eazy/`.

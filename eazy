@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-60"
+EAZY_VERSION="3.0-61"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -146,11 +146,19 @@ tem_sudo_sem_senha() {
     sudo -n true 2>/dev/null
 }
 
+eazy_pausa_terminal() {
+    local mensagem="${1:-Pressione Enter para continuar...}"
+    if [ -t 0 ]; then
+        printf '\n\033[1;36m%s\033[0m\n' "$mensagem"
+        IFS= read -r _eazy_pause || true
+    fi
+}
+
 operacao_com_sudo() {
     local cmd="$1"
     local desc="${2:-Operação}"
     local dry_msg="${3:-}"
-
+    clear 2>/dev/null || printf '\033c'
     echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}🔧 $desc${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -160,6 +168,7 @@ operacao_com_sudo() {
         [ -n "$dry_msg" ] && echo -e "${YELLOW}[DRY RUN] $dry_msg${NC}"
         echo -e "${YELLOW}[DRY RUN] Comando: $cmd${NC}"
         echo -e "${GREEN}✅ [DRY RUN] Concluído (sem alterações)${NC}"
+        eazy_pausa_terminal "DRY-RUN concluído. Pressione Enter para voltar."
         return 0
     fi
 
@@ -172,10 +181,10 @@ operacao_com_sudo() {
     else
         echo -e "${RED}❌ Falha na operação (código $ret)${NC}"
         [ -n "$output" ] && echo "$output"
-    fi
+        fi
+    eazy_pausa_terminal "$desc concluída. Pressione Enter para voltar."
     return "$ret"
 }
-
 toggle_dry_run() {
     if [ "${DRY_RUN:-0}" = "1" ]; then
         DRY_RUN="0"
@@ -1100,6 +1109,10 @@ limpeza_auto() {
     qtd_logs=$(find /var/log -type f -name '*.log' -mtime +"$dias" 2>/dev/null | wc -l)
     qtd_tmp=$(find /tmp -type f -user "$(id -un)" -mtime +"$dias" 2>/dev/null | wc -l)
     qtd_lixeira=$(find "$HOME/.local/share/Trash/files" -type f -mtime +"$dias" 2>/dev/null | wc -l)
+    bytes_logs=$(find /var/log -type f -name '*.log' -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    bytes_tmp=$(find /tmp -type f -user "$(id -un)" -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    bytes_lixeira=$(find "$HOME/.local/share/Trash/files" -type f -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
+    bytes_limpeza=$((bytes_logs + bytes_tmp + bytes_lixeira))
     {
         echo "PRÉVIA DA LIMPEZA AUTOMÁTICA"
         echo "================================"
@@ -1110,6 +1123,8 @@ limpeza_auto() {
         echo "  • Logs antigos: $qtd_logs arquivo(s) em /var/log"
         echo "  • Temporários antigos: $qtd_tmp arquivo(s) seus em /tmp"
         echo "  • Lixeira antiga: $qtd_lixeira arquivo(s)"
+        echo "  • Espaço calculado dos arquivos elegíveis: $(formatar_bytes_label "$bytes_limpeza")"
+        echo "  • O cálculo acima também é exibido no DRY-RUN; nada será apagado nesse modo."
         echo "  • Cache APT/DNF/Pacman e Docker: limpeza específica do gerenciador"
         echo "  • Journal: vacuum de ${dias}d"
         echo ""
@@ -1238,9 +1253,15 @@ manutencao_dados_eazy() {
 
     if eazy_dry_run_bloquear "limpeza dos dados próprios do eazy"; then
         whiptail --title "DRY-RUN" --msgbox "Simulação concluída. Nada foi apagado.\n\nEspaço que seria liberado: $(formatar_bytes_label "$total_bytes")" 10 76
+        clear 2>/dev/null || printf '\033c'
+        printf 'DRY-RUN concluído. Espaço que seria liberado: %s\n' "$(formatar_bytes_label "$total_bytes")"
+        eazy_pausa_terminal "Pressione Enter para voltar."
         return
     fi
 
+    clear 2>/dev/null || printf '\033c'
+    echo -e "\n${CYAN}🧹 LIMPEZA DOS DADOS DO EAZY${NC}"
+    echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}"
     for item in "${itens[@]}"; do
         case "$item" in
             playlists) find "$PLAYLIST_DIR_PADRAO" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true ;;
@@ -1255,6 +1276,9 @@ manutencao_dados_eazy() {
         esac
     done
     whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
+    clear 2>/dev/null || printf '\033c'
+    printf 'Limpeza seletiva concluída. Espaço processado: %s\n' "$(formatar_bytes_label "$total_bytes")"
+    eazy_pausa_terminal "Pressione Enter para voltar."
 }
 
 eazy_limpar_playlist_ausentes() {
@@ -1870,6 +1894,7 @@ carregar_filtro_dir() {
     linha=$(awk -F '\t' -v d="$dir" '$1 == d {line=$0} END {print line}' "$FILTER_POSITIONS_FILE" 2>/dev/null)
     if [ -n "$linha" ]; then
         FZF_QUERY="${linha#*$'\t'}"
+        FZF_QUERY=$(printf '%s' "$FZF_QUERY" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
     else
         FZF_QUERY=""
     fi
@@ -6397,7 +6422,7 @@ while true; do
         ')")
 
     # --print-query + --expect: linha1=query, linha2=tecla, resto=seleção
-    FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p')
+    FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p' | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
     tecla=$(printf '%s\n' "$saida_fzf" | sed -n '2p')
     escolha_raw=$(printf '%s\n' "$saida_fzf" | tail -n +3)
     # Remove .. / Voltar de seleções múltiplas (Ctrl-A, TAB, espaço…)
