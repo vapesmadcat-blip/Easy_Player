@@ -4436,7 +4436,6 @@ obter_lista_rapida() {
                 sub(/^\.\//, "", caminho_abs)
                 caminho_abs = c_root "/" caminho_abs
             }
-            marca = selected[caminho_abs] ? "✓ " : "  "
             sub(/^\.\//, "", caminho)
 
             nome_exib = caminho
@@ -4451,20 +4450,20 @@ obter_lista_rapida() {
             ext = tolower(ext_arr[n])
 
             if (ext ~ /^(m3u|pls)$/) {
-                printf "%015d\t%s%s📜 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s📜 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
-                printf "%015d\t%s%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-                printf "%015d\t%s%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_img, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-                printf "%015d\t%s%s📦 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_zip, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s📦 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else {
-                printf "%015d\t%s%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_vid, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
         rm -f "$tmp_busca"
@@ -4537,8 +4536,6 @@ obter_lista_rapida() {
             sub(/^\.\//, "", caminho_abs)
             caminho_abs = c_root "/" caminho_abs
         }
-        marca = selected[caminho_abs] ? "✓ " : "  "
-
         sub(/^\.\//, "", caminho)
         nome_exib = (length(nome) > 38) ? substr(nome, 1, 38) ".." : nome
         mb = sprintf("%.1f", bytes / 1048576)
@@ -4550,23 +4547,23 @@ obter_lista_rapida() {
         ext = tolower(ext_arr[n])
 
         if (tipo == "d") {
-            printf "%015d\t%s%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
-                chave, c_dir, marca, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
+            printf "%015d\t%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
+                chave, c_dir, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
         } else if (ext ~ /^(m3u|pls)$/) {
-            printf "%015d\t%s%s📜 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s📜 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
-            printf "%015d\t%s%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-            printf "%015d\t%s%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_img, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-            printf "%015d\t%s%s📦 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_zip, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s📦 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else {
-            printf "%015d\t%s%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_vid, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
         }
     }'
 }
