@@ -1,8 +1,9 @@
-eazy (3.0-76) unstable; urgency=medium
+eazy (3.0-77) unstable; urgency=medium
 
-
-
-  * Fix -m maintenance dispatch, clear screen before automatic cleanup, and pause after menu actions.
+  * Make normal-browser selection global across directories.
+  * Keep Ctrl-A, Ctrl-R and Ctrl-X scoped to direct files in the current directory.
+  * Make Enter execute only the cursor item and Alt-Enter execute the accumulated selection.
+  * Add explicit S/N confirmation for clearing the global selection.
 
  -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 29 Aug 2026 00:30:00 +0000
 

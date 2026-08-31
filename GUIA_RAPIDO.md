@@ -2,7 +2,9 @@
 
 ## Iniciar
 
-Execute `eazy` para abrir o navegador. Use `Enter` para entrar em pastas ou abrir arquivos, `Tab` para selecionar e avançar, `Espaço` para selecionar sem avançar e `Esc` para cancelar uma operação interrompível.
+Execute `eazy` para abrir o navegador. Use `Enter` para executar somente o item sob o cursor, `Tab` para alternar o arquivo atual na seleção global e avançar, `Espaço` para alternar sem avançar e `Esc` para cancelar uma operação interrompível. Para executar o conjunto acumulado entre pastas, use `Alt-Enter`.
+
+No navegador normal, `Ctrl-A`, `Ctrl-R` e `Ctrl-X` operam somente nos arquivos diretamente da pasta atual; `Alt-X` limpa toda a seleção global depois de uma confirmação textual `S/N`. A linha `..` e as subpastas nunca entram na seleção global.
 
 ## Pesquisa por nome e extensão
 
@@ -105,6 +107,6 @@ Nas limpezas, a tela é limpa antes do comando, o resultado fica visível depois
 
 ## Seleção e filas
 
-Use `Insert` para enviar itens às filas 1, 2 ou 3. `Ctrl-P` alterna entre as filas e a pasta. Em listas com múltiplos itens, `Tab` seleciona e avança; `Espaço` marca o item mantendo o cursor no mesmo lugar.
+Use `Insert` para enviar itens às filas 1, 2 ou 3. `Ctrl-P` alterna entre as filas e a pasta. No navegador normal, `Tab` alterna o arquivo na seleção global e avança; `Espaço` alterna o arquivo mantendo o cursor no mesmo lugar. `Enter` executa só o cursor, enquanto `Alt-Enter` executa todos os arquivos acumulados, inclusive os escolhidos em outras pastas.
 
 O guia completo está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md).
