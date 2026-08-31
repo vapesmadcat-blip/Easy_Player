@@ -1,4 +1,11 @@
-## 3.0-61 — Guia rápido e manutenção revisada
+## 3.0-62 — Navegação e manutenção avançada
+
+- `Home` vai ao primeiro item e `End` ao último item das listas, inclusive filas temporárias.
+- A seleção normal não é descartada automaticamente após ações; o usuário a remove desmarcando os itens.
+- Adicionado `eazy -a`, com lista única segmentada por PLAYLISTS, LISTAS TEMPORÁRIAS, DUPLICADOS, PESQUISAS SALVAS, NOTAS, HISTÓRICO/DOWNLOADS e ESTADO/BACKUPS.
+- A manutenção avançada mostra preview de conteúdo, calcula espaço, respeita DRY-RUN e registra exclusões em ordem, data, hora, tamanho e caminho completo.
+
+## 3.0-62 — Guia rápido e manutenção revisada
 
 - Adicionado o GUIA_RAPIDO.md com exemplos práticos de busca por curingas, conteúdo, frases e operadores.
 - Limpezas agora exibem cálculo de espaço também no DRY-RUN.

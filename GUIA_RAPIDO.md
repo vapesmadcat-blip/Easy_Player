@@ -97,7 +97,9 @@ Salve a pesquisa com um nome quando quiser reutilizá-la. O eazy guarda os parâ
 
 ## Manutenção e DRY-RUN
 
-Use `eazy -m` ou abra a manutenção pelo menu `Ctrl-K`. A limpeza seletiva permite escolher playlists, listas, pesquisas, notas, histórico, downloads, cache, estado e backups. O modo **DRY-RUN** mostra o que seria feito, calcula o espaço estimado e não remove dados.
+Use `eazy -m
+
+eazy -a` ou abra a manutenção pelo menu `Ctrl-K`. A limpeza seletiva permite escolher playlists, listas, pesquisas, notas, histórico, downloads, cache, estado e backups. O modo **DRY-RUN** mostra o que seria feito, calcula o espaço estimado e não remove dados.
 
 Nas limpezas, a tela é limpa antes do comando, o resultado fica visível depois da execução e o eazy aguarda confirmação para retornar ao menu. Antes de qualquer remoção real, revise a prévia e a confirmação.
 

@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-61"
+EAZY_VERSION="3.0-62"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1441,6 +1441,71 @@ validar_dados_eazy() {
     return 0
 }
 
+manutencao_avancada_eazy() {
+    local manifest="/tmp/eazy-maint-all-$$" selecionados ordem=0 linha caminho bytes categoria
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    : > "$manifest"
+    adicionar_segmento() {
+        local titulo="$1"; shift
+        printf '\033[1;35m━━ %s ━━\033[0m\n' "$titulo" >> "$manifest"
+        for caminho in "$@"; do
+            [ -f "$caminho" ] || continue
+            printf '  %s\n' "$(readlink -f -- "$caminho" 2>/dev/null || echo "$caminho")" >> "$manifest"
+        done
+    }
+    mapfile -t _pls < <(find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -name '*.m3u' -o -name '*.m3u8' -o -name '*.pls' \) -print 2>/dev/null | sort)
+    adicionar_segmento "PLAYLISTS" "${_pls[@]}" "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
+    mapfile -t _tmp < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist*' -print 2>/dev/null | sort)
+    adicionar_segmento "LISTAS TEMPORÁRIAS" "${_tmp[@]}"
+    adicionar_segmento "DUPLICADOS" "$DUP_LISTA"
+    mapfile -t _pesq < <(find "$SAVED_SEARCHES_DIR" -type f -print 2>/dev/null | sort)
+    adicionar_segmento "PESQUISAS SALVAS" "${_pesq[@]}"
+    mapfile -t _notas < <(find "$NOTES_DIR" -type f -print 2>/dev/null | sort)
+    adicionar_segmento "NOTAS" "${_notas[@]}"
+    adicionar_segmento "HISTÓRICO E DOWNLOADS" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$DOWNLOAD_PASSWORDS"
+    mapfile -t _estado < <(find "$CONFIG_DIR" -maxdepth 1 -type f \( -name '*session*' -o -name '*position*' -o -name '*dest*' -o -name '*mark*' \) -print 2>/dev/null | sort)
+    adicionar_segmento "ESTADO E BACKUPS" "${_estado[@]}"
+    clear 2>/dev/null || printf '\033c'
+    echo -e "\033[1;36mMANUTENÇÃO AVANÇADA — selecione os arquivos para apagar\033[0m"
+    echo "Espaço marca; Enter confirma. Cabeçalhos coloridos não são apagáveis."
+    selecionados=$(grep -v '^$' "$manifest" | fzf --ansi --multi --no-sort --border=rounded --header='Preview à direita · selecione somente arquivos' --preview='linha={}; case "$linha" in *━━*) printf "%s\\n" "$linha" ;; *) p="${linha#  }"; if [ -f "$p" ]; then sed -n "1,120p" -- "$p"; else echo "Arquivo não existe: $p"; fi ;; esac' --preview-window='right:55%:wrap' --expect=enter 2>/dev/tty) || { rm -f "$manifest"; return; }
+    selecionados=$(printf '%s\n' "$selecionados" | tail -n +2)
+    [ -n "$selecionados" ] || { rm -f "$manifest"; return; }
+    total_bytes=0
+    while IFS= read -r linha; do
+        [[ "$linha" == *━━* ]] && continue
+        caminho="${linha#  }"
+        [ -f "$caminho" ] || continue
+        bytes=$(stat -c '%s' -- "$caminho" 2>/dev/null || echo 0)
+        total_bytes=$((total_bytes + bytes))
+    done <<< "$selecionados"
+    whiptail --title "Confirmar exclusão" --yesno "Arquivos selecionados: $(printf '%s\n' "$selecionados" | grep -c '^')\nEspaço: $(formatar_bytes_label "$total_bytes")\n\nExcluir somente os itens selecionados?" 11 74 || { rm -f "$manifest"; return; }
+    local log_file="$CONFIG_DIR/maintenance_deletions.log"
+    mkdir -p "$(dirname -- "$log_file")"
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        clear 2>/dev/null || printf '\033c'
+        echo "DRY-RUN: nenhum arquivo será apagado. Espaço que seria liberado: $(formatar_bytes_label "$total_bytes")"
+    fi
+    while IFS= read -r linha; do
+        [[ "$linha" == *━━* ]] && continue
+        caminho="${linha#  }"; [ -f "$caminho" ] || continue
+        ordem=$((ordem + 1)); bytes=$(stat -c '%s' -- "$caminho" 2>/dev/null || echo 0)
+        categoria="arquivo selecionado"
+        if [ "${DRY_RUN:-0}" = "1" ]; then
+            printf '[DRY-RUN] %02d | %s | %s bytes | %s\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho"
+        else
+            if rm -f -- "$caminho"; then
+                printf '%02d | %s | %s bytes | %s | EXCLUÍDO\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho" | tee -a "$log_file"
+            else
+                printf '%02d | %s | %s bytes | %s | FALHA\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho" | tee -a "$log_file"
+            fi
+        fi
+    done <<< "$selecionados"
+    printf '\nLog: %s\n' "$log_file"
+    eazy_pausa_terminal "Operação concluída. Pressione Enter para voltar."
+    rm -f "$manifest"
+}
+
 menu_manutencao_eazy() {
     local opcao
     opcao=$(whiptail --title "🧰 Manutenção do próprio eazy" --menu \
@@ -1516,8 +1581,11 @@ menu_manutencao() {
 # --- TRATAMENTO DE ARGUMENTOS INICIAIS ---
 # O despacho de -m ocorre depois das definições de função, no início do fluxo principal.
 EAZY_OPEN_MAINTENANCE=0
+EAZY_OPEN_ADV_MAINTENANCE=0
 if [ "${1:-}" = "-m" ] || [ "${1:-}" = "--maintenance" ]; then
     EAZY_OPEN_MAINTENANCE=1
+elif [ "${1:-}" = "-a" ] || [ "${1:-}" = "--advanced-maintenance" ]; then
+    EAZY_OPEN_ADV_MAINTENANCE=1
 fi
 
 # Verificação de proteção com senha (ao iniciar)
@@ -6139,6 +6207,10 @@ mover_arquivos() {
     sleep 1.5
 }
 
+if [ "${EAZY_OPEN_ADV_MAINTENANCE:-0}" = "1" ]; then
+    manutencao_avancada_eazy
+    exit $?
+fi
 if [ "${EAZY_OPEN_MAINTENANCE:-0}" = "1" ]; then
     menu_manutencao_direta
     exit $?
@@ -6371,6 +6443,8 @@ while true; do
         # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
         FZF_NORMAL_SELECT_BINDS=(
             --bind='space:toggle+transform-header(eazy_status_header {+})'
+            --bind='home:first'
+            --bind='end:last'
             --bind='tab:toggle+down+transform-header(eazy_status_header {+})'
             --bind='shift-tab:toggle+up+transform-header(eazy_status_header {+})'
         )
@@ -6404,6 +6478,8 @@ while true; do
         "${FZF_BIND_T[@]}" \
         "${FZF_BIND_ESC[@]}" \
         "${FZF_SEARCH_ESC_BIND[@]}" \
+        --bind="home:first" \
+        --bind="end:last" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
@@ -7240,7 +7316,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         # Seleção normal: toca só o que foi marcado / o item sob o cursor
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        : > "$SELECTED_FILE"
+        # A seleção persistente não é apagada após uma ação; ela só sai quando
+        # o usuário a desmarca explicitamente no navegador.
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
@@ -7336,7 +7413,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        : > "$SELECTED_FILE"
+        # A seleção persistente não é apagada após uma ação; ela só sai quando
+        # o usuário a desmarca explicitamente no navegador.
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
@@ -7434,7 +7512,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         # Extrai caminhos absolutos da seleção (TAB/ESPAÇO)
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        : > "$SELECTED_FILE"
+        # A seleção persistente não é apagada após uma ação; ela só sai quando
+        # o usuário a desmarca explicitamente no navegador.
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')

@@ -1,14 +1,14 @@
 # Instalação do eazy
 
-## Debian / Ubuntu — versão 3.0-61
+## Debian / Ubuntu — versão 3.0-62
 
 A instalação oficial usa a **Release do GitHub**, o pacote `.deb` e seu checksum SHA-256:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-61/eazy_3.0-61_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-61/eazy_3.0-61_all.deb.sha256
-sha256sum -c eazy_3.0-61_all.deb.sha256
-sudo apt install ./eazy_3.0-61_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb.sha256
+sha256sum -c eazy_3.0-62_all.deb.sha256
+sudo apt install ./eazy_3.0-62_all.deb
 eazy
 ```
 
@@ -17,7 +17,7 @@ O comando `sha256sum -c` deve informar `OK` antes da instalação. Não instale 
 Para remover os arquivos baixados depois da instalação:
 
 ```bash
-rm -f eazy_3.0-61_all.deb eazy_3.0-61_all.deb.sha256
+rm -f eazy_3.0-62_all.deb eazy_3.0-62_all.deb.sha256
 ```
 
 ## Atualização a partir do código
@@ -27,8 +27,8 @@ git clone https://github.com/vapesmadcat-blip/Easy_Player.git
 cd Easy_Player
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sha256sum packaging/eazy/dist/eazy_3.0-61_all.deb
-sudo apt install ./packaging/eazy/dist/eazy_3.0-61_all.deb
+sha256sum packaging/eazy/dist/eazy_3.0-62_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-62_all.deb
 eazy
 ```
 
@@ -64,7 +64,7 @@ Para filtrar o conteúdo, escolha **Sim — digitar uma ou mais palavras-chave**
 
 A ordem é: primeiro o eazy encontra os arquivos pelo nome/extensão, depois verifica a expressão no conteúdo de cada arquivo e só então mostra a lista. Pesquisas salvas preservam a expressão e o snapshot; `Alt-R` solicita uma nova execução.
 
-## Recursos da versão 3.0-61
+## Recursos da versão 3.0-62
 
 O editor de notas agora é o mini editor visual incluído no pacote, sem dependência de Vim, vi ou nano. Seus atalhos são `Ctrl-N` para nova nota, `Ctrl-S` para salvar e abrir outra, `Esc` para salvar e sair, `Enter` para nova linha e `Backspace` para apagar. O gerenciador mantém `Ctrl-E`, `Del`, `Ctrl-R` e `Ctrl-X` para listar, apagar, renomear e exportar notas.
 
