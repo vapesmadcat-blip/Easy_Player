@@ -97,14 +97,27 @@ Salve a pesquisa com um nome quando quiser reutilizá-la. O eazy guarda os parâ
 
 ## Manutenção e DRY-RUN
 
-Use `eazy -m
-
-eazy -a` ou abra a manutenção pelo menu `Ctrl-K`. A limpeza seletiva permite escolher playlists, listas, pesquisas, notas, histórico, downloads, cache, estado e backups. O modo **DRY-RUN** mostra o que seria feito, calcula o espaço estimado e não remove dados.
+Use `eazy -m` para a manutenção normal ou `eazy -a` para a manutenção avançada. A limpeza seletiva permite escolher playlists, listas, pesquisas, notas, histórico, downloads, cache, estado e backups. O modo **DRY-RUN** mostra o que seria feito, calcula o espaço estimado e não remove dados.
 
 Nas limpezas, a tela é limpa antes do comando, o resultado fica visível depois da execução e o eazy aguarda confirmação para retornar ao menu. Antes de qualquer remoção real, revise a prévia e a confirmação.
 
-## Seleção e filas
+## Seleção persistente e filas
 
-Use `Insert` para enviar itens às filas 1, 2 ou 3. `Ctrl-P` alterna entre as filas e a pasta. Em listas com múltiplos itens, `Tab` seleciona e avança; `Espaço` marca o item mantendo o cursor no mesmo lugar.
+A seleção normal é persistente por caminho completo. Ela não é apagada quando você entra em um diretório, executa um arquivo, volta por `..` ou muda de lista. Ao entrar em uma pasta que foi selecionada, os arquivos marcados daquela pasta reaparecem marcados.
+
+| Tecla | Ação |
+|---|---|
+| `Espaço` ou `Tab` | Marca/desmarca o item sob o cursor. Em um diretório, marca/desmarca recursivamente todos os arquivos dele. |
+| `Ctrl-A` | Marca os itens visíveis da lista atual; não faz seleção recursiva. |
+| `Enter` | Executa somente o item sob o cursor, ignorando a seleção global. Em um diretório, entra nele e preserva as seleções anteriores. |
+| `Alt+Enter` | Executa todos os arquivos atualmente marcados na seleção global. |
+| `Ctrl-X` | Zera somente a seleção local do diretório atual. |
+| `Alt-X` | Pergunta e, após confirmação, zera toda a seleção global. |
+| `Home` | Vai ao primeiro item da lista. |
+| `End` | Vai ao último item da lista. |
+
+A seleção é armazenada por caminho absoluto em `~/.config/eazy/selected_paths`, evitando que a posição visual de um arquivo em outra pasta seja confundida com a seleção real. Use `Insert` para enviar itens às filas 1, 2 ou 3 e `Ctrl-P` para alternar entre filas e pasta.
+
+Exemplo: se três arquivos e três diretórios estiverem marcados, `Enter` sobre um diretório apenas entra nele e preserva as seis marcações. Dentro dele, marque mais dois arquivos e pressione `Enter` sobre `..`; ao voltar, todas as marcações continuam ativas. Para executar tudo, use `Alt+Enter`.
 
 O guia completo está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md).
