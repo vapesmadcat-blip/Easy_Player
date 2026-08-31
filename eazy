@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-62"
+EAZY_VERSION="3.0-73"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -4601,14 +4601,16 @@ eazy_sel_toggle_path() {
     rm -f "$tmp" "$tmp.2" 2>/dev/null || true
 }
 eazy_sel_select_visible() {
-    local q="$1" linha p abs tmp="${SELECTED_FILE}.tmp"
+    # Ctrl-A seleciona somente arquivos diretamente no diretório atual.
+    local q="$1" linha p abs dir_atual="$(pwd -P)" tmp="${SELECTED_FILE}.tmp"
     cat "$SELECTED_FILE" 2>/dev/null > "$tmp" || : > "$tmp"
     while IFS= read -r linha; do
         [ -z "$linha" ] && continue
         p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-        [ -z "$p" ] && continue
-        [[ "$p" == ".." ]] && continue
+        [ -z "$p" ] || [[ "$p" == ".." ]] && continue
         abs=$(eazy_sel_abs "$p") || continue
+        [ -f "$abs" ] || continue
+        [ "$(dirname -- "$abs")" = "$dir_atual" ] || continue
         printf '%s\n' "$abs" >> "$tmp"
     done < <(eazy_lista_filtrada "$q" 2>/dev/null)
     sort -u "$tmp" > "${tmp}.sorted" 2>/dev/null || cp -f "$tmp" "${tmp}.sorted"
@@ -6515,7 +6517,7 @@ while true; do
             --bind="shift-tab:execute-silent(eazy_sel_toggle_path {})+reload(eazy_lista_filtrada '{q}')+up+transform-header(eazy_status_header)"
         )
     fi
-    saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
+    saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --ansi \
         --disabled \
         --print-query \
         --query="$FZF_QUERY" \
