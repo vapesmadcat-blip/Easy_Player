@@ -7,10 +7,10 @@ Navegador e reprodutor multimídia no **terminal**, rápido, orientado por tecla
 ### Debian / Ubuntu: pacote `.deb` da Release
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-77/eazy_3.0-77_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-77/eazy_3.0-77_all.deb.sha256
-sha256sum -c eazy_3.0-77_all.deb.sha256
-sudo apt install ./eazy_3.0-77_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb.sha256
+sha256sum -c eazy_3.0-62_all.deb.sha256
+sudo apt install ./eazy_3.0-62_all.deb
 eazy
 ```
 
@@ -35,7 +35,7 @@ O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem p
 ```bash
 chmod +x packaging/build-deb.sh
 ./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-77_all.deb
+sudo apt install ./packaging/eazy/dist/eazy_3.0-62_all.deb
 ```
 
 ### Dependências manuais no Debian/Ubuntu
@@ -69,12 +69,10 @@ eazy --config
 
 | Tecla | Ação |
 |---|---|
-| `Enter` | Executar somente o item sob o cursor |
+| `Enter` | Tocar, entrar na pasta ou abrir playlist `.m3u` |
 | `Esc` | Sair da busca recursiva e voltar à pasta normal |
 | `Ctrl-Backspace` | Voltar ao último diretório |
-| `Tab` / `Espaço` | Alternar arquivo na seleção global |
-| `Alt-Enter` | Executar todos os arquivos da seleção global |
-| `Alt-X` | Limpar toda a seleção global após confirmação `S/N` |
+| `Tab` / `Espaço` | Marcar item |
 | `Insert` | Enviar para fila 1, 2 ou 3 |
 | `Ctrl-P` | Alternar filas 1→2→3→diretório |
 | `Ctrl-F` | Busca recursiva por extensão, tamanho e conteúdo |
@@ -88,8 +86,8 @@ eazy --config
 | `F9` | Configuração e overview do sistema |
 | `F10` | HELP EXPANDIDO com atalhos e manutenção |
 | `F12` | Duplicados: selecionar uma amostra por grupo |
-| `Ctrl-R` | Inverter a seleção no diretório atual |
-| `Ctrl-A` / `Ctrl-X` | Selecionar / limpar arquivos do diretório atual |
+| `Ctrl-R` | Duplicados: inverter seleção |
+| `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
 | `Q` / `X` | Sair do programa |
 
 ### Pesquisa avançada por nome e conteúdo
@@ -108,8 +106,6 @@ Para pesquisar dentro dos arquivos, escolha **Sim — digitar uma ou mais palavr
 | `"erro grave" AND NOT debug` | Exige a frase e exclui `debug` |
 
 O eazy primeiro filtra pelo nome/extensão e depois verifica o conteúdo dos arquivos restantes. Pesquisas salvas guardam a expressão e o snapshot do resultado; `Alt-R` executa um remake quando você quiser atualizar a pesquisa.
-
-No navegador normal, `Enter` executa somente o item sob o cursor. `Tab`/`Espaço` acumulam arquivos na seleção global, inclusive ao atravessar diretórios; `Alt-Enter` executa esse conjunto acumulado. `Ctrl-A`, `Ctrl-R` e `Ctrl-X` afetam somente os arquivos diretamente da pasta atual e não descem em subpastas.
 
 ### Editor de notas rápidas
 

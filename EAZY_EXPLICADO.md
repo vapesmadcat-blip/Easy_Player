@@ -31,24 +31,21 @@ O preview pode ser ligado ou desligado. Quando ativo, o eazy tenta mostrar infor
 
 ## 4. Seleção de arquivos e diretórios
 
-A seleção múltipla é uma das funções centrais do eazy. No navegador normal, a seleção global contém arquivos escolhidos explicitamente e pode atravessar diretórios: marque arquivos em uma pasta, entre em outra, marque mais arquivos, volte com `..` e execute o conjunto ao final.
+A seleção múltipla é uma das funções centrais do eazy. Arquivos e diretórios podem ser selecionados para reprodução, cópia, movimentação, exclusão, inclusão em filas, análise ou conversão.
 
-| Tecla | Ação no navegador normal |
+| Tecla | Ação |
 |---|---|
-| `Tab` | Alterna o arquivo atual na seleção global e avança |
-| `Shift-Tab` | Alterna o arquivo atual na seleção global e volta |
-| `Espaço` | Alterna o arquivo atual sem avançar |
-| `Enter` | Executa somente o item sob o cursor |
-| `Alt-Enter` | Executa todos os arquivos acumulados na seleção global |
-| `Ctrl-A` | Seleciona somente os arquivos diretamente do diretório atual |
-| `Ctrl-R` | Inverte a seleção somente no diretório atual |
-| `Ctrl-X` | Limpa a seleção somente no diretório atual |
-| `Alt-X` | Limpa toda a seleção global após confirmação `S/N` |
+| `Tab` | Seleciona o item atual e avança para o próximo |
+| `Shift-Tab` | Seleciona o item atual e volta para o anterior |
+| `Espaço` | Marca ou desmarca o item atual sem avançar |
+| `Enter` | Abre, reproduz, entra no diretório ou confirma a ação |
+| `Ctrl-A` | Seleciona todos, conforme o contexto |
+| `Ctrl-X` | Limpa a seleção em contextos que usam essa ação |
 | `Del` | Executa a remoção correspondente ao modo atual |
 
-Diretórios e a linha `..` não entram na seleção global do navegador normal. `Ctrl-A`, `Ctrl-R` e `Ctrl-X` não descem em subpastas e preservam as seleções acumuladas em outros diretórios. Os modos especializados, como duplicados e playlists, mantêm as regras próprias de cada contexto.
+A seleção pode conter diretórios. Uma pasta selecionada é reconhecida como diretório, recebe ícone próprio, tem tamanho calculado recursivamente e não é tratada como uma mídia comum pelo player.
 
-O cabeçalho informa a quantidade de arquivos selecionados e os bytes ocupados. A seleção global é armazenada em `~/.config/eazy/selected_paths` por padrão, pode ser alterada por `EAZY_SELECTED_FILE` e é normalizada para remover caminhos inexistentes.
+O cabeçalho informa a quantidade de itens selecionados e os bytes ocupados. Para um arquivo, o cálculo usa o tamanho do arquivo. Para uma pasta, o cálculo considera o conteúdo recursivo da pasta.
 
 ## 5. Navegação entre diretórios
 

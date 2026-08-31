@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.1"
+EAZY_VERSION="3.0-75"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -2180,17 +2180,11 @@ eazy_lista_filtrada() {
     ' "$f"
 
     # 2) demais itens — filtro + highlight (verde base + amarelo no match)
-    awk -F '\t' -v q="$q" -v OFS='\t' -v selected_file="${SELECTED_FILE:-}" -v c_root="$(pwd -P)" '
+    awk -F '\t' -v q="$q" -v OFS='\t' '
     BEGIN {
         # Match: amarelo brilhante no fundo preto do terminal
         HL = "\033[1;93m"
         OFF = "\033[0m"
-        if (selected_file != "") {
-            while ((getline sp < selected_file) > 0) {
-                if (sp != "") selected[sp] = 1
-            }
-            close(selected_file)
-        }
     }
     function strip_ansi(s) {
         gsub(/\033\[[0-9;]*m/, "", s)
@@ -2232,29 +2226,13 @@ eazy_lista_filtrada() {
         }
         return base s OFF
     }
-    function abs_path(p,    cleaned) {
-        if (p == "") return p
-        if (substr(p, 1, 1) == "/") return p
-        cleaned = p
-        cleaned = (substr(p, 1, 2) == "./") ? substr(p, 3) : p
-        return c_root "/" cleaned
-    }
-    function prefix_for(path,    a) {
-        a = abs_path(path)
-        return ((a in selected) || (path in selected)) ? "✓ " : "  "
-    }
     $NF == ".." { next }
     $2 ~ /◀ Voltar/ { next }
     $2 ~ /📁 \.\./ { next }
     {
+        if (q == "") { print; next }
         nome_plain = strip_ansi($2)
         path_plain = strip_ansi($NF)
-        if (q == "") {
-            base = cor_base($2)
-            $2 = base prefix_for(path_plain) nome_plain OFF
-            print
-            next
-        }
         hay = lower(nome_plain) " " lower(path_plain)
         n = split(lower(q), toks, /[[:space:]]+/)
         ok = 1
@@ -2264,7 +2242,7 @@ eazy_lista_filtrada() {
         }
         if (!ok) next
         base = cor_base($2)
-        $2 = base prefix_for(path_plain) hi_all(nome_plain, base)
+        $2 = hi_all(nome_plain, base)
         print
     }
     ' "$f"
@@ -2790,15 +2768,6 @@ eazy_status_header() {
             sel_bytes=$((sel_bytes + t))
             sel_count=$((sel_count + 1))
         done
-    elif [ -f "${SELECTED_FILE:-}" ]; then
-        local p t
-        while IFS= read -r p || [ -n "$p" ]; do
-            [ -n "$p" ] || continue
-            t=$(tamanho_caminho "$p")
-            t=$(echo "$t" | tr -cd '0-9'); t=${t:-0}
-            sel_bytes=$((sel_bytes + t))
-            sel_count=$((sel_count + 1))
-        done < "$SELECTED_FILE"
     fi
     sel_h=$(formatar_bytes_label "$sel_bytes")
     printf "DRY-RUN: %s  |  HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" "$livre_h" "$total_h" "$sel_h" "$sel_count"
@@ -4619,133 +4588,6 @@ caminho_absoluto() {
     fi
 }
 
-# --- Seleção global do navegador normal -------------------------------------
-# SELECTED_FILE contém somente arquivos regulares escolhidos explicitamente.
-# A seleção é global entre diretórios, mas Ctrl-A/Ctrl-R/Ctrl-X operam apenas
-# sobre os arquivos diretamente visíveis no diretório atual.
-eazy_selection_path() {
-    local linha="${1:-}" p
-    [ -n "$linha" ] || return 1
-    eazy_eh_navegacao "$linha" && return 1
-    p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-    [ -n "$p" ] || return 1
-    p=$(caminho_absoluto "$p")
-    [ -f "$p" ] || return 1
-    printf '%s\n' "$p"
-}
-
-eazy_selection_normalize() {
-    [ -n "${SELECTED_FILE:-}" ] || return 0
-    mkdir -p "$(dirname -- "$SELECTED_FILE")" 2>/dev/null || true
-    touch "$SELECTED_FILE" 2>/dev/null || return 0
-    local tmp p abs
-    tmp="${SELECTED_FILE}.normalize.tmp.$$"
-    : > "$tmp" || return 0
-    while IFS= read -r p || [ -n "$p" ]; do
-        [ -n "$p" ] || continue
-        abs=$(caminho_absoluto "$p")
-        [ -f "$abs" ] || continue
-        grep -Fxq -- "$abs" "$tmp" 2>/dev/null || printf '%s\n' "$abs" >> "$tmp"
-    done < "$SELECTED_FILE"
-    mv -f -- "$tmp" "$SELECTED_FILE" 2>/dev/null || rm -f "$tmp"
-}
-
-eazy_selection_current_files() {
-    local q="${1:-}" linha p abs dir_atual
-    dir_atual=$(pwd -P)
-    [ -f "${LISTA_FZF_FILE:-}" ] || return 0
-    {
-        if [ -n "$q" ]; then
-            eazy_lista_filtrada "$q"
-        else
-            cat -- "$LISTA_FZF_FILE"
-        fi
-    } | while IFS= read -r linha || [ -n "$linha" ]; do
-        p=$(eazy_selection_path "$linha") || continue
-        abs=$(readlink -f -- "$p" 2>/dev/null || printf '%s\n' "$p")
-        [ "$(dirname -- "$abs")" = "$dir_atual" ] || continue
-        printf '%s\n' "$abs"
-    done | awk '!seen[$0]++'
-}
-
-eazy_selection_toggle_path() {
-    local linha="${1:-}" p tmp
-    p=$(eazy_selection_path "$linha") || return 0
-    eazy_selection_normalize
-    tmp="${SELECTED_FILE}.tmp.$$"
-    if grep -Fxq -- "$p" "$SELECTED_FILE" 2>/dev/null; then
-        grep -Fxv -- "$p" "$SELECTED_FILE" > "$tmp" 2>/dev/null || : > "$tmp"
-    else
-        cat "$SELECTED_FILE" 2>/dev/null > "$tmp" || : > "$tmp"
-        printf '%s\n' "$p" >> "$tmp"
-    fi
-    awk 'NF && !seen[$0]++' "$tmp" > "${tmp}.uniq" 2>/dev/null || cp -- "$tmp" "${tmp}.uniq"
-    mv -f -- "${tmp}.uniq" "$SELECTED_FILE"
-    rm -f "$tmp"
-}
-
-eazy_selection_select_all_current() {
-    local q="${1:-}"
-    eazy_selection_normalize
-    local tmp p
-    tmp="${SELECTED_FILE}.tmp.$$"
-    cat "$SELECTED_FILE" 2>/dev/null > "$tmp" || : > "$tmp"
-    while IFS= read -r p || [ -n "$p" ]; do
-        grep -Fxq -- "$p" "$tmp" 2>/dev/null || printf '%s\n' "$p" >> "$tmp"
-    done < <(eazy_selection_current_files "$q")
-    awk 'NF && !seen[$0]++' "$tmp" > "${tmp}.uniq" 2>/dev/null || cp -- "$tmp" "${tmp}.uniq"
-    mv -f -- "${tmp}.uniq" "$SELECTED_FILE"
-    rm -f "$tmp"
-}
-
-eazy_selection_clear_current() {
-    local q="${1:-}"
-    eazy_selection_normalize
-    local tmp p
-    tmp="${SELECTED_FILE}.tmp.$$"
-    : > "$tmp"
-    while IFS= read -r p || [ -n "$p" ]; do
-        grep -Fxq -- "$p" <(eazy_selection_current_files "$q") 2>/dev/null && continue
-        printf '%s\n' "$p" >> "$tmp"
-    done < "$SELECTED_FILE"
-    mv -f -- "$tmp" "$SELECTED_FILE"
-}
-
-eazy_selection_invert_current() {
-    local q="${1:-}"
-    eazy_selection_normalize
-    local current="${SELECTED_FILE}.current.$$" tmp="${SELECTED_FILE}.tmp.$$" p
-    eazy_selection_current_files "$q" > "$current"
-    : > "$tmp"
-    while IFS= read -r p || [ -n "$p" ]; do
-        grep -Fxq -- "$p" "$current" 2>/dev/null && continue
-        printf '%s\n' "$p" >> "$tmp"
-    done < "$SELECTED_FILE"
-    while IFS= read -r p || [ -n "$p" ]; do
-        grep -Fxq -- "$p" "$SELECTED_FILE" 2>/dev/null || printf '%s\n' "$p" >> "$tmp"
-    done < "$current"
-    awk 'NF && !seen[$0]++' "$tmp" > "${tmp}.uniq" 2>/dev/null || cp -- "$tmp" "${tmp}.uniq"
-    mv -f -- "${tmp}.uniq" "$SELECTED_FILE"
-    rm -f "$current" "$tmp"
-}
-
-eazy_selection_clear_global_confirm() {
-    eazy_selection_normalize
-    local n resposta
-    n=$(grep -c '^' "$SELECTED_FILE" 2>/dev/null || echo 0)
-    n=$(printf '%s' "$n" | tr -cd '0-9'); n=${n:-0}
-    [ "$n" -gt 0 ] || return 0
-    if [ -r /dev/tty ] && [ -w /dev/tty ]; then
-        printf '\nLimpar a seleção global (%s arquivo(s))? Digite S ou N: ' "$n" > /dev/tty
-        IFS= read -r resposta < /dev/tty || resposta=""
-        [[ "$resposta" =~ ^[Ss]$ ]] || return 0
-    else
-        command whiptail --title "Seleção global" --yesno \
-            "Limpar a seleção acumulada ($n arquivo(s))?" 9 62 2>/dev/null || return 0
-    fi
-    : > "$SELECTED_FILE"
-}
-
 # --- Editor de notas rápidas ---
 # Usa o mini editor visual fornecido no projeto; não depende de Vim, vi ou nano.
 # Ctrl-N cria nota; Ctrl-S salva e abre outra; Esc salva e sai.
@@ -6398,7 +6240,7 @@ fi
 registrar_status
 
 # Preview precisa estar exportado para o subprocess do fzf
-export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho somar_selecao_bytes info_disco caminho_absoluto eazy_selection_path eazy_selection_normalize eazy_selection_current_files eazy_selection_toggle_path eazy_selection_select_all_current eazy_selection_clear_current eazy_selection_invert_current eazy_selection_clear_global_confirm eazy_dup_path eazy_dup_normalize_selection eazy_dup_normalize_fixed eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert eazy_dup_amostra_f12 eazy_dup_select_fixed eazy_dup_refresh_lista eazy_dup_salvar_lista eazy_dup_carregar_lista eazy_dup_lista_tem_itens eazy_dup_limpar_lista contar_dup_lista selecionar_um_duplicado_por_grupo 2>/dev/null || true
+export -f eazy_preview eazy_status_header eazy_sync_cursor formatar_bytes_label tamanho_caminho somar_selecao_bytes info_disco caminho_absoluto eazy_dup_path eazy_dup_normalize_selection eazy_dup_normalize_fixed eazy_dup_toggle_path eazy_dup_select_all eazy_dup_clear_all eazy_dup_invert eazy_dup_amostra_f12 eazy_dup_select_fixed eazy_dup_refresh_lista eazy_dup_salvar_lista eazy_dup_carregar_lista eazy_dup_lista_tem_itens eazy_dup_limpar_lista contar_dup_lista selecionar_um_duplicado_por_grupo 2>/dev/null || true
 
 # fzf mais novo diferencia Ctrl+Backspace; versões antigas o reportam como Ctrl+H.
 EAZY_FZF_BACKSPACE_EXPECT=""
@@ -6511,7 +6353,7 @@ while true; do
         EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta do arquivo | [INSERT]: Fila | [DEL]: HD | [CTRL-F]: Sair "
     else
         TEXTO_PROMPT=" 📂 [$FILTRO_ATUAL] $PASTA_ATUAL ❯ "
-        EAZY_HEADER_HINT=" [TAB/ESPACO]: Selecionar | [ENTER]: Cursor | [ALT-ENTER]: Seleção global | [CTRL-A/R/X]: Pasta atual | [ALT-X]: Limpar global | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD | [F10]: Ajuda "
+        EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD | [F10]: Ajuda "
     fi
     export EAZY_HEADER_HINT
     TEXTO_HEADER=$(eazy_status_header)
@@ -6589,23 +6431,18 @@ while true; do
         CTRL_T_BIND='ctrl-t:execute-silent(eazy_dup_select_fixed)+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
     else
         # toggle-all / select-all nunca devem incluir .. (sempre a 1ª linha)
-        CTRL_R_BIND='ctrl-r:execute-silent(eazy_selection_invert_current '\''{q}'\'')+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+transform-header(eazy_status_header)'
-        CTRL_A_BIND='ctrl-a:execute-silent(eazy_selection_select_all_current '\''{q}'\'')+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+first+transform-header(eazy_status_header)'
-        CTRL_X_BIND='ctrl-x:execute-silent(eazy_selection_clear_current '\''{q}'\'')+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+transform-header(eazy_status_header)'
+        CTRL_R_BIND='ctrl-r:toggle-all+first+deselect+transform-header(eazy_status_header {+})'
+        CTRL_A_BIND='ctrl-a:select-all+first+deselect+transform-header(eazy_status_header {+})'
+        CTRL_X_BIND='ctrl-x:deselect-all+transform-header(eazy_status_header)'
         CTRL_T_BIND=''
     fi
     # Ctrl-T: em duplicados é bind (●→✓); fora, --expect altera ordenação por data
     FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     if [ "${MODO_DUP:-0}" -ne 1 ]; then
-        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,alt-enter,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
+        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     fi
     FZF_BIND_T=()
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
-    FZF_BIND_GLOBAL_X=()
-    if [ "${MODO_DUP:-0}" -ne 1 ]; then
-        CTRL_GLOBAL_X_BIND='alt-x:execute-silent(eazy_selection_clear_global_confirm)+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+transform-header(eazy_status_header)'
-        FZF_BIND_GLOBAL_X=(--bind="$CTRL_GLOBAL_X_BIND")
-    fi
     FZF_BIND_ESC=()
     FZF_SEARCH_ESC_BIND=()
     if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
@@ -6624,13 +6461,13 @@ while true; do
             --bind='space:execute-silent(bash -c '\''eazy_dup_toggle_path "\$1"'\'' -- {})+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
                 )
     else
-        # Seleção normal: Espaço/Tab gravam no conjunto global e redesenham as marcas.
+        # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
         FZF_NORMAL_SELECT_BINDS=(
-            --bind='space:execute-silent(bash -c '\''eazy_selection_toggle_path "\$1"'\'' -- {})+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+transform-header(eazy_status_header)'
+            --bind='space:toggle+transform-header(eazy_status_header {+})'
             --bind='home:first'
             --bind='end:last'
-            --bind='tab:execute-silent(bash -c '\''eazy_selection_toggle_path "\$1"'\'' -- {})+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+down+transform-header(eazy_status_header)'
-            --bind='shift-tab:execute-silent(bash -c '\''eazy_selection_toggle_path "\$1"'\'' -- {})+reload(eazy_lista_filtrada '\''{q}'\'')+deselect-all+up+transform-header(eazy_status_header)'
+            --bind='tab:toggle+down+transform-header(eazy_status_header {+})'
+            --bind='shift-tab:toggle+up+transform-header(eazy_status_header {+})'
         )
     fi
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
@@ -6660,7 +6497,6 @@ while true; do
         --bind="$CTRL_X_BIND" \
         --bind="$CTRL_R_BIND" \
         "${FZF_BIND_T[@]}" \
-        "${FZF_BIND_GLOBAL_X[@]}" \
         "${FZF_BIND_ESC[@]}" \
         "${FZF_SEARCH_ESC_BIND[@]}" \
         --bind="home:first" \
@@ -6730,17 +6566,6 @@ while true; do
         TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"
         registrar_status
         continue
-    fi
-
-    # No navegador normal, Enter ignora a seleção acumulada e executa apenas
-    # o item sob o cursor. Alt-Enter é a ação explícita do conjunto global.
-    if [ "$tecla" = "alt-enter" ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
-        eazy_selection_normalize
-        escolha=$(cat "$SELECTED_FILE" 2>/dev/null || true)
-    elif [ -z "$tecla" ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ] && [ -n "${ULTIMO_ARQUIVO:-}" ]; then
-        # O cursor é a fonte do Enter; não transforma o item em seleção global.
-        escolha_raw=$(printf '%s\n' "$ULTIMO_ARQUIVO")
-        escolha="$ULTIMO_ARQUIVO"
     fi
 
     if [ "$tecla" = "f12" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
@@ -7048,6 +6873,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 MODO_DUP=0
                 rm -f "$DUP_MANUAL_FILE"
                 : > "$DUP_SELECTED_FILE"
+                : > "$SELECTED_FILE"
                 TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
             elif eazy_dup_lista_tem_itens; then
                 # Já existe busca: só reabre a lista tmp (não inicia nova)
@@ -7521,6 +7347,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -d "$p" ] && continue
             p_abs=$(caminho_absoluto "$p")
             printf '%s\n' "$p_abs" >> "$playlist_sel"
+            if ! grep -Fxq -- "$p_abs" "$SELECTED_FILE" 2>/dev/null; then
+                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            fi
         done <<< "$escolha"
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
@@ -7615,6 +7444,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -z "$p" ] && continue
             p_abs=$(caminho_absoluto "$p")
             printf '%s\n' "$p_abs" >> "$playlist_sel"
+            if ! grep -Fxq -- "$p_abs" "$SELECTED_FILE" 2>/dev/null; then
+                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            fi
         done <<< "$escolha"
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
@@ -7713,6 +7545,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -z "$p" ] && continue
             p_abs=$(caminho_absoluto "$p")
             printf '%s\n' "$p_abs" >> "$playlist_sel"
+            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
         done <<< "$escolha"
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')

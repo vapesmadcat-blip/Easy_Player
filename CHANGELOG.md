@@ -1,11 +1,3 @@
-## 3.0-77 — Seleção global e Enter no cursor
-
-- `Enter` executa somente o item sob o cursor.
-- `Alt-Enter` executa os arquivos acumulados pela seleção global entre diretórios.
-- `Ctrl-A`, `Ctrl-R` e `Ctrl-X` operam somente nos arquivos diretamente do diretório atual.
-- `Tab`/`Espaço` alternam arquivos na seleção global; `Alt-X` limpa o conjunto global após confirmação.
-- A seleção global não inclui `..`, diretórios nem resultados recursivos de subpastas.
-
 ## 3.0-62 — Navegação e manutenção avançada
 
 - `Home` vai ao primeiro item e `End` ao último item das listas, inclusive filas temporárias.
