@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-73"
+EAZY_VERSION="3.0-74"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -4629,6 +4629,8 @@ eazy_sel_clear_local() {
 }
 eazy_sel_clear_global() { : > "$SELECTED_FILE"; : > "$SELECTED_LOCAL_FILE" 2>/dev/null || true; }
 eazy_sel_count() { grep -c '^' "$SELECTED_FILE" 2>/dev/null | tr -cd '0-9'; }
+# Os binds do fzf executam subprocessos; sem esta exportação, os atalhos não alteram a seleção.
+export -f eazy_sel_abs eazy_sel_toggle_path eazy_sel_select_visible eazy_sel_clear_local eazy_sel_clear_global eazy_sel_count 2>/dev/null || true
 
 # --- Editor de notas rápidas ---
 # Usa o mini editor visual fornecido no projeto; não depende de Vim, vi ou nano.
