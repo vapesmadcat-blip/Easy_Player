@@ -1,0 +1,569 @@
+#!/bin/bash
+# Mini Editor de Texto em Bash  (moldura + temas + setas)
+# Uso: bash editor [arquivo]
+#
+# Teclas:
+#   Ctrl+N     → nova nota
+#   Ctrl+S     → salva e abre outra
+#   Ctrl+T     → troca tema
+#   ESC        → salva e sai
+#   Enter      → nova linha (CRLF)
+#   Backspace  → apaga
+#   ← → ↑ ↓    → move o cursor
+
+set -u
+# sem -e: erros de leitura de tecla não devem matar o editor
+
+# ─── Constantes de controle (estilo C) ────────────────────────
+# #define CR 13
+# #define LF 10
+# #define CRLF CR+LF
+CR=$'\x0d'                   # byte 13
+LF=$'\x0a'                   # byte 10
+CRLF="${CR}${LF}"            # CR + LF
+
+# ─── Temas ────────────────────────────────────────────────────
+declare -A TEMA_DARK=(
+    [nome]="Dark"
+    [border]='\033[38;5;39m'
+    [title]='\033[1;97m'
+    [title_bg]='\033[48;5;236m'
+    [text]='\033[38;5;252m'
+    [cursor]='\033[1;92m'
+    [help]='\033[2;37m'
+    [accent]='\033[38;5;45m'
+    [bg]=''
+)
+
+declare -A TEMA_LIGHT=(
+    [nome]="Light"
+    [border]='\033[38;5;25m'
+    [title]='\033[1;30m'
+    [title_bg]='\033[48;5;255m'
+    [text]='\033[38;5;235m'
+    [cursor]='\033[1;31m'
+    [help]='\033[2;30m'
+    [accent]='\033[38;5;27m'
+    [bg]='\033[48;5;255m'
+)
+
+declare -A TEMA_CREPUSCULO=(
+    [nome]="Crepúsculo"
+    [border]='\033[38;5;209m'
+    [title]='\033[1;38;5;223m'
+    [title_bg]='\033[48;5;53m'
+    [text]='\033[38;5;223m'
+    [cursor]='\033[1;38;5;214m'
+    [help]='\033[2;38;5;180m'
+    [accent]='\033[38;5;175m'
+    [bg]=''
+)
+
+declare -A TEMA_AURORA=(
+    [nome]="Aurora"
+    [border]='\033[38;5;49m'
+    [title]='\033[1;38;5;159m'
+    [title_bg]='\033[48;5;17m'
+    [text]='\033[38;5;194m'
+    [cursor]='\033[1;38;5;118m'
+    [help]='\033[2;38;5;109m'
+    [accent]='\033[38;5;141m'
+    [bg]=''
+)
+
+TEMAS=("DARK" "LIGHT" "CREPUSCULO" "AURORA")
+TEMA_IDX=0
+TEMA_ATUAL="DARK"
+
+aplicar_tema() {
+    local nome="$1"
+    case "$nome" in
+        DARK)
+            BORDER="${TEMA_DARK[border]}"; TITLE="${TEMA_DARK[title]}"
+            TITLE_BG="${TEMA_DARK[title_bg]}"; TEXT="${TEMA_DARK[text]}"
+            CURSOR="${TEMA_DARK[cursor]}"; HELP="${TEMA_DARK[help]}"
+            ACCENT="${TEMA_DARK[accent]}"; BG="${TEMA_DARK[bg]}"
+            NOME_TEMA="${TEMA_DARK[nome]}" ;;
+        LIGHT)
+            BORDER="${TEMA_LIGHT[border]}"; TITLE="${TEMA_LIGHT[title]}"
+            TITLE_BG="${TEMA_LIGHT[title_bg]}"; TEXT="${TEMA_LIGHT[text]}"
+            CURSOR="${TEMA_LIGHT[cursor]}"; HELP="${TEMA_LIGHT[help]}"
+            ACCENT="${TEMA_LIGHT[accent]}"; BG="${TEMA_LIGHT[bg]}"
+            NOME_TEMA="${TEMA_LIGHT[nome]}" ;;
+        CREPUSCULO)
+            BORDER="${TEMA_CREPUSCULO[border]}"; TITLE="${TEMA_CREPUSCULO[title]}"
+            TITLE_BG="${TEMA_CREPUSCULO[title_bg]}"; TEXT="${TEMA_CREPUSCULO[text]}"
+            CURSOR="${TEMA_CREPUSCULO[cursor]}"; HELP="${TEMA_CREPUSCULO[help]}"
+            ACCENT="${TEMA_CREPUSCULO[accent]}"; BG="${TEMA_CREPUSCULO[bg]}"
+            NOME_TEMA="${TEMA_CREPUSCULO[nome]}" ;;
+        AURORA)
+            BORDER="${TEMA_AURORA[border]}"; TITLE="${TEMA_AURORA[title]}"
+            TITLE_BG="${TEMA_AURORA[title_bg]}"; TEXT="${TEMA_AURORA[text]}"
+            CURSOR="${TEMA_AURORA[cursor]}"; HELP="${TEMA_AURORA[help]}"
+            ACCENT="${TEMA_AURORA[accent]}"; BG="${TEMA_AURORA[bg]}"
+            NOME_TEMA="${TEMA_AURORA[nome]}" ;;
+    esac
+}
+aplicar_tema "DARK"
+
+RESET='\033[0m'
+BOLD='\033[1m'
+
+cleanup() {
+    stty sane 2>/dev/null || true
+    tput cnorm 2>/dev/null || true
+    tput sgr0 2>/dev/null || true
+    printf '\033[0m\033[?25h'
+    echo
+}
+trap cleanup EXIT INT TERM
+
+gerar_nome() {
+    local i=1
+    while [[ -f "nota${i}.txt" ]]; do ((i++)); done
+    echo "nota${i}.txt"
+}
+
+# ─── Estado do editor ─────────────────────────────────────────
+ARQUIVO_ATUAL=""
+BUFFER=""
+CURSOR_POS=0
+
+if [[ $# -ge 1 && -n "$1" ]]; then
+    ARQUIVO_ATUAL="$1"
+else
+    ARQUIVO_ATUAL=$(gerar_nome)
+fi
+
+if [[ -f "$ARQUIVO_ATUAL" ]]; then
+    BUFFER=$(<"$ARQUIVO_ATUAL")
+    CURSOR_POS=${#BUFFER}
+fi
+
+# ─── Helpers de cursor ────────────────────────────────────────
+pos_para_linha_col() {
+    local pos=$1
+    local linha=1 col=1 i=0
+    local len=${#BUFFER}
+    (( pos > len )) && pos=$len
+    while (( i < pos )); do
+        local c="${BUFFER:i:1}"
+        if [[ "$c" == "$LF" ]]; then
+            ((linha++))
+            col=1
+        elif [[ "$c" == "$CR" ]]; then
+            :
+        else
+            ((col++))
+        fi
+        ((i++))
+    done
+    echo "$linha $col"
+}
+
+mover_vertical() {
+    local dir=$1
+    read -r cur_linha cur_col <<< "$(pos_para_linha_col $CURSOR_POS)"
+    local target_linha=$((cur_linha + dir))
+    (( target_linha < 1 )) && return
+
+    local linha=1 i=0 len=${#BUFFER} col=1
+    local start_of_target=-1
+
+    while (( i <= len )); do
+        if (( linha == target_linha && start_of_target < 0 )); then
+            start_of_target=$i
+        fi
+        if (( linha == target_linha )); then
+            if (( col == cur_col )); then
+                CURSOR_POS=$i
+                return
+            fi
+            if (( i == len )) || [[ "${BUFFER:i:1}" == "$LF" ]]; then
+                CURSOR_POS=$i
+                return
+            fi
+        fi
+        if (( i == len )); then break; fi
+        local c="${BUFFER:i:1}"
+        if [[ "$c" == "$LF" ]]; then
+            ((linha++))
+            col=1
+            if (( linha > target_linha )); then
+                return
+            fi
+        elif [[ "$c" != "$CR" ]]; then
+            ((col++))
+        fi
+        ((i++))
+    done
+}
+
+inserir() {
+    local s="$1"
+    BUFFER="${BUFFER:0:CURSOR_POS}${s}${BUFFER:CURSOR_POS}"
+    CURSOR_POS=$(( CURSOR_POS + ${#s} ))
+}
+
+apagar_esquerda() {
+    (( CURSOR_POS <= 0 )) && return
+    if (( CURSOR_POS >= 2 )) && [[ "${BUFFER:CURSOR_POS-2:2}" == "$CRLF" ]]; then
+        BUFFER="${BUFFER:0:CURSOR_POS-2}${BUFFER:CURSOR_POS}"
+        CURSOR_POS=$(( CURSOR_POS - 2 ))
+    else
+        BUFFER="${BUFFER:0:CURSOR_POS-1}${BUFFER:CURSOR_POS}"
+        CURSOR_POS=$(( CURSOR_POS - 1 ))
+    fi
+}
+
+salvar_atual() {
+    printf '%s' "$BUFFER" > "$ARQUIVO_ATUAL"
+    if [ -n "${EAZY_LAST_NOTE:-}" ]; then
+        printf '%s\n' "$ARQUIVO_ATUAL" > "$EAZY_LAST_NOTE"
+    fi
+}
+
+restaurar_raw() {
+    stty raw -echo 2>/dev/null || true
+}
+
+gerenciar_notas() {
+    local acao="$1" escolha nome destino old_stty
+    salvar_atual
+    old_stty=$(stty -g 2>/dev/null || true)
+    stty sane 2>/dev/null || true
+    case "$acao" in
+        listar)
+            if command -v fzf >/dev/null 2>&1; then
+                escolha=$(find "${EAZY_NOTES_DIR:-.}" -maxdepth 1 -type f -name '*.txt' -printf '%f\n' 2>/dev/null | sort | fzf --height=45% --reverse --border --prompt='Notas > ')
+            else
+                escolha=$(find "${EAZY_NOTES_DIR:-.}" -maxdepth 1 -type f -name '*.txt' -printf '%f\n' 2>/dev/null | sort | head -n1)
+            fi
+            if [ -n "$escolha" ]; then
+                ARQUIVO_ATUAL="${EAZY_NOTES_DIR:-.}/$escolha"
+                [ -f "$ARQUIVO_ATUAL" ] && BUFFER=$(<"$ARQUIVO_ATUAL") || BUFFER=''
+                CURSOR_POS=${#BUFFER}
+                [ -n "${EAZY_LAST_NOTE:-}" ] && printf '%s\n' "$ARQUIVO_ATUAL" > "$EAZY_LAST_NOTE"
+            fi
+            ;;
+        renomear)
+            printf 'Novo nome para %s: ' "$(basename "$ARQUIVO_ATUAL")"
+            IFS= read -r nome
+            if [ -n "$nome" ]; then
+                [[ "$nome" != *.* ]] && nome+='.txt'
+                destino="$(dirname "$ARQUIVO_ATUAL")/$nome"
+                if mv -- "$ARQUIVO_ATUAL" "$destino" 2>/dev/null; then
+                    ARQUIVO_ATUAL="$destino"
+                    [ -n "${EAZY_LAST_NOTE:-}" ] && printf '%s\n' "$ARQUIVO_ATUAL" > "$EAZY_LAST_NOTE"
+                fi
+            fi
+            ;;
+        exportar)
+            mkdir -p "${EAZY_EXPORT_DIR:-$HOME/Documentos/Easy-Notes}" 2>/dev/null || true
+            cp -- "$ARQUIVO_ATUAL" "${EAZY_EXPORT_DIR:-$HOME/Documentos/Easy-Notes}/$(basename "$ARQUIVO_ATUAL")" 2>/dev/null || true
+            ;;
+    esac
+    [ -n "$old_stty" ] && stty "$old_stty" 2>/dev/null || true
+    restaurar_raw
+}
+
+# ─── Terminal raw ─────────────────────────────────────────────
+stty raw -echo 2>/dev/null
+tput civis 2>/dev/null || true
+
+ler_byte() {
+    local b
+    b=$(dd bs=1 count=1 2>/dev/null | od -An -tu1 2>/dev/null)
+    b=${b// /}
+    b=${b//$'\n'/}
+    echo -n "$b"
+}
+
+# ─── Desenho ──────────────────────────────────────────────────
+desenhar() {
+    local COLS=$(tput cols 2>/dev/null || echo 80)
+    local LINES=$(tput lines 2>/dev/null || echo 24)
+
+    local BOX_W=$(( COLS * 75 / 100 ))
+    local BOX_H=$(( LINES * 70 / 100 ))
+    (( BOX_W < 42 )) && BOX_W=42
+    (( BOX_H < 12 )) && BOX_H=12
+    (( BOX_W > COLS - 4 )) && BOX_W=$((COLS - 4))
+    (( BOX_H > LINES - 4 )) && BOX_H=$((LINES - 4))
+
+    local START_X=$(( (COLS - BOX_W) / 2 ))
+    local START_Y=$(( (LINES - BOX_H) / 2 ))
+    local INNER_W=$(( BOX_W - 2 ))
+    local INNER_H=$(( BOX_H - 5 ))
+
+    clear
+    if [[ -n "$BG" ]]; then
+        printf "${BG}"
+        for ((yy=1; yy<=LINES; yy++)); do
+            printf '\033[%d;1H%*s' $yy $COLS ""
+        done
+    fi
+
+    gotoxy() { printf '\033[%d;%dH' "$1" "$2"; }
+
+    gotoxy $START_Y $START_X
+    printf "${BORDER}╔"; printf '═%.0s' $(seq 1 $INNER_W); printf "╗${RESET}"
+
+    gotoxy $((START_Y + 1)) $START_X
+    printf "${BORDER}║${RESET}${TITLE_BG}${TITLE}"
+    local titulo="  ✦ MINI EDITOR  ·  ${ARQUIVO_ATUAL}  "
+    local titulo_len=${#titulo}
+    local pad=$(( (INNER_W - titulo_len) / 2 )); (( pad < 0 )) && pad=0
+    printf "%*s%s%*s" $pad "" "$titulo" $((INNER_W - titulo_len - pad)) ""
+    printf "${RESET}${BORDER}║${RESET}"
+
+    gotoxy $((START_Y + 2)) $START_X
+    printf "${BORDER}╠"; printf '═%.0s' $(seq 1 $INNER_W); printf "╣${RESET}"
+
+    local content_start=$((START_Y + 3))
+    for ((i=0; i<INNER_H; i++)); do
+        gotoxy $((content_start + i)) $START_X
+        printf "${BORDER}║${RESET}"
+        if [[ -n "$BG" ]]; then printf "${BG}%*s${RESET}" $INNER_W ""; else printf "%*s" $INNER_W ""; fi
+        printf "${BORDER}║${RESET}"
+    done
+
+    gotoxy $((content_start + INNER_H)) $START_X
+    printf "${BORDER}╠"; printf '═%.0s' $(seq 1 $INNER_W); printf "╣${RESET}"
+
+    gotoxy $((content_start + INNER_H + 1)) $START_X
+    printf "${BORDER}║${RESET}${HELP}"
+    local ajuda=" ←→↑↓ Mover · Ctrl+N Nova · Ctrl+S Salvar · Ctrl+T Tema · ESC Sair "
+    local tema_info=" [${NOME_TEMA}] "
+    local total_len=$(( ${#ajuda} + ${#tema_info} ))
+    local pad_a=$(( (INNER_W - total_len) / 2 )); (( pad_a < 0 )) && pad_a=0
+    printf "%*s%s${ACCENT}%s${HELP}%*s" $pad_a "" "$ajuda" "$tema_info" $((INNER_W - total_len - pad_a)) ""
+    printf "${RESET}${BORDER}║${RESET}"
+
+    gotoxy $((content_start + INNER_H + 2)) $START_X
+    printf "${BORDER}╚"; printf '═%.0s' $(seq 1 $INNER_W); printf "╝${RESET}"
+
+    # Conteúdo
+    local -a linhas=()
+    local linha_atual=""
+    local i=0 len=${#BUFFER}
+    while (( i < len )); do
+        local c="${BUFFER:i:1}"
+        if [[ "$c" == "$LF" ]]; then
+            linhas+=("$linha_atual")
+            linha_atual=""
+        elif [[ "$c" != "$CR" ]]; then
+            linha_atual+="$c"
+        fi
+        ((i++))
+    done
+    linhas+=("$linha_atual")
+
+    local num_linhas=${#linhas[@]}
+    read -r CUR_LINHA CUR_COL <<< "$(pos_para_linha_col $CURSOR_POS)"
+
+    local start_line=0
+    if (( CUR_LINHA > INNER_H )); then
+        start_line=$(( CUR_LINHA - INNER_H ))
+    fi
+    if (( start_line + INNER_H > num_linhas )); then
+        start_line=$(( num_linhas - INNER_H ))
+        (( start_line < 0 )) && start_line=0
+    fi
+
+    local y=$content_start
+    local cursor_screen_y=-1 cursor_screen_x=-1
+
+    for ((li=start_line; li<num_linhas && y < content_start + INNER_H; li++)); do
+        gotoxy $y $((START_X + 1))
+        local texto="${linhas[$li]}"
+        if (( ${#texto} > INNER_W - 1 )); then
+            texto="${texto:0:$((INNER_W - 1))}"
+        fi
+        printf "${TEXT}%s${RESET}" "$texto"
+
+        if (( li + 1 == CUR_LINHA )); then
+            cursor_screen_y=$y
+            local visual_col=$CUR_COL
+            (( visual_col > INNER_W - 1 )) && visual_col=$((INNER_W - 1))
+            (( visual_col < 1 )) && visual_col=1
+            cursor_screen_x=$(( START_X + visual_col ))
+        fi
+        ((y++))
+    done
+
+    if (( cursor_screen_y >= 0 )); then
+        gotoxy $cursor_screen_y $cursor_screen_x
+        printf "${CURSOR}${BOLD}▌${RESET}"
+    fi
+
+    gotoxy $LINES 1
+    printf "${ACCENT}${BOLD} %d/%d ${RESET}${HELP}│ ${NOME_TEMA}${RESET}" "$CUR_LINHA" "$CUR_COL"
+}
+
+# ─── Loop principal ───────────────────────────────────────────
+while true; do
+    desenhar
+
+    codigo=$(ler_byte)
+    [[ -z "$codigo" ]] && continue
+
+    case "$codigo" in
+        14)
+            salvar_atual
+            ARQUIVO_ATUAL=$(gerar_nome)
+            BUFFER=""
+            CURSOR_POS=0
+            ;;
+        19)
+            salvar_atual
+            ARQUIVO_ATUAL=$(gerar_nome)
+            BUFFER=""
+            CURSOR_POS=0
+            ;;
+        20)
+            TEMA_IDX=$(( (TEMA_IDX + 1) % ${#TEMAS[@]} ))
+            TEMA_ATUAL="${TEMAS[$TEMA_IDX]}"
+            aplicar_tema "$TEMA_ATUAL"
+            ;;
+        5)  gerenciar_notas listar ;;
+        18) gerenciar_notas renomear ;;
+        24) gerenciar_notas exportar ;;
+        27)
+            # Lê possível sequência de escape (setas etc.)
+            # time 2 min 0 ≈ 0.2s de espera
+            old_stty=$(stty -g 2>/dev/null || true)
+            stty -echo -icanon time 2 min 0 2>/dev/null || true
+            b2=$(dd bs=1 count=1 2>/dev/null | od -An -tu1 2>/dev/null | tr -d " \n")
+            b3=""
+            if [[ -n "$b2" ]]; then
+                b3=$(dd bs=1 count=1 2>/dev/null | od -An -tu1 2>/dev/null | tr -d " \n")
+            fi
+            # volta pro raw
+            if [[ -n "$old_stty" ]]; then
+                stty "$old_stty" 2>/dev/null || true
+            fi
+            stty raw -echo 2>/dev/null || true
+
+            # ESC sozinho (sem bytes seguintes) → salva e sai
+            if [[ -z "$b2" ]]; then
+                salvar_atual
+                stty sane 2>/dev/null || true
+                clear
+                printf "\n  \033[1;36mEditor finalizado.\033[0m\n"
+                printf "  \033[32mÚltimo arquivo:\033[0m %s\n" "$ARQUIVO_ATUAL"
+                printf "  \033[2mTema usado: %s\033[0m\n\n" "$NOME_TEMA"
+                exit 0
+            fi
+
+            # ESC [ A/B/C/D  (setas)
+            # b2=91 ([)  b3=65(A) 66(B) 67(C) 68(D)
+            if [[ "$b2" == "91" ]]; then
+                case "$b3" in
+                    65)  # ↑
+                        mover_vertical -1
+                        ;;
+                    66)  # ↓
+                        mover_vertical 1
+                        ;;
+                    67)  # →
+                        _len=${#BUFFER}
+                        if (( CURSOR_POS < _len )); then
+                            if [[ "${BUFFER:CURSOR_POS:1}" == "$CR" ]]; then
+                                CURSOR_POS=$(( CURSOR_POS + 2 ))
+                                (( CURSOR_POS > _len )) && CURSOR_POS=$_len
+                            else
+                                CURSOR_POS=$(( CURSOR_POS + 1 ))
+                            fi
+                        fi
+                        ;;
+                    68)  # ←
+                        if (( CURSOR_POS > 0 )); then
+                            if (( CURSOR_POS >= 2 )) && [[ "${BUFFER:CURSOR_POS-2:2}" == "$CRLF" ]]; then
+                                CURSOR_POS=$(( CURSOR_POS - 2 ))
+                            else
+                                CURSOR_POS=$(( CURSOR_POS - 1 ))
+                            fi
+                        fi
+                        ;;
+                    *)
+                        # Home/End/Delete/F-keys → descarta resto da sequência
+                        stty -echo -icanon time 1 min 0 2>/dev/null || true
+                        dd bs=1 count=6 2>/dev/null >/dev/null || true
+                        stty raw -echo 2>/dev/null || true
+                        ;;
+                esac
+            else
+                # ESC O A (setas em modo application) ou outro
+                # Se b2=79 (O) e b3=A/B/C/D também trata
+                if [[ "$b2" == "79" ]]; then
+                    case "$b3" in
+                        65) mover_vertical -1 ;;
+                        66) mover_vertical 1 ;;
+                        67)
+                            _len=${#BUFFER}
+                            if (( CURSOR_POS < _len )); then
+                                CURSOR_POS=$(( CURSOR_POS + 1 ))
+                            fi
+                            ;;
+                        68)
+                            if (( CURSOR_POS > 0 )); then
+                                CURSOR_POS=$(( CURSOR_POS - 1 ))
+                            fi
+                            ;;
+                    esac
+                else
+                    stty -echo -icanon time 1 min 0 2>/dev/null || true
+                    dd bs=1 count=4 2>/dev/null >/dev/null || true
+                    stty raw -echo 2>/dev/null || true
+                fi
+            fi
+            ;;
+        127|8)
+            apagar_esquerda
+            ;;
+        13)
+            old_stty=$(stty -g 2>/dev/null)
+            stty -echo -icanon time 1 min 0 2>/dev/null
+            extra=$(dd bs=1 count=1 2>/dev/null | od -An -tu1 | tr -d ' \n')
+            stty "$old_stty" 2>/dev/null
+            stty raw -echo 2>/dev/null
+            inserir "$CRLF"
+            ;;
+        10)
+            inserir "$CRLF"
+            ;;
+        *)
+            # Aceita:
+            #   32-126  → ASCII imprimível (a-z A-Z 0-9 espaço !@#$% etc.)
+            #   128-255 → bytes altos (UTF-8: á é í ó ú ç ã õ Á É ... e emojis)
+            # Controles 0-31 (exceto os que já tratamos) são ignorados
+            if [[ -n "$codigo" ]] && (( 10#$codigo >= 32 )); then
+                # Monta o caractere a partir do valor decimal do byte
+                char=$(printf '%b' "\\$(printf '%03o' "$codigo")")
+                # Se for início de sequência UTF-8 (C2-F4), tenta juntar os bytes seguintes
+                if (( 10#$codigo >= 194 && 10#$codigo <= 244 )); then
+                    # quantos bytes de continuação?
+                    extra=0
+                    if   (( 10#$codigo >= 194 && 10#$codigo <= 223 )); then extra=1   # 2 bytes
+                    elif (( 10#$codigo >= 224 && 10#$codigo <= 239 )); then extra=2   # 3 bytes
+                    elif (( 10#$codigo >= 240 && 10#$codigo <= 244 )); then extra=3   # 4 bytes
+                    fi
+                    for ((e=0; e<extra; e++)); do
+                        old_stty=$(stty -g 2>/dev/null)
+                        stty -echo -icanon time 1 min 0 2>/dev/null
+                        nb=$(dd bs=1 count=1 2>/dev/null | od -An -tu1 | tr -d " \n")
+                        stty "$old_stty" 2>/dev/null
+                        stty raw -echo 2>/dev/null
+                        if [[ -n "$nb" ]] && (( 10#$nb >= 128 && 10#$nb <= 191 )); then
+                            char+=$(printf '%b' "\\$(printf '%03o' "$nb")")
+                        else
+                            break
+                        fi
+                    done
+                fi
+                inserir "$char"
+            fi
+            ;;
+    esac
+done

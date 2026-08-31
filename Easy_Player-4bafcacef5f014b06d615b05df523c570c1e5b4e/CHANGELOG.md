@@ -1,0 +1,336 @@
+## 3.0-62 — Navegação e manutenção avançada
+
+- `Home` vai ao primeiro item e `End` ao último item das listas, inclusive filas temporárias.
+- A seleção normal não é descartada automaticamente após ações; o usuário a remove desmarcando os itens.
+- Adicionado `eazy -a`, com lista única segmentada por PLAYLISTS, LISTAS TEMPORÁRIAS, DUPLICADOS, PESQUISAS SALVAS, NOTAS, HISTÓRICO/DOWNLOADS e ESTADO/BACKUPS.
+- A manutenção avançada mostra preview de conteúdo, calcula espaço, respeita DRY-RUN e registra exclusões em ordem, data, hora, tamanho e caminho completo.
+
+## 3.0-62 — Guia rápido e manutenção revisada
+
+- Adicionado o GUIA_RAPIDO.md com exemplos práticos de busca por curingas, conteúdo, frases e operadores.
+- Limpezas agora exibem cálculo de espaço também no DRY-RUN.
+- Comandos de limpeza limpam a tela antes da execução e pausam depois do resultado.
+- Filtros restaurados são sanitizados contra CR e sequências ANSI residuais.
+- Revisada a preservação da seleção e conferida a lista de dependências do instalador.
+
+## 3.0-60 — Documentação consolidada da busca avançada
+
+- Atualizada toda a documentação da pesquisa por extensões, nomes e curingas.
+- Documentadas palavras múltiplas, frases entre aspas e operadores `AND`, `OR` e `NOT`.
+- Mantidos os recursos de manutenção, snapshots, validação, notas e limpeza segura das versões anteriores.
+
+## 3.0-59 — Manutenção Linux e pausas no menu
+
+- Corrigido o modo `eazy -m` para executar somente depois que todas as funções de manutenção foram carregadas.
+- Adicionada limpeza da tela antes do início da limpeza automática, após a prévia e a confirmação final.
+- O menu de ações agora pausa ao final de cada ação para que o resultado de aplicativos externos possa ser lido.
+
+## 3.0-58 — Limpeza automática com prévia e idade configurável
+
+- A limpeza automática agora pergunta quantos dias devem ser usados como critério.
+- A prévia informa quantos logs, temporários e itens da lixeira são elegíveis.
+- Nenhuma limpeza começa antes da visualização da prévia e de uma confirmação final.
+- O critério escolhido é aplicado a logs, journal, temporários e lixeira.
+- O modo DRY-RUN continua impedindo a remoção real.
+
+## 3.0-57 — Ctrl-S salva a lista temporária ativa
+
+- Corrigido o salvamento de playlists quando o usuário está dentro de uma fila ou lista temporária.
+- `Ctrl-S` agora usa o arquivo realmente aberto em `ARQUIVO_PLAYLIST_ABERTO`, inclusive em listas personalizadas.
+- Adicionada a função central `arquivo_playlist_ativo` para evitar retorno indevido à fila 1.
+- Incluído teste de regressão para confirmar que a lista ativa é salva no lugar da fila 1.
+
+## 3.0-56 — Frases e operadores lógicos na busca
+
+- Frases entre aspas são pesquisadas literalmente, preservando os espaços.
+- `AND` exige todos os termos do grupo.
+- `OR` aceita qualquer grupo alternativo.
+- `NOT` exclui arquivos que contenham o termo seguinte.
+- Operadores escritos dentro de aspas são tratados como texto literal.
+
+## 3.0-56 — Conteúdo aplicado aos curingas
+
+- Corrigido o descarte de `BUSCA_CONTEUDO` causado por command substitution.
+- A seleção de extensões, nomes e curingas agora preserva o texto de conteúdo no shell principal.
+- Múltiplas palavras são aplicadas com lógica AND no mesmo arquivo.
+
+## 3.0-56 — Busca por múltiplas palavras-chave
+
+- Corrigida a ativação da busca por conteúdo.
+- O campo aceita várias palavras separadas por espaços.
+- Todas as palavras precisam existir no mesmo arquivo para ele aparecer no resultado.
+
+## 3.0-56 — Correção da busca por conteúdo
+
+- Corrigida a leitura da opção `Sim` do radiolist.
+- A resposta do whiptail agora é normalizada antes de ativar a busca interna com grep.
+- A busca por conteúdo volta a filtrar corretamente os arquivos encontrados.
+
+## 3.0-56 — Pesquisa restaurada da v18
+
+- Restaurado o fluxo de entrega da pesquisa da versão 3.0-18.
+- Removido o monitor assíncrono do caminho normal que estava prendendo o fzf após 100%.
+- A lista deve abrir diretamente após o término da busca, sem pressionar Esc.
+- Mantidos os padrões novos de extensões e nomes com curingas.
+
+## 3.0-56 — Fluxo de pesquisa baseado na v18
+
+- Removido o `wait` bloqueante do encerramento do monitor de Esc.
+- A pesquisa normal agora libera a lista sem depender de pressionar Esc.
+- O monitor é encerrado sem bloquear a entrega dos resultados, preservando o cancelamento durante a varredura.
+
+## 3.0-56 — Progresso sincronizado
+
+- Removida a barra artificial exibida antes da pesquisa real.
+- A etapa de nomes mostra apenas o estado de pesquisa até o `find` terminar.
+- A barra percentual aparece somente na etapa real de conteúdo ou ao concluir a varredura.
+
+## 3.0-56 — Retorno automático para a lista
+
+- Corrigida a corrida na restauração do modo do terminal após a pesquisa.
+- O encerramento normal agora entrega os resultados diretamente ao fzf, sem pressionar Esc.
+- Esc permanece reservado para cancelar a busca em andamento.
+
+## 3.0-56 — Busca mais rápida
+
+- A pesquisa recursiva deixou de repetir a varredura para cada letra.
+- Agora todos os padrões são pesquisados em uma única passada, reduzindo a espera antes da exibição dos resultados.
+- A barra de progresso e o cancelamento por Esc continuam ativos.
+
+## 3.0-56 — Pesquisa por nomes e curingas
+
+- O campo de extensões extras aceita extensões, listas separadas por espaço ou vírgula e padrões de nome.
+- Exemplos: `sh mp4 vid* filme.mov movie.*`.
+- Extensões simples viram `*.ext`; padrões com ponto ou curingas são usados como nomes completos.
+
+## 3.0-56 — Índice do cursor na lista filtrada
+
+- Ao voltar com filtro, o cursor agora localiza o mesmo caminho dentro da lista visível.
+- A posição é recalculada após o filtro: um arquivo que era 10 pode ser restaurado na posição 2 filtrada.
+
+## 3.0-56 — Restauração correta do cursor com filtro
+
+- No retorno ao diretório anterior, o filtro é carregado antes da posição do cursor.
+- A posição passa a ser recalculada sobre a lista filtrada visível.
+
+## 3.0-56 — Persistência do filtro ao retornar
+
+- O filtro é salvo por diretório junto com a posição do cursor.
+- Ao retornar por Ctrl-Backspace ou `..`, filtro e cursor são restaurados.
+- Ao avançar para um novo diretório, o filtro continua sendo zerado.
+
+## 3.0-56 — Pergunta de correção no terminal
+
+- A validação permanece na tela escura, sem caixa de diálogo para referências ausentes.
+- A pergunta `CORRIGIR? (S/N)` exige resposta explícita, sem valor padrão.
+
+## 3.0-56 — Correção de referências ausentes
+
+- A validação agora pergunta se o usuário deseja corrigir referências ausentes.
+- A correção remove somente entradas quebradas das estruturas selecionadas.
+- Nenhum arquivo de mídia é apagado.
+
+## 3.0-56 — Validação de integridade
+
+- Removida a opção antiga Validar .M3U do menu de ações.
+- Adicionada validação detalhada de playlists, listas temporárias e pesquisas no modo de manutenção.
+
+## 3.0-40 — Modo de manutenção direto
+
+- Adicionado `eazy -m`.
+- Separa manutenção dos dados próprios, sem sudo, da manutenção do sistema, com sudo sob demanda.
+
+## 3.0-39 — Manutenção seletiva dos dados do eazy
+
+- Incluído checklist para apagar playlists, filas, pesquisas, notas, histórico, downloads, cache, estado e backups.
+- Confirmação explícita e proteção DRY-RUN.
+
+## 3.0-38 — Correção do Esc durante a busca
+
+- Corrigida a detecção do byte ESC real.
+- Monitor permanece ativo durante find e grep.
+- Processos ativos são encerrados ao cancelar.
+
+## 3.0-37 — Esc durante a busca
+
+- Esc agora é monitorado durante find e grep.
+- Subprocessos ativos são encerrados e temporários removidos.
+
+## 3.0-36 — Cancelamento por Esc
+
+- Esc cancela buscas, leituras, previews, escolhas de arquivos, conversões, diagnósticos e diálogos interrompíveis.
+- O terminal é restaurado ao retornar ao navegador.
+
+## 3.0-35 — Pesquisas salvas com resultado congelado
+
+- Pesquisas salvas agora preservam o resultado encontrado.
+- `Alt-R` refaz a pesquisa somente quando solicitado.
+- A abertura de uma pesquisa pergunta se o usuário deseja refazê-la.
+
+## 3.0-34 — Documentação completa
+
+- Expandida a documentação com todas as funções, menus, ações, filas, listas temporárias, playlists, pesquisas, histórico, downloads, duplicados, manutenção, conversões, notas, persistência, instalação e exemplos.
+
+## 3.0-33 — Instalador completo e documentação
+
+- O `--install` instala as ferramentas necessárias para reprodução, PDF, conversão, preview e diagnóstico.
+- O instalador cria toda a estrutura inicial de configuração, filas, notas, playlists e exportação.
+- Incluído `EAZY_EXPLICADO.md`, com funcionamento e vantagens do projeto.
+
+## 3.0-32 — Identificação visual de diretórios
+
+- Diretórios nas listas temporárias usam ícone e cor de pasta, mantendo tamanho e navegação.
+
+## 3.0-31 — Nome limpo das listas
+
+- O Insert exibe somente o nome da lista e a quantidade de itens, ocultando o identificador interno.
+
+## 3.0-30 — Retorno de diretórios em listas
+
+- Diretórios nas listas temporárias aparecem como pastas.
+- Entrar em uma pasta e pressionar `..` retorna à lista de origem.
+
+## 3.0-29 — Diretórios nas listas temporárias
+
+- Diretórios nas filas e listas personalizadas são reconhecidos como pastas, com tamanho recursivo e navegação.
+- Diretórios não são enviados ao player como arquivos de mídia.
+
+## 3.0-28 — Tab seleciona e avança
+
+- Tab marca somente o item atual e avança para o próximo item.
+- Espaço continua marcando no lugar.
+
+## 3.0-27 — Seleção de diretórios e bytes
+
+- Espaço e Tab selecionam arquivos e diretórios sem limpar a seleção.
+- O cabeçalho mostra quantidade e bytes selecionados, com tamanho recursivo para diretórios.
+
+## 3.0-26 — Rótulos das listas temporárias
+
+- Insert e Ctrl-P mostram o nome real da lista e a quantidade de itens, sem C_ ou Fila 1.
+
+## 3.0-25 — Nomes das listas temporárias
+
+- Todas as listas personalizadas aparecem no Insert e no Ctrl-P com o nome informado.
+
+## 3.0-24 — Listas temporárias no Ctrl-P
+
+- Listas criadas pelo Insert agora aparecem no ciclo do Ctrl-P.
+
+## 3.0-23 — Pesquisas salvas e listas temporárias
+
+- Ctrl-S salva a pesquisa ativa com nome.
+- Ctrl-F permite abrir uma pesquisa salva.
+- Insert permite criar uma nova lista temporária nomeada.
+
+## 3.0-22 — Retorno com posição persistente
+
+- A posição salva é restaurada ao voltar pelo atalho, clique ou `Enter` em `..`.
+- O mecanismo do fzf volta a usar o estado persistente original.
+
+## 3.0-21 — Alertas sonoros
+
+- Emite beep ao mudar de diretório.
+- Emite beep nos diálogos de erro e falha.
+
+## 3.0-20 — Posição do cursor na navegação
+
+- Ctrl-Backspace restaura a posição salva do diretório anterior.
+- Subir por `..` posiciona o cursor no topo, em `..`.
+
+## 3.0-19 — Navegação e destinos persistentes
+
+- Ao mudar de diretório, o filtro é limpo, o cursor vai para `..` e a seleção permanece.
+- Os últimos destinos de copiar e mover ficam persistentes.
+
+## 3.0-17 — Última nota editada
+
+- O Ctrl-N agora abre sempre o último arquivo realmente salvo ou editado.
+- A seleção, renomeação e criação de notas atualizam a persistência do último caminho.
+
+## 3.0-16 — Mini editor visual de notas
+
+- Substitui o editor baseado em Vim pelo mini editor visual Bash incluído no projeto.
+- Mantém Ctrl-N para nova nota, Ctrl-S para salvar e abrir outra, Esc para salvar e sair, Enter para nova linha e Backspace para apagar.
+- Preserva Ctrl-E, Ctrl-R e Ctrl-X para listar, renomear e exportar notas.
+
+## 3.0-15 — Gerenciador de notas rápidas
+
+- Ctrl-E abre uma lista compacta centralizada com as notas.
+- Del apaga, Ctrl-R renomeia e Ctrl-X exporta para `~/Documentos/Easy-Notes/`.
+
+## 3.0-14 — Editor de notas rápidas
+
+- Ctrl-N abre a última nota ou cria `nota.txt`.
+- Alt-N cria uma nova nota dentro do editor.
+- Esc salva o conteúdo e sai do editor.
+
+## 3.0-13 — Release eazy-v3.0-13
+
+- Corrige o despacho de PDF antes do player MPlayer/mpv.
+- PDF selecionado no navegador abre a caixa de leitura/conversão.
+- Mantém a seleção fzf e a pausa de imagens.
+
+## 3.0-12 — Release eazy-v3.0-12
+
+- Suporte integrado para leitura e conversão de PDF.
+- PDF abre pelo Enter; nenhuma opção D foi adicionada ao menu.
+- Ferramentas: pdftotext, pdftohtml, pdftoppm e img2pdf.
+
+## 3.0-11 — Release eazy-v3.0-11
+
+- Instalação oficial por Release GitHub com pacote `.deb` e checksum `.sha256`.
+- HELP EXPANDIDO atualizado com busca por `Esc`, DRY-RUN, sudo, progresso e temperatura da CPU.
+
+# Changelog
+
+## 3.0-11
+
+- Restaurado o HELP EXPANDIDO do F10 com navegação, filas, duplicados, manutenção e dicas completas.
+- `Esc` sai da busca recursiva e retorna à pasta normal sem fechar o eazy.
+- Busca de duplicados com barra de progresso durante inventário, hashes e consolidação.
+- Análise e limpeza automática de HD com progresso por etapas.
+- Menu Ctrl-K ampliado com manutenção de sistema, HD, vídeo, som, SWAP e diretórios vazios.
+- Nova opção de monitoramento de temperatura da CPU via `lm-sensors` e sensores térmicos do kernel.
+- Operações que exigem sudo solicitam a senha em caixa antes da execução e usam `sudo -n` depois da autenticação.
+- Estado do DRY-RUN exibido no cabeçalho e nas telas de manutenção.
+
+## 3.0-10
+
+- Filtro digitado (`FZF_QUERY`) permanece até mudar de pasta ou apagar
+- Seleção no modo normal persiste em `SELECTED_FILE` (sobrevive a reload/filtro)
+- Ctrl-A / Ctrl-R / Ctrl-X usam `eazy_sel_*` e não incluem `..`
+- Ao mudar de pasta: zera seleção e limpa o filtro digitado
+
+## 3.0-9
+
+- Lista temporária dedicada para preservar seleções no modo Duplicados durante redesenhos
+- Ctrl-R inverte a seleção atual; Ctrl-A seleciona todos e Ctrl-X limpa todos
+- F12 mantém a seleção de um representante existente por grupo
+- Enter, Insert, apagar, copiar, mover e embaralhar usam a seleção persistente
+- Seleção permanece até Ctrl-X (zerar) ou mudança de pasta
+- Ctrl-A / Ctrl-R não incluem a linha `..` / Voltar na seleção
+
+## 3.0 — professional
+
+- Identidade de versão e codinome
+- `--help` em texto (estilo utilitário Unix)
+- `--version` formal
+- Instalador com lista clara de pacotes apt
+- README e launcher `.desktop`
+- Caminho como argumento reforçado (`eazy ~/Videos`)
+- Filtro fzf estável (sem fzf aninhado no reload)
+- `..` / Voltar sempre visíveis e fora da seleção em massa
+- 3 filas temporárias (Ctrl-P / Insert)
+- Alt-D apaga do disco em playlists; Del só remove da lista
+- Marcação para exclusão no mpv (`d` / `D`)
+
+## 2.3
+
+- Persistência de sessão, cursor e preview
+- Buffer de busca em sessão
+- Múltiplos players e opção sem áudio
+
+## 2.x
+
+- Evolução iterativa: filas, busca, dups, downloads, ações

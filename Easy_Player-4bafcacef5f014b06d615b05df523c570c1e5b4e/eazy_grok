@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-62"
+EAZY_VERSION="3.0-56"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -146,19 +146,11 @@ tem_sudo_sem_senha() {
     sudo -n true 2>/dev/null
 }
 
-eazy_pausa_terminal() {
-    local mensagem="${1:-Pressione Enter para continuar...}"
-    if [ -t 0 ]; then
-        printf '\n\033[1;36m%s\033[0m\n' "$mensagem"
-        IFS= read -r _eazy_pause || true
-    fi
-}
-
 operacao_com_sudo() {
     local cmd="$1"
     local desc="${2:-Operação}"
     local dry_msg="${3:-}"
-    clear 2>/dev/null || printf '\033c'
+
     echo -e "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}🔧 $desc${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -168,7 +160,6 @@ operacao_com_sudo() {
         [ -n "$dry_msg" ] && echo -e "${YELLOW}[DRY RUN] $dry_msg${NC}"
         echo -e "${YELLOW}[DRY RUN] Comando: $cmd${NC}"
         echo -e "${GREEN}✅ [DRY RUN] Concluído (sem alterações)${NC}"
-        eazy_pausa_terminal "DRY-RUN concluído. Pressione Enter para voltar."
         return 0
     fi
 
@@ -181,10 +172,10 @@ operacao_com_sudo() {
     else
         echo -e "${RED}❌ Falha na operação (código $ret)${NC}"
         [ -n "$output" ] && echo "$output"
-        fi
-    eazy_pausa_terminal "$desc concluída. Pressione Enter para voltar."
+    fi
     return "$ret"
 }
+
 toggle_dry_run() {
     if [ "${DRY_RUN:-0}" = "1" ]; then
         DRY_RUN="0"
@@ -1094,60 +1085,14 @@ diagnostico_disco_rapido() {
 }
 
 limpeza_auto() {
-    local dias preview progresso_hd concluido_hd gauge_hd="" qtd_logs qtd_tmp qtd_lixeira
-    while true; do
-        dias=$(whiptail --title "Limpeza Automática" --inputbox \
-            "Remover arquivos com mais de quantos dias?\n\nDigite um número entre 1 e 3650:" 11 65 "30" 3>&1 1>&2 2>&3) || return
-        if [[ "$dias" =~ ^[0-9]+$ ]] && [ "$dias" -ge 1 ] && [ "$dias" -le 3650 ]; then
-            break
-        fi
-        whiptail --title "Valor inválido" --msgbox "Informe somente um número inteiro entre 1 e 3650." 8 60
-    done
-
-    # Primeiro mostra a prévia. Nenhuma operação de limpeza ocorre antes desta tela.
-    preview=$(mktemp "${TMPDIR:-/tmp}/eazy-clean-preview.XXXXXX") || return 1
-    qtd_logs=$(find /var/log -type f -name '*.log' -mtime +"$dias" 2>/dev/null | wc -l)
-    qtd_tmp=$(find /tmp -type f -user "$(id -un)" -mtime +"$dias" 2>/dev/null | wc -l)
-    qtd_lixeira=$(find "$HOME/.local/share/Trash/files" -type f -mtime +"$dias" 2>/dev/null | wc -l)
-    bytes_logs=$(find /var/log -type f -name '*.log' -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
-    bytes_tmp=$(find /tmp -type f -user "$(id -un)" -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
-    bytes_lixeira=$(find "$HOME/.local/share/Trash/files" -type f -mtime +"$dias" -printf '%s\n' 2>/dev/null | awk '{s+=$1} END {print s+0}')
-    bytes_limpeza=$((bytes_logs + bytes_tmp + bytes_lixeira))
-    {
-        echo "PRÉVIA DA LIMPEZA AUTOMÁTICA"
-        echo "================================"
-        echo "Critério: arquivos com mais de $dias dia(s)"
-        echo "DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)"
-        echo ""
-        echo "Serão considerados:"
-        echo "  • Logs antigos: $qtd_logs arquivo(s) em /var/log"
-        echo "  • Temporários antigos: $qtd_tmp arquivo(s) seus em /tmp"
-        echo "  • Lixeira antiga: $qtd_lixeira arquivo(s)"
-        echo "  • Espaço calculado dos arquivos elegíveis: $(formatar_bytes_label "$bytes_limpeza")"
-        echo "  • O cálculo acima também é exibido no DRY-RUN; nada será apagado nesse modo."
-        echo "  • Cache APT/DNF/Pacman e Docker: limpeza específica do gerenciador"
-        echo "  • Journal: vacuum de ${dias}d"
-        echo ""
-        echo "A prévia não remove nada. A exclusão só começa após a confirmação."
-    } > "$preview"
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Prévia — Limpeza com mais de $dias dias" --textbox "$preview" 20 78 --scrolltext
-    else
-        cat "$preview"
-        read -r -p "Enter para continuar..."
-    fi
-    rm -f "$preview"
-
-    if ! whiptail --title "Confirmar limpeza" --yesno \
-        "Executar agora a limpeza dos itens com mais de $dias dia(s)?\n\nA ação respeitará o DRY RUN atual e não poderá ser desfeita." 12 65; then
+    if ! whiptail --title "Limpeza Automática" --yesno \
+        "Isso irá (respeitando DRY RUN):\n\n  • Limpar caches APT/DNF/Pacman/Docker\n  • Logs > 30 dias\n  • Lixeira do usuário\n  • /tmp arquivos +30 dias\n\nDRY RUN atual: $([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)\nContinuar?" 18 65; then
         return
     fi
 
-    # A execução começa em uma tela limpa, sem misturar a prévia com o progresso.
-    clear 2>/dev/null || printf '\033c'
-    echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA — acima de $dias dias${NC}"
+    echo -e "\n${CYAN}🧹 LIMPEZA AUTOMÁTICA${NC}"
     echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}\n"
-    progresso_hd="/tmp/eazy-hd-clean-progress-$$"; concluido_hd="/tmp/eazy-hd-clean-done-$$"
+    local progresso_hd="/tmp/eazy-hd-clean-progress-$$" concluido_hd="/tmp/eazy-hd-clean-done-$$" gauge_hd=""
     : > "$progresso_hd"; rm -f "$concluido_hd"
     if command -v whiptail >/dev/null 2>&1 && [ -t 2 ]; then
         (
@@ -1158,7 +1103,7 @@ limpeza_auto() {
                 sleep 0.15
             done
             printf '100\n'
-        ) | whiptail --gauge "Limpando...\nCaches, logs, lixeira e temporários antigos." 8 70 0 2>/dev/null &
+        ) | whiptail --gauge "Limpando HD...\nCaches, logs, lixeira e temporários." 8 70 0 2>/dev/null &
         gauge_hd=$!
     fi
     printf '10\n' >> "$progresso_hd"
@@ -1181,22 +1126,22 @@ limpeza_auto() {
     printf '55\n' >> "$progresso_hd"
     echo -e "${YELLOW}Logs /tmp / lixeira...${NC}"
     if [ "${DRY_RUN:-0}" = "1" ]; then
-        echo "  [DRY RUN] find /var/log -name '*.log' -mtime +$dias -delete"
-        echo "  [DRY RUN] journalctl --vacuum-time=${dias}d"
-        echo "  [DRY RUN] find ~/.local/share/Trash/files -type f -mtime +$dias -delete"
-        echo "  [DRY RUN] find /tmp -type f -user $(id -un) -mtime +$dias -delete"
+        echo "  [DRY RUN] find /var/log -name '*.log' -mtime +30 -delete"
+        echo "  [DRY RUN] journalctl --vacuum-time=30d"
+        echo "  [DRY RUN] rm -rf ~/.local/share/Trash/*"
+        echo "  [DRY RUN] find /tmp -type f -mtime +30 -delete"
     else
-        operacao_com_sudo "find /var/log -name '*.log' -mtime +$dias -delete 2>/dev/null; true" "Logs antigos"
+        operacao_com_sudo "find /var/log -name '*.log' -mtime +30 -delete 2>/dev/null; true" "Logs antigos"
         if command -v journalctl >/dev/null 2>&1; then
-            operacao_com_sudo "journalctl --vacuum-time=${dias}d" "Journal vacuum"
+            operacao_com_sudo "journalctl --vacuum-time=30d" "Journal vacuum"
         fi
-        find "$HOME/.local/share/Trash/files" -type f -user "$(id -un)" -mtime +"$dias" -delete 2>/dev/null || true
-        find /tmp -type f -user "$(id -un)" -mtime +"$dias" -delete 2>/dev/null || true
-        find /tmp -type d -user "$(id -un)" -mtime +"$dias" -empty -delete 2>/dev/null || true
+        rm -rf ~/.local/share/Trash/* 2>/dev/null || true
+        find /tmp -type f -mtime +30 -delete 2>/dev/null || true
+        find /tmp -type d -mtime +30 -empty -delete 2>/dev/null || true
     fi
 
     printf '90\n' >> "$progresso_hd"
-    echo -e "\n${GREEN}✅ Limpeza finalizada (mais de $dias dias; DRY RUN=$([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO)).${NC}"
+    echo -e "\n${GREEN}✅ Limpeza finalizada (DRY RUN=$([ "${DRY_RUN:-0}" = "1" ] && echo SIM || echo NÃO)).${NC}"
     printf '100\n' >> "$progresso_hd"
     touch "$concluido_hd"
     [ -n "$gauge_hd" ] && wait "$gauge_hd" 2>/dev/null || true
@@ -1253,15 +1198,9 @@ manutencao_dados_eazy() {
 
     if eazy_dry_run_bloquear "limpeza dos dados próprios do eazy"; then
         whiptail --title "DRY-RUN" --msgbox "Simulação concluída. Nada foi apagado.\n\nEspaço que seria liberado: $(formatar_bytes_label "$total_bytes")" 10 76
-        clear 2>/dev/null || printf '\033c'
-        printf 'DRY-RUN concluído. Espaço que seria liberado: %s\n' "$(formatar_bytes_label "$total_bytes")"
-        eazy_pausa_terminal "Pressione Enter para voltar."
         return
     fi
 
-    clear 2>/dev/null || printf '\033c'
-    echo -e "\n${CYAN}🧹 LIMPEZA DOS DADOS DO EAZY${NC}"
-    echo -e "${YELLOW}DRY RUN: $([ "${DRY_RUN:-0}" = "1" ] && echo 'SIM' || echo 'NÃO')${NC}"
     for item in "${itens[@]}"; do
         case "$item" in
             playlists) find "$PLAYLIST_DIR_PADRAO" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true ;;
@@ -1276,9 +1215,6 @@ manutencao_dados_eazy() {
         esac
     done
     whiptail --title "Limpeza concluída" --msgbox "Limpeza seletiva concluída.\n\nEspaço estimado processado: $(formatar_bytes_label "$total_bytes")" 10 76
-    clear 2>/dev/null || printf '\033c'
-    printf 'Limpeza seletiva concluída. Espaço processado: %s\n' "$(formatar_bytes_label "$total_bytes")"
-    eazy_pausa_terminal "Pressione Enter para voltar."
 }
 
 eazy_limpar_playlist_ausentes() {
@@ -1441,71 +1377,6 @@ validar_dados_eazy() {
     return 0
 }
 
-manutencao_avancada_eazy() {
-    local manifest="/tmp/eazy-maint-all-$$" selecionados ordem=0 linha caminho bytes categoria
-    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-    : > "$manifest"
-    adicionar_segmento() {
-        local titulo="$1"; shift
-        printf '\033[1;35m━━ %s ━━\033[0m\n' "$titulo" >> "$manifest"
-        for caminho in "$@"; do
-            [ -f "$caminho" ] || continue
-            printf '  %s\n' "$(readlink -f -- "$caminho" 2>/dev/null || echo "$caminho")" >> "$manifest"
-        done
-    }
-    mapfile -t _pls < <(find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -name '*.m3u' -o -name '*.m3u8' -o -name '*.pls' \) -print 2>/dev/null | sort)
-    adicionar_segmento "PLAYLISTS" "${_pls[@]}" "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
-    mapfile -t _tmp < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist*' -print 2>/dev/null | sort)
-    adicionar_segmento "LISTAS TEMPORÁRIAS" "${_tmp[@]}"
-    adicionar_segmento "DUPLICADOS" "$DUP_LISTA"
-    mapfile -t _pesq < <(find "$SAVED_SEARCHES_DIR" -type f -print 2>/dev/null | sort)
-    adicionar_segmento "PESQUISAS SALVAS" "${_pesq[@]}"
-    mapfile -t _notas < <(find "$NOTES_DIR" -type f -print 2>/dev/null | sort)
-    adicionar_segmento "NOTAS" "${_notas[@]}"
-    adicionar_segmento "HISTÓRICO E DOWNLOADS" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$DOWNLOAD_PASSWORDS"
-    mapfile -t _estado < <(find "$CONFIG_DIR" -maxdepth 1 -type f \( -name '*session*' -o -name '*position*' -o -name '*dest*' -o -name '*mark*' \) -print 2>/dev/null | sort)
-    adicionar_segmento "ESTADO E BACKUPS" "${_estado[@]}"
-    clear 2>/dev/null || printf '\033c'
-    echo -e "\033[1;36mMANUTENÇÃO AVANÇADA — selecione os arquivos para apagar\033[0m"
-    echo "Espaço marca; Enter confirma. Cabeçalhos coloridos não são apagáveis."
-    selecionados=$(grep -v '^$' "$manifest" | fzf --ansi --multi --no-sort --border=rounded --header='Preview à direita · selecione somente arquivos' --preview='linha={}; case "$linha" in *━━*) printf "%s\\n" "$linha" ;; *) p="${linha#  }"; if [ -f "$p" ]; then sed -n "1,120p" -- "$p"; else echo "Arquivo não existe: $p"; fi ;; esac' --preview-window='right:55%:wrap' --expect=enter 2>/dev/tty) || { rm -f "$manifest"; return; }
-    selecionados=$(printf '%s\n' "$selecionados" | tail -n +2)
-    [ -n "$selecionados" ] || { rm -f "$manifest"; return; }
-    total_bytes=0
-    while IFS= read -r linha; do
-        [[ "$linha" == *━━* ]] && continue
-        caminho="${linha#  }"
-        [ -f "$caminho" ] || continue
-        bytes=$(stat -c '%s' -- "$caminho" 2>/dev/null || echo 0)
-        total_bytes=$((total_bytes + bytes))
-    done <<< "$selecionados"
-    whiptail --title "Confirmar exclusão" --yesno "Arquivos selecionados: $(printf '%s\n' "$selecionados" | grep -c '^')\nEspaço: $(formatar_bytes_label "$total_bytes")\n\nExcluir somente os itens selecionados?" 11 74 || { rm -f "$manifest"; return; }
-    local log_file="$CONFIG_DIR/maintenance_deletions.log"
-    mkdir -p "$(dirname -- "$log_file")"
-    if [ "${DRY_RUN:-0}" = "1" ]; then
-        clear 2>/dev/null || printf '\033c'
-        echo "DRY-RUN: nenhum arquivo será apagado. Espaço que seria liberado: $(formatar_bytes_label "$total_bytes")"
-    fi
-    while IFS= read -r linha; do
-        [[ "$linha" == *━━* ]] && continue
-        caminho="${linha#  }"; [ -f "$caminho" ] || continue
-        ordem=$((ordem + 1)); bytes=$(stat -c '%s' -- "$caminho" 2>/dev/null || echo 0)
-        categoria="arquivo selecionado"
-        if [ "${DRY_RUN:-0}" = "1" ]; then
-            printf '[DRY-RUN] %02d | %s | %s bytes | %s\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho"
-        else
-            if rm -f -- "$caminho"; then
-                printf '%02d | %s | %s bytes | %s | EXCLUÍDO\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho" | tee -a "$log_file"
-            else
-                printf '%02d | %s | %s bytes | %s | FALHA\n' "$ordem" "$(date '+%F %T')" "$bytes" "$caminho" | tee -a "$log_file"
-            fi
-        fi
-    done <<< "$selecionados"
-    printf '\nLog: %s\n' "$log_file"
-    eazy_pausa_terminal "Operação concluída. Pressione Enter para voltar."
-    rm -f "$manifest"
-}
-
 menu_manutencao_eazy() {
     local opcao
     opcao=$(whiptail --title "🧰 Manutenção do próprio eazy" --menu \
@@ -1579,13 +1450,11 @@ menu_manutencao() {
 
 
 # --- TRATAMENTO DE ARGUMENTOS INICIAIS ---
-# O despacho de -m ocorre depois das definições de função, no início do fluxo principal.
-EAZY_OPEN_MAINTENANCE=0
-EAZY_OPEN_ADV_MAINTENANCE=0
-if [ "${1:-}" = "-m" ] || [ "${1:-}" = "--maintenance" ]; then
-    EAZY_OPEN_MAINTENANCE=1
-elif [ "${1:-}" = "-a" ] || [ "${1:-}" = "--advanced-maintenance" ]; then
-    EAZY_OPEN_ADV_MAINTENANCE=1
+
+# -m abre diretamente o gerenciador de manutenção, sem iniciar o navegador.
+if [ "$1" = "-m" ] || [ "$1" = "--maintenance" ]; then
+    menu_manutencao_direta
+    exit $?
 fi
 
 # Verificação de proteção com senha (ao iniciar)
@@ -1824,17 +1693,6 @@ atualizar_fila_atual() {
     esac
 }
 
-# Retorna o arquivo que está realmente aberto na tela.
-# Em listas personalizadas, PLAYLIST_FILE continua sendo apenas o buffer
-# da fila padrão; por isso ele não pode ser usado diretamente.
-arquivo_playlist_ativo() {
-    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
-        printf '%s\n' "$ARQUIVO_PLAYLIST_ABERTO"
-    else
-        printf '%s\n' "$PLAYLIST_FILE"
-    fi
-}
-
 # Conta itens de uma fila (1/2/3)
 contar_fila() {
     local n f
@@ -1962,7 +1820,6 @@ carregar_filtro_dir() {
     linha=$(awk -F '\t' -v d="$dir" '$1 == d {line=$0} END {print line}' "$FILTER_POSITIONS_FILE" 2>/dev/null)
     if [ -n "$linha" ]; then
         FZF_QUERY="${linha#*$'\t'}"
-        FZF_QUERY=$(printf '%s' "$FZF_QUERY" | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
     else
         FZF_QUERY=""
     fi
@@ -5081,12 +4938,8 @@ tocar_lista() {
 }
 
 salvar_playlist() {
-    local destino nome_tmp dir_destino lista_origem
-    # Ctrl-S dentro de uma playlist deve salvar a lista que está aberta.
-    # PLAYLIST_FILE pode continuar apontando para a fila padrão quando a
-    # navegação veio de uma lista temporária personalizada.
-    lista_origem=$(arquivo_playlist_ativo)
-    if [ ! -s "$lista_origem" ]; then
+    local destino nome_tmp dir_destino
+    if [ ! -s "$PLAYLIST_FILE" ]; then
         whiptail --title "Salvar Playlist" --msgbox "A playlist temporária está vazia.\nUse INSERT para adicionar arquivos antes de salvar." 8 60
         return
     fi
@@ -5132,7 +4985,7 @@ salvar_playlist() {
             if ! grep -Fxq -- "$item_abs" "$destino" 2>/dev/null; then
                 printf '%s\n' "$item_abs" >> "$destino"
             fi
-        done < "$lista_origem"
+        done < "$PLAYLIST_FILE"
     else
         {
             printf '%s\n' '#EXTM3U'
@@ -5140,7 +4993,7 @@ salvar_playlist() {
                 [ -z "$item" ] && continue
                 [[ "$item" =~ ^# ]] && continue
                 caminho_absoluto "$item"
-            done < "$lista_origem"
+            done < "$PLAYLIST_FILE"
         } > "$destino"
     fi
 
@@ -6028,8 +5881,6 @@ menu_acoes_selecao() {
             whiptail --title "Fila" --msgbox "Adicionados: $quantidade_adicionada\nTotal na fila: $total_fila" 9 45
             ;;
     esac
-    printf '\n'
-    read -r -p "Pressione Enter para voltar ao menu de ações..." _ || true
 }
 
 # Copia arquivos selecionados para um destino
@@ -6206,15 +6057,6 @@ mover_arquivos() {
     echo -e "\033[1;32mMovidos: $ok\033[0m | \033[1;31mFalhas: $falha\033[0m"
     sleep 1.5
 }
-
-if [ "${EAZY_OPEN_ADV_MAINTENANCE:-0}" = "1" ]; then
-    manutencao_avancada_eazy
-    exit $?
-fi
-if [ "${EAZY_OPEN_MAINTENANCE:-0}" = "1" ]; then
-    menu_manutencao_direta
-    exit $?
-fi
 
 registrar_status
 
@@ -6443,8 +6285,6 @@ while true; do
         # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
         FZF_NORMAL_SELECT_BINDS=(
             --bind='space:toggle+transform-header(eazy_status_header {+})'
-            --bind='home:first'
-            --bind='end:last'
             --bind='tab:toggle+down+transform-header(eazy_status_header {+})'
             --bind='shift-tab:toggle+up+transform-header(eazy_status_header {+})'
         )
@@ -6478,8 +6318,6 @@ while true; do
         "${FZF_BIND_T[@]}" \
         "${FZF_BIND_ESC[@]}" \
         "${FZF_SEARCH_ESC_BIND[@]}" \
-        --bind="home:first" \
-        --bind="end:last" \
         --bind="load:pos($TMP)" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
@@ -6498,7 +6336,7 @@ while true; do
         ')")
 
     # --print-query + --expect: linha1=query, linha2=tecla, resto=seleção
-    FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p' | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
+    FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p')
     tecla=$(printf '%s\n' "$saida_fzf" | sed -n '2p')
     escolha_raw=$(printf '%s\n' "$saida_fzf" | tail -n +3)
     # Remove .. / Voltar de seleções múltiplas (Ctrl-A, TAB, espaço…)
@@ -7316,8 +7154,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         # Seleção normal: toca só o que foi marcado / o item sob o cursor
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
+        : > "$SELECTED_FILE"
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
@@ -7413,8 +7250,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
+        : > "$SELECTED_FILE"
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
@@ -7512,8 +7348,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         # Extrai caminhos absolutos da seleção (TAB/ESPAÇO)
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
+        : > "$SELECTED_FILE"
         while IFS= read -r linha; do
             [ -z "$linha" ] && continue
             p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
