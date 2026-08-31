@@ -282,6 +282,94 @@ check_orphans() {
 }
 
 # ------------------------------------------------------------
+# 7. Executar TRIM em SSDs
+# ------------------------------------------------------------
+trim_ssd() {
+    echo -e "\\n${CYAN}=== Otimizando SSD com TRIM ===${NC}"
+
+    if ! command -v fstrim >/dev/null 2>&1; then
+        echo -e "${YELLOW}[AVISO] fstrim não está disponível neste sistema.${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}Dispositivos de bloco detectados:${NC}"
+    lsblk -o NAME,TYPE,ROTA,SIZE,MOUNTPOINTS 2>/dev/null || true
+
+    if confirm "Deseja executar fstrim em todos os sistemas de arquivos montados?"; then
+        fstrim -av 2>&1 || echo -e "${YELLOW}[AVISO] Alguns pontos de montagem não aceitaram TRIM.${NC}"
+        echo -e "${GREEN}[OK] TRIM concluído onde suportado.${NC}"
+    else
+        echo -e "${YELLOW}[INFO] TRIM cancelado.${NC}"
+    fi
+}
+
+# ------------------------------------------------------------
+# 8. Ajustar parâmetros de memória e I/O do kernel
+# ------------------------------------------------------------
+optimize_kernel() {
+    echo -e "\\n${CYAN}=== Ajustando parâmetros do kernel ===${NC}"
+    echo -e "${YELLOW}Os ajustes são temporários e podem ser revertidos com a reinicialização.${NC}"
+    echo "  vm.swappiness: $(sysctl -n vm.swappiness 2>/dev/null || echo indisponível)"
+    echo "  vm.vfs_cache_pressure: $(sysctl -n vm.vfs_cache_pressure 2>/dev/null || echo indisponível)"
+    echo "  vm.dirty_ratio: $(sysctl -n vm.dirty_ratio 2>/dev/null || echo indisponível)"
+
+    if ! confirm "Aplicar perfil equilibrado para desktop (swappiness=10, cache_pressure=50, dirty_ratio=10)?"; then
+        echo -e "${YELLOW}[INFO] Ajustes do kernel cancelados.${NC}"
+        return
+    fi
+
+    sysctl -w vm.swappiness=10 2>/dev/null || true
+    sysctl -w vm.vfs_cache_pressure=50 2>/dev/null || true
+    sysctl -w vm.dirty_ratio=10 2>/dev/null || true
+    sysctl -w vm.dirty_background_ratio=5 2>/dev/null || true
+    echo -e "${GREEN}[OK] Perfil de memória e I/O aplicado temporariamente.${NC}"
+}
+
+# ------------------------------------------------------------
+# 9. Otimizar parâmetros de rede
+# ------------------------------------------------------------
+optimize_network() {
+    echo -e "\\n${CYAN}=== Otimizando rede ===${NC}"
+    echo -e "${YELLOW}Os ajustes são temporários e podem ser revertidos com a reinicialização.${NC}"
+    echo "  net.ipv4.tcp_fastopen: $(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo indisponível)"
+    echo "  net.ipv4.tcp_fin_timeout: $(sysctl -n net.ipv4.tcp_fin_timeout 2>/dev/null || echo indisponível)"
+    echo "  net.core.default_qdisc: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo indisponível)"
+
+    if ! confirm "Aplicar ajustes seguros de latência TCP e fila de rede?"; then
+        echo -e "${YELLOW}[INFO] Ajustes de rede cancelados.${NC}"
+        return
+    fi
+
+    sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
+    sysctl -w net.ipv4.tcp_fin_timeout=30 2>/dev/null || true
+    sysctl -w net.core.default_qdisc=fq 2>/dev/null || true
+    echo -e "${GREEN}[OK] Perfil de rede aplicado onde suportado.${NC}"
+}
+
+# ------------------------------------------------------------
+# 10. Exibir relatório de saúde do sistema
+# ------------------------------------------------------------
+system_health_report() {
+    echo -e "\\n${CYAN}=== Relatório avançado de saúde do sistema ===${NC}"
+    echo -e "${YELLOW}Uptime:${NC}"
+    uptime -p 2>/dev/null || uptime
+    echo -e "${YELLOW}Carga:${NC}"
+    uptime | sed 's/^.*load average: //' || true
+    echo -e "${YELLOW}Memória:${NC}"
+    free -h
+    echo -e "${YELLOW}Discos:${NC}"
+    df -hT --exclude-type=tmpfs --exclude-type=devtmpfs 2>/dev/null || df -h
+    echo -e "${YELLOW}Swap:${NC}"
+    swapon --show 2>/dev/null || echo "Nenhuma swap ativa."
+    echo -e "${YELLOW}Temperatura disponível:${NC}"
+    if command -v sensors >/dev/null 2>&1; then
+        sensors 2>/dev/null || echo "Sensores não disponíveis."
+    else
+        echo "Instale lm-sensors para consultar temperaturas."
+    fi
+}
+
+# ------------------------------------------------------------
 # Menu separado de otimização
 # ------------------------------------------------------------
 menu_otimizacao() {
@@ -291,7 +379,12 @@ menu_otimizacao() {
         echo "  1) Liberar / otimizar RAM"
         echo "  2) Limpar e otimizar disco"
         echo "  3) Definir CPU para máxima performance"
-        echo "  4) Executar todas as otimizações"
+        echo "  4) Executar todas as otimizações básicas"
+        echo "  5) Executar TRIM em SSDs"
+        echo "  6) Ajustar memória e I/O do kernel"
+        echo "  7) Otimizar parâmetros de rede"
+        echo "  8) Exibir relatório avançado de saúde"
+        echo "  9) Executar todas as otimizações avançadas"
         echo "  0) Voltar ao menu principal"
         echo
         read -p "Opção: " opcao_otimizacao
@@ -306,6 +399,21 @@ menu_otimizacao() {
                 clean_disk
                 set_cpu_performance
                 echo -e "\\n${GREEN}=== Otimização completa finalizada ===${NC}"
+                pause
+                ;;
+            5) clear; trim_ssd; pause ;;
+            6) clear; optimize_kernel; pause ;;
+            7) clear; optimize_network; pause ;;
+            8) clear; system_health_report; pause ;;
+            9)
+                clear
+                free_ram
+                clean_disk
+                set_cpu_performance
+                trim_ssd
+                optimize_kernel
+                optimize_network
+                echo -e "\\n${GREEN}=== Otimizações avançadas finalizadas ===${NC}"
                 pause
                 ;;
             0) return 0 ;;
