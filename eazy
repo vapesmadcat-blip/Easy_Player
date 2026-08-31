@@ -7,7 +7,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-62"
+EAZY_VERSION="3.0-75"
 EAZY_CODENAME="professional"
 EAZY_NAME="eazy"
 
@@ -1804,7 +1804,9 @@ TMP_FILE="/tmp/fzf_tmp_$$"
 DUP_FILE="/tmp/fzf_dup_$$"
 DUP_SELECTED_FILE="/tmp/fzf_dup_selected_$$"
 DUP_FIXED_FILE="/tmp/fzf_dup_fixed_$$"   # F12 amostragem — marca VERMELHA fixa (não inverte)
-SELECTED_FILE="/tmp/fzf_selected_$$"
+SELECTED_FILE="${EAZY_SELECTED_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/eazy/selected_paths}"
+mkdir -p "$(dirname -- "$SELECTED_FILE")" 2>/dev/null || true
+touch "$SELECTED_FILE" 2>/dev/null || true
 DUP_MANUAL_FILE="/tmp/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" 2>/dev/null || true
 # Migra fila legada e garante 3 filas
@@ -4415,7 +4417,12 @@ obter_lista_rapida() {
         awk -F'\t' \
             -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
             -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" \
+            -v selected_file="$SELECTED_FILE" -v c_root="$(pwd -P)" \
             -v tmin="${BUSCA_TAM_MIN:-0}" -v tmax="${BUSCA_TAM_MAX:-0}" '
+        BEGIN {
+            while ((getline sp < selected_file) > 0) selected[sp] = 1
+            close(selected_file)
+        }
         {
             bytes = $1 + 0
             if (tmin > 0 && bytes <= tmin) next
@@ -4424,6 +4431,12 @@ obter_lista_rapida() {
             mtime = $2
             nome = $4
             caminho = $5
+            caminho_abs = caminho
+            if (caminho_abs !~ /^\//) {
+                sub(/^\.\//, "", caminho_abs)
+                caminho_abs = c_root "/" caminho_abs
+            }
+            marca = selected[caminho_abs] ? "✓ " : "  "
             sub(/^\.\//, "", caminho)
 
             nome_exib = caminho
@@ -4438,20 +4451,20 @@ obter_lista_rapida() {
             ext = tolower(ext_arr[n])
 
             if (ext ~ /^(m3u|pls)$/) {
-                printf "%015d\t%s📜 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s%s📜 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
-                printf "%015d\t%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-                printf "%015d\t%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_img, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-                printf "%015d\t%s📦 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s%s📦 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_zip, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else {
-                printf "%015d\t%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
-                    chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
+                printf "%015d\t%s%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
+                    chave, c_vid, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
         rm -f "$tmp_busca"
@@ -4507,13 +4520,24 @@ obter_lista_rapida() {
 
     find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null | awk -F'\t' \
         -v c_dir="$C_DIR" -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
-        -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" '
+        -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" \
+        -v selected_file="$SELECTED_FILE" -v c_root="$(pwd -P)" '
+    BEGIN {
+        while ((getline sp < selected_file) > 0) selected[sp] = 1
+        close(selected_file)
+    }
     {
         bytes = $1
         mtime = $2
         tipo = $3
         nome = $4
         caminho = $5
+        caminho_abs = caminho
+        if (caminho_abs !~ /^\//) {
+            sub(/^\.\//, "", caminho_abs)
+            caminho_abs = c_root "/" caminho_abs
+        }
+        marca = selected[caminho_abs] ? "✓ " : "  "
 
         sub(/^\.\//, "", caminho)
         nome_exib = (length(nome) > 38) ? substr(nome, 1, 38) ".." : nome
@@ -4526,23 +4550,23 @@ obter_lista_rapida() {
         ext = tolower(ext_arr[n])
 
         if (tipo == "d") {
-            printf "%015d\t%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
-                chave, c_dir, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
+            printf "%015d\t%s%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
+                chave, c_dir, marca, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
         } else if (ext ~ /^(m3u|pls)$/) {
-            printf "%015d\t%s📜 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s%s📜 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
-            printf "%015d\t%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-            printf "%015d\t%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_img, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-            printf "%015d\t%s📦 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s%s📦 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_zip, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else {
-            printf "%015d\t%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
-                chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
+            printf "%015d\t%s%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_vid, marca, nome_exib, c_reset, c_size, info, c_reset, caminho
         }
     }'
 }
@@ -6588,7 +6612,7 @@ Depois use:
     elif [ "$tecla" = "X" ] || [ "$tecla" = "ctrl-q" ] || [ "$tecla" = "q" ]; then
         # X / Q / CTRL-Q = sair — salva sessão completa
         salvar_sessao
-        rm -f "$TMP_FILE" "$DUP_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE" "$DUP_MANUAL_FILE" 2>/dev/null
+        rm -f "$TMP_FILE" "$DUP_FILE" "$DUP_SELECTED_FILE" "$DUP_MANUAL_FILE" 2>/dev/null
         clear
         echo -e "\033[1;32m${EAZY_NAME} ${EAZY_VERSION}\033[0m — sessão salva."
         echo -e "Filas: 1=$(contar_fila 1) · 2=$(contar_fila 2) · 3=$(contar_fila 3)"
@@ -7324,9 +7348,11 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
             # Diretórios não são mídia: só entram quando selecionados sozinhos para navegação.
             [ -d "$p" ] && continue
-            # Já vem resolvido (absoluto) da listagem
-            printf '%s\n' "$p" >> "$playlist_sel"
-            printf '%s\n' "$p" >> "$SELECTED_FILE"
+            p_abs=$(caminho_absoluto "$p")
+            printf '%s\n' "$p_abs" >> "$playlist_sel"
+            if ! grep -Fxq -- "$p_abs" "$SELECTED_FILE" 2>/dev/null; then
+                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            fi
         done <<< "$escolha"
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
@@ -7362,7 +7388,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
         if [[ "$primeiro_caminho" =~ ^\.\.$ ]]; then
-            MODO_DUP=0; rm -f "$DUP_MANUAL_FILE" "$DUP_SELECTED_FILE" "$SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
+            MODO_DUP=0; rm -f "$DUP_MANUAL_FILE" "$DUP_SELECTED_FILE"; TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status; continue
         fi
         # A lista temporária persistente é a fonte da seleção para todas as ações.
         playlist_sel="/tmp/eazy_sel_play_$$"
@@ -7421,7 +7447,9 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             [ -z "$p" ] && continue
             p_abs=$(caminho_absoluto "$p")
             printf '%s\n' "$p_abs" >> "$playlist_sel"
-            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            if ! grep -Fxq -- "$p_abs" "$SELECTED_FILE" 2>/dev/null; then
+                printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
+            fi
         done <<< "$escolha"
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
