@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Wrapper to run eazy with selection persistence module sourced.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+MODULE="$SCRIPT_DIR/eazy-persist-selection.sh"
+if [ -f "$MODULE" ]; then
+    # shellcheck source=/dev/null
+    source "$MODULE"
+fi
+exec "$SCRIPT_DIR/eazy" "$@"
