@@ -1,146 +1,160 @@
-# eazy 3.0 (professional)
+# eazy 3.2 (release)
 
-Navegador e reprodutor multimídia no **terminal**, rápido, orientado por teclado e com poucas dependências. O projeto usa **fzf** em conjunto com **mpv**, mplayer, VLC CLI ou ffplay.
+**Repositório:** [https://github.com/vapesmadcat-blip/Easy_Player](https://github.com/vapesmadcat-blip/Easy_Player)
+
+**Navegador e reprodutor multimídia no terminal** — `fzf` + `mpv` (ou mplayer/cvlc/ffplay).
+
+Seleção persistente entre pastas, filas temporárias, playlists, busca, duplicados, downloads e manutenção do sistema.
+
+## Requisitos
+
+**Obrigatórios**
+
+- `bash`, `fzf`, `whiptail`, `find`, `awk`
+- Um player: `mpv` (recomendado), `mplayer`, `cvlc` ou `ffplay`
+
+**Opcionais**
+
+- `yt-dlp`, `aria2c`, `axel`, `wget` — downloads  
+- `ffmpeg`, `chafa`, `imagemagick`, `poppler-utils`, `img2pdf` — preview e conversões  
+- `p7zip`, `unzip` — arquivos compactados  
+- `smartmontools`, `lm-sensors` — diagnóstico  
 
 ## Instalação
 
-### Debian / Ubuntu: pacote `.deb` da Release
+### Direto do GitHub
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.0-62/eazy_3.0-62_all.deb.sha256
-sha256sum -c eazy_3.0-62_all.deb.sha256
-sudo apt install ./eazy_3.0-62_all.deb
-eazy
+git clone https://github.com/vapesmadcat-blip/Easy_Player.git
+cd Easy_Player
+chmod +x eazy install.sh
+./install.sh
 ```
 
-Para corrigir dependências caso necessário:
+Ou em uma linha:
 
 ```bash
-sudo apt -f install
+git clone https://github.com/vapesmadcat-blip/Easy_Player.git && cd Easy_Player && chmod +x eazy install.sh && ./install.sh
 ```
 
-### Instalação rápida a partir do código
+### Pacote .deb (Debian / Ubuntu / Mint)
 
 ```bash
-chmod +x eazy
-./eazy --install
-./eazy --uninstall
+sudo apt install ./eazy_3.2_all.deb
+# ou:
+sudo dpkg -i eazy_3.2_all.deb
+sudo apt-get install -f
 ```
 
-O instalador detecta apt, pacman, dnf, zypper e apk. As operações que exigem privilégios solicitam a senha em uma caixa segura antes da execução.
-
-### Gerar o pacote Debian localmente
+### Tarball
 
 ```bash
-chmod +x packaging/build-deb.sh
-./packaging/build-deb.sh
-sudo apt install ./packaging/eazy/dist/eazy_3.0-62_all.deb
+tar -xzf eazy-3.2.tar.gz
+cd eazy-3.2
+./install.sh
 ```
 
-### Dependências manuais no Debian/Ubuntu
+### Makefile
 
 ```bash
-sudo apt update && sudo apt install -y \
-  fzf mpv mplayer gawk sed findutils whiptail wget \
-  axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils \
-  inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager \
-  upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils file curl
+sudo make install
+make install-full
 ```
 
-O `--install` também cria `~/.config/eazy/`, `notas/`, `saved_searches/`, `mpv_scripts/`, `scripts/`, `backups/`, `~/Playlists/` e `~/Documentos/Easy-Notes/`, além das três filas, histórico e lista de duplicados. O cache de busca permanece temporário em `/tmp`.
-
-A limpeza automática pede o número de dias, exibe uma prévia com a quantidade de logs, temporários e itens da lixeira elegíveis e somente inicia depois da confirmação final. O modo DRY-RUN continua impedindo a remoção real.
-
-O pacote `rar` oficial é opcional e depende do repositório `non-free`; não é necessário para instalar o eazy.
-
-## Uso
+### Arch Linux (PKGBUILD)
 
 ```bash
-eazy
-eazy ~/Videos
-eazy ./filme.mp4
-eazy --help
+makepkg -si
+```
+
+### Remover
+
+```bash
+./uninstall.sh
+# ou:
+eazy --uninstall
+sudo apt remove eazy
+```
+
+O instalador detecta o gerenciador de pacotes, instala dependências, copia para `/usr/local/bin/eazy`, cria `~/.config/eazy/` e o script de manutenção completa.
+
+```bash
 eazy --version
-eazy --config
+eazy --help
+eazy -m
 ```
 
-## Atalhos
+## Uso rápido
 
-| Tecla | Ação |
-|---|---|
-| `Enter` | Tocar, entrar na pasta ou abrir playlist `.m3u` |
-| `Esc` | Sair da busca recursiva e voltar à pasta normal |
-| `Ctrl-Backspace` | Voltar ao último diretório |
-| `Tab` / `Espaço` | Marcar item |
-| `Insert` | Enviar para fila 1, 2 ou 3 |
-| `Ctrl-P` | Alternar filas 1→2→3→diretório |
-| `Ctrl-F` | Busca recursiva por extensão, tamanho e conteúdo |
-| `Ctrl-D` | Buscar duplicados ou reabrir a lista temporária |
-| `Ctrl-B` | Downloads |
-| `Ctrl-K` | Menu completo de ações, manutenção e `Conversões` |
-| `Ctrl-L` | Ir à pasta do arquivo |
-| `Ctrl-/` | Ligar/desligar preview |
-| `Del` | Remover conforme o contexto |
-| `Alt-D` | Apagar do disco em playlist/fila |
-| `F9` | Configuração e overview do sistema |
-| `F10` | HELP EXPANDIDO com atalhos e manutenção |
-| `F12` | Duplicados: selecionar uma amostra por grupo |
-| `Ctrl-R` | Duplicados: inverter seleção |
-| `Ctrl-A` / `Ctrl-X` | Duplicados: selecionar todos / limpar todos |
-| `Q` / `X` | Sair do programa |
+```bash
+eazy
+eazy ~/Vídeos
+eazy arquivo.mp4
+eazy --config
+eazy -m
+eazy --update-ytdlp
+```
 
-### Pesquisa avançada por nome e conteúdo
+## Seleção (3.2)
 
-O `Ctrl-F` aceita extensões, nomes completos e curingas no mesmo campo. Exemplos: `sh mp4 vid* filme.mov movie.*`. Tokens simples são convertidos em extensões (`mp4` vira `*.mp4`); tokens com ponto ou curingas são tratados como padrões completos de nome.
+| Tecla | Comportamento |
+|--------|----------------|
+| **Tab / Espaço** | Marca o item — a seleção **persiste** entre pastas |
+| **Enter** | Executa **só** o item sob o cursor |
+| **Alt+Enter** | Executa a **seleção inteira** (persistente + marcas do fzf) |
+| **Ctrl-A / Ctrl-X / Ctrl-R** | Todos / limpar pasta atual / inverter (marcas + persistência) |
+| **F12** | Reaplica a persistência como multi-select do fzf |
+| **Insert** | Envia a seleção para fila tmp 1/2/3 ou lista personalizada |
+| **Ctrl-K / Y / U / E** | Ações, copiar, mover, shuffle — mesma seleção do Alt+Enter |
 
-Para pesquisar dentro dos arquivos, escolha **Sim — digitar uma ou mais palavras-chave**. A expressão aceita palavras simples, frases entre aspas e os operadores `AND`, `OR` e `NOT`:
+Arquivo de persistência: `~/.config/eazy/selected_paths`
 
-| Expressão | Resultado |
-|---|---|
-| `alpha beta` | Exige `alpha` e `beta` no mesmo arquivo |
-| `alpha AND beta` | Exige os dois termos |
-| `alpha OR beta` | Aceita qualquer alternativa |
-| `alpha AND NOT debug` | Exige `alpha` e exclui arquivos com `debug` |
-| `"erro grave"` | Procura a frase literal, incluindo o espaço |
-| `"erro grave" AND NOT debug` | Exige a frase e exclui `debug` |
+## Atalhos principais
 
-O eazy primeiro filtra pelo nome/extensão e depois verifica o conteúdo dos arquivos restantes. Pesquisas salvas guardam a expressão e o snapshot do resultado; `Alt-R` executa um remake quando você quiser atualizar a pesquisa.
+| Tecla | Função |
+|--------|--------|
+| Ctrl-F | Busca recursiva |
+| Ctrl-D | Duplicados |
+| Ctrl-P | Alternar filas / listas / diretório |
+| Ctrl-O | Abrir playlist `.m3u` / `.pls` |
+| Ctrl-G | Histórico |
+| Ctrl-B | Downloads |
+| Ctrl-L | Ir à pasta do arquivo |
+| Ctrl-/ | Preview on/off |
+| Del / Alt-D | Remover da lista ou apagar do disco |
+| F9 | Configuração / overview / som |
+| F10 | Ajuda expandida |
+| Q / X / Ctrl-Q | Sair (salva sessão) |
 
-### Editor de notas rápidas
+## Manutenção (`eazy -m`)
 
-Ao pressionar `Ctrl-N` no navegador, o eazy abre a última nota. O mini editor visual fornecido no projeto não depende de Vim, vi ou nano e usa os seguintes controles:
+1. **Dados do próprio eazy** (sem sudo)
+2. **Manutenção do sistema** (sudo quando necessário)
+3. **Manutenção COMPLETA (sudo)** — RAM, disco, CPU, órfãos, TRIM, kernel, rede
 
-| Tecla | Ação |
-|---|---|
-| `Ctrl-N` | Nova nota |
-| `Ctrl-S` | Salva e abre outra nota |
-| `Esc` | Salva e sai |
-| `Enter` | Nova linha |
-| `Backspace` | Apaga |
-| `Ctrl-E` | Lista compacta de notas |
-| `Del` | Apaga a nota selecionada |
-| `Ctrl-R` | Renomeia a nota selecionada |
-| `Ctrl-X` | Exporta para `~/Documentos/Easy-Notes/` |
-
-O menu `Ctrl-K` inclui manutenção de sistema, análise e limpeza de HD, SMART, SWAP, som, vídeo/GPU, remoção de diretórios vazios, overview, monitoramento de temperatura da CPU e o item `Conversões`. O item `Conversões` oferece vídeo→vídeo, imagem→imagem, imagens→PDF, PDF→imagem, PDF→texto e PDF→HTML; PDFs também podem ser abertos diretamente com `Enter`, e imagens aguardam uma pausa antes do retorno ao navegador.
-
-## Duplicados e progresso
-
-A busca de duplicados filtra primeiro por tamanho e depois compara o conteúdo por hash. Uma barra de progresso informa o andamento do inventário, cálculo dos hashes e consolidação dos grupos. A análise de HD e a limpeza automática também mostram o avanço por etapas.
-
-## DRY-RUN e sudo
-
-O estado do **DRY-RUN** é exibido no cabeçalho e nas telas de manutenção. Com o modo ligado, operações destrutivas são apenas simuladas. Quando uma operação exige `sudo`, o eazy abre uma caixa de senha antes da execução, autentica com `sudo -S` e executa o comando posterior com `sudo -n`, evitando prompts inesperados que possam quebrar a tela.
+```bash
+eazy -m
+eazy --maintenance
+eazy -a
+```
 
 ## Configuração
 
-Os dados de usuário ficam em `~/.config/eazy/`, incluindo configuração, sessão, filas temporárias, histórico, seleções e listas de duplicados.
+Arquivos em `~/.config/eazy/`:
+
+| Arquivo | Uso |
+|---------|-----|
+| `config` | Player, volume, pastas, preview |
+| `session` | Sessão ao sair |
+| `selected_paths` | Seleção persistente |
+| `temp_playlist_1..3` | Filas temporárias |
+| `history` | Histórico |
+| `scripts/manut-completa.sh` | Manutenção completa |
 
 ## Licença
 
 Uso livre. Sem garantias.
 
-## Funcionamento e vantagens
+---
 
-O guia rápido de uso está em [`GUIA_RAPIDO.md`](GUIA_RAPIDO.md), com exemplos de pesquisa por curingas, conteúdo, frases, `AND`, `OR` e `NOT`. A explicação completa dos recursos, do funcionamento, da persistência, das filas, das notas, do modo DRY-RUN e das vantagens do projeto está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md). Após a instalação Debian, esses arquivos ficam disponíveis em `/usr/share/doc/eazy/`.
+**eazy 3.2 · release**
