@@ -1,0 +1,21 @@
+--- a/eazy
++++ b/eazy
+@@ -1,15 +1,16 @@
+ # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
+ #!/usr/bin/env bash
+ #
+-#  eazy — navegador e reprodutor multimídia no terminal
+-#  https://github.com/ (local)  |  fzf + mpv/mplayer/cvlc/ffplay
++#  eazy 3.2 (release) — navegador e reprodutor multimídia no terminal
++#  https://github.com/vapesmadcat-blip/Easy_Player
++#  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
+ #
+ #  Licença: uso livre. Sem garantias.
+ #
+ set -o pipefail
+ 
+-EAZY_VERSION="3.0-65"
+-EAZY_CODENAME="professional"
++EAZY_VERSION="3.2"
++EAZY_CODENAME="release"
+ EAZY_NAME="eazy"
