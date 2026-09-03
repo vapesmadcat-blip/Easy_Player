@@ -1,0 +1,348 @@
+.TH EAZY 1 "2026-09-03" "eazy 3.2" "User Commands"
+.SH NAME
+eazy \- navegador e reprodutor multimídia no terminal (fzf + mpv)
+.SH SYNOPSIS
+.B eazy
+[\fIOPTIONS\fR] [\fIPATH\fR]
+.P
+.B eazy
+.BR \-m | \-\-maintenance
+.P
+.B eazy
+.BR \-a | \-\-advanced\-maintenance
+.P
+.B eazy
+.BR \-\-install | \-\-uninstall | \-\-config | \-\-update\-ytdlp
+.SH DESCRIPTION
+.B eazy
+é um navegador de arquivos e player multimídia para o terminal, baseado em
+.BR fzf (1)
+e
+.BR mpv (1)
+(ou mplayer, cvlc, ffplay).
+.P
+Permite navegar pastas, marcar arquivos com
+.B seleção persistente
+entre diretórios, montar filas temporárias e playlists, buscar de forma
+recursiva, detectar duplicados, baixar mídia online e executar manutenção
+do sistema.
+.P
+A interface principal é o
+.BR fzf :
+lista filtrável, multi-seleção visual e atalhos de teclado personalizados.
+.SH ARGUMENTS
+.TP
+.I PATH
+Se for um
+.BR diretório ,
+abre o eazy nessa pasta.
+Se for um
+.BR arquivo ,
+abre a pasta pai e posiciona o cursor nesse item.
+Sem argumento, usa o diretório atual.
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Mostra a ajuda resumida no terminal e sai.
+.TP
+.BR \-V ", " \-\-version
+Mostra a versão (ex.:
+.BR "eazy 3.2 (release)" )
+e sai.
+.TP
+.B \-\-config
+Abre o assistente de configuração (player padrão, volume, pastas,
+preview, etc.). Também acessível por
+.B F9
+dentro do eazy.
+.TP
+.B \-\-install
+Instala dependências ausentes (apt/pacman/dnf/zypper/apk), copia o
+comando para
+.IR /usr/local/bin/eazy ,
+cria
+.IR ~/.config/eazy/
+e scripts auxiliares (ex.: manutenção completa).
+.TP
+.B \-\-uninstall
+Remove
+.I /usr/local/bin/eazy
+e o launcher
+.IR .desktop .
+Preserva
+.IR ~/.config/eazy/ .
+.TP
+.B \-\-update\-ytdlp
+Baixa o binário oficial mais recente do
+.B yt-dlp
+(sem pip).
+.TP
+.BR \-m ", " \-\-maintenance
+Abre o menu de manutenção:
+.RS
+.IP \(bu 2
+dados do próprio eazy (sem sudo)
+.IP \(bu 2
+manutenção do sistema (sudo quando necessário)
+.IP \(bu 2
+manutenção COMPLETA — RAM, disco, CPU, órfãos, TRIM, kernel, rede (sudo)
+.RE
+.TP
+.BR \-a ", " \-\-advanced\-maintenance
+Manutenção avançada com seleção fina de arquivos de dados do eazy.
+.SH SELECTION MODEL
+O eazy combina duas camadas de seleção:
+.TP
+.B Marcas do fzf
+Multi-select visual da sessão atual (Tab/Espaço). Pode ser perdida após
+.B reload
+(Ctrl-A, filtros, etc.).
+.TP
+.B Seleção persistente
+Lista de caminhos em
+.IR ~/.config/eazy/selected_paths
+(e estado local por diretório). Sobrevive a navegação entre pastas e a
+reloads do fzf.
+.P
+.B Enter
+executa
+.B somente
+o item sob o cursor.
+.P
+.B Alt+Enter
+executa a
+.B seleção inteira
+(união da multi-seleção do fzf com a persistência). O mesmo conjunto é
+usado por Insert, Del, Ctrl-K/Y/U/E.
+.P
+.B F12
+(fora de Duplicados) reaplica a persistência como multi-select manual do
+fzf (marca visual + texto ✓).
+.P
+.B Ctrl-R
+inverte
+.B marcas e persistência
+dos itens visíveis (respeita o filtro atual).
+.SH KEYBINDINGS
+.SS Navegação e seleção
+.TP
+.B Enter
+Tocar / abrir só o item sob o cursor; entrar em pasta; abrir playlist
+.BR .m3u .
+.TP
+.B Alt+Enter
+Executar a seleção inteira (persistente + marcas), com confirmação se
+houver vários itens.
+.TP
+.BR Tab " / " Espaço
+Marcar ou desmarcar o item (atualiza persistência).
+.TP
+.B Ctrl\-A
+Selecionar todos os itens visíveis.
+.TP
+.B Ctrl\-X
+Limpar a seleção do diretório / filtro atual.
+.TP
+.B Ctrl\-R
+Inverter seleção (marcas + persistência).
+.TP
+.B F12
+Reaplicar persistência como multi-select do fzf.
+Em modo Duplicados: amostragem (1 arquivo por grupo).
+.SS Filas e playlists
+.TP
+.B Insert
+Enviar a seleção (mesma regra do Alt+Enter) para fila temporária 1, 2, 3
+ou lista personalizada.
+.TP
+.B Ctrl\-P
+Alternar Filas 1 → 2 → 3 → listas → duplicados → diretório.
+.TP
+.B Ctrl\-O
+Abrir playlist
+.BR .m3u " / " .pls .
+.TP
+.B Ctrl\-S
+Salvar a fila/playlist ativa (quando aplicável).
+.SS Busca, disco e ações
+.TP
+.B Ctrl\-F
+Busca recursiva (extensão, tamanho, conteúdo).
+.TP
+.B Ctrl\-D
+Modo duplicados.
+.TP
+.B Ctrl\-K
+Menu de ações sobre a seleção (mesma fonte do Alt+Enter).
+.TP
+.BR Ctrl\-Y " / " Ctrl\-U
+Copiar / mover a seleção.
+.TP
+.B Ctrl\-E
+Tocar a seleção em ordem aleatória (shuffle).
+.TP
+.BR Del " / " Alt\-D
+Remover da lista ou apagar do disco (conforme contexto).
+.SS Outros
+.TP
+.B Ctrl\-B
+Fila de downloads (yt-dlp, aria2c, axel, wget).
+.TP
+.B Ctrl\-G
+Histórico de arquivos tocados.
+.TP
+.B Ctrl\-L
+Ir à pasta do arquivo sob o cursor.
+.TP
+.B Ctrl\-/
+Ligar/desligar preview (preferência persistida).
+.TP
+.B Ctrl\-Backspace
+Voltar ao último diretório (em fzf antigo:
+.BR Ctrl\-H ).
+.TP
+.B F9
+Configuração, overview de hardware e teste de som.
+.TP
+.B F10
+Ajuda expandida (whiptail).
+.TP
+.BR Q " / " X " / " Ctrl\-Q
+Sair e salvar sessão.
+.SS Dentro do mpv
+.TP
+.B d
+Marcar para exclusão ao sair do player.
+.TP
+.B D
+Marcar e ir ao próximo item.
+.SH MAINTENANCE
+.B eazy \-m
+abre o menu:
+.TP
+.B 1. Dados do eazy
+Limpeza e validação de playlists, filas, pesquisas e notas — sem sudo.
+.TP
+.B 2. Sistema
+Disco, SWAP, som, vídeo, diretórios vazios, DRY-RUN — sudo quando
+necessário.
+.TP
+.B 3. Completa (sudo)
+Script interativo (RAM, caches, órfãos, CPU performance, TRIM, sysctl,
+rede). Gravado em
+.IR ~/.config/eazy/scripts/manut\-completa.sh .
+.P
+Com
+.B DRY RUN
+ligado, operações destrutivas são só simuladas (a manutenção completa
+não roda em simulação parcial).
+.SH FILES
+.TP
+.I ~/.config/eazy/config
+Preferências (player, volume, pastas, preview).
+.TP
+.I ~/.config/eazy/session
+Sessão ao sair (diretório, cursor, etc.).
+.TP
+.I ~/.config/eazy/selected_paths
+Seleção persistente global de arquivos.
+.TP
+.I ~/.config/eazy/temp_playlist_1
+.TQ
+.I ~/.config/eazy/temp_playlist_2
+.TQ
+.I ~/.config/eazy/temp_playlist_3
+Filas temporárias (Insert / Ctrl-P).
+.TP
+.I ~/.config/eazy/history
+Histórico de reprodução.
+.TP
+.I ~/.config/eazy/scripts/manut\-completa.sh
+Script de manutenção completa do sistema.
+.TP
+.I /usr/local/bin/eazy
+Comando instalado por
+.B \-\-install
+ou pacote
+.BR .deb .
+.SH ENVIRONMENT
+.TP
+.B EDITOR
+Editor usado em fluxos de notas/configuração, quando aplicável.
+.TP
+.B PATH
+Deve incluir o diretório do binário
+.B eazy
+e das ferramentas
+.BR fzf ,
+.BR mpv ,
+etc.
+.SH DEPENDENCIES
+.SS Obrigatórias
+.BR bash (1),
+.BR fzf (1),
+.BR whiptail (1)
+(ou libnewt),
+.BR find (1),
+.BR awk (1)
+.SS Player (um deles)
+.BR mpv (1)
+(recomendado),
+.BR mplayer (1),
+.BR cvlc (1),
+.BR ffplay (1)
+.SS Opcionais
+.BR yt\-dlp (1),
+.BR aria2c (1),
+.BR axel (1),
+.BR ffmpeg (1),
+.BR chafa (1),
+p7zip,
+smartmontools,
+lm\-sensors
+.SH EXIT STATUS
+.TP
+.B 0
+Sucesso ou saída normal pelo usuário.
+.TP
+.B >0
+Erro de instalação, dependência ausente, ou falha de operação.
+.SH EXAMPLES
+.TP
+Abrir o diretório atual:
+.B eazy
+.TP
+Abrir uma pasta:
+.B eazy ~/Vídeos
+.TP
+Posicionar no arquivo:
+.B eazy ~/Música/faixa.mp3
+.TP
+Manutenção:
+.B eazy \-m
+.TP
+Instalar / atualizar comando e deps:
+.B eazy \-\-install
+.TP
+Instalar a partir de .deb (sem clonar):
+.nf
+curl -fsSL -o eazy_3.2_all.deb \\
+  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2/eazy_3.2_all.deb
+sudo apt install ./eazy_3.2_all.deb
+.fi
+.SH BUGS
+Reporte problemas em
+.UR https://github.com/vapesmadcat\-blip/Easy_Player
+.UE
+.SH SEE ALSO
+.BR fzf (1),
+.BR mpv (1),
+.BR find (1),
+.BR yt\-dlp (1),
+.BR whiptail (1)
+.P
+Documentação do repositório:
+.UR https://github.com/vapesmadcat\-blip/Easy_Player
+.UE
+.SH AUTHOR
+eazy contributors. Uso livre. Sem garantias.
