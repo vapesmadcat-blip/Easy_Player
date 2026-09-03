@@ -1,5 +1,6 @@
 # eazy 3.2 (release)
 
+**Autor:** João Kersting  
 **Repositório:** [https://github.com/vapesmadcat-blip/Easy_Player](https://github.com/vapesmadcat-blip/Easy_Player)
 
 **Navegador e reprodutor multimídia no terminal** — `fzf` + `mpv` (ou mplayer/cvlc/ffplay).
@@ -11,6 +12,7 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 **eazy-v3.2** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2)
 
 - Quebra de linha automática no editor
+- Importar notas de arquivos externos
 - Melhorias gerais de estabilidade
 
 ## Requisitos
@@ -133,6 +135,33 @@ Arquivo de persistência: `~/.config/eazy/selected_paths`
 | F10 | Ajuda expandida |
 | Q / X / Ctrl-Q | Sair (salva sessão) |
 
+## Editor de Notas
+
+### Controles do Editor
+
+| Tecla | Ação |
+|--------|--------|
+| `Ctrl-N` | Nova nota |
+| `Ctrl-S` | Salva e abre outra nota |
+| `Esc` | Salva e sai |
+| `Enter` | Nova linha (com quebra automática) |
+| `Backspace` | Apaga |
+| `Ctrl-E` | Lista compacta de notas |
+| `Del` | Apaga a nota selecionada |
+| `Ctrl-R` | Renomeia a nota selecionada |
+| `Ctrl-I` | Importar notas de arquivo externo |
+| `Ctrl-X` | Exporta para `~/Documentos/Easy-Notes/` |
+
+### Importar Notas
+
+O eazy 3.2 permite importar notas de arquivos de texto externos. Use a combinação **Ctrl-I** no editor para:
+
+- Selecionar arquivos de texto (`.txt`, `.md`, etc)
+- Importar o conteúdo como nova nota
+- Manter os arquivos originais intactos
+
+Os arquivos importados são convertidos automaticamente para o formato de notas do eazy.
+
 ## Manutenção (`eazy -m`)
 
 1. **Dados do próprio eazy** (sem sudo)
@@ -164,4 +193,5 @@ Uso livre. Sem garantias.
 
 ---
 
-**eazy 3.2 · release**
+**eazy 3.2 · release**  
+Desenvolvido por João Kersting
