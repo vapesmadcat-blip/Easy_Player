@@ -1525,6 +1525,543 @@ manutencao_avancada_eazy() {
     rm -f "$manifest"
 }
 
+# ------------------------------------------------------------
+# Manutenção completa (script dedicado) — eazy -m
+# ------------------------------------------------------------
+eazy_script_manut_completa_path() {
+    printf '%s\n' "${SCRIPTS_DIR:-$CONFIG_DIR/scripts}/manut-completa.sh"
+}
+
+eazy_instalar_script_manut_completa() {
+    local dest dir
+    dest=$(eazy_script_manut_completa_path)
+    dir=$(dirname -- "$dest")
+    mkdir -p "$dir" 2>/dev/null || true
+    cat > "$dest" <<'EAZY_MANUT_EOF'
+#!/bin/bash
+
+# ============================================================
+#  Script de Manutenção Linux - RAM / Disco / CPU / Órfãos
+#  Autor: Grok
+#  Uso: sudo bash manutencao.sh
+# ============================================================
+
+# Cores
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Verifica se está rodando como root
+if [[ $EUID -ne 0 ]]; then
+   echo -e "${RED}[ERRO] Este script precisa ser executado como root (sudo).${NC}"
+   exit 1
+fi
+
+echo -e "${CYAN}"
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║         SCRIPT DE MANUTENÇÃO LINUX - COMPLETO            ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo -e "${NC}"
+
+# ------------------------------------------------------------
+# Funções auxiliares
+# ------------------------------------------------------------
+pause() {
+    echo
+    read -p "Pressione ENTER para continuar..."
+}
+
+confirm() {
+    read -p "$(echo -e ${YELLOW}$1 [s/N]: ${NC})" resp
+    [[ "$resp" =~ ^[sS]$ ]]
+}
+
+# ------------------------------------------------------------
+# 1. Detectar gerenciador de pacotes
+# ------------------------------------------------------------
+detect_pkg_manager() {
+    if command -v apt >/dev/null 2>&1; then
+        PKG="apt"
+    elif command -v dnf >/dev/null 2>&1; then
+        PKG="dnf"
+    elif command -v pacman >/dev/null 2>&1; then
+        PKG="pacman"
+    elif command -v zypper >/dev/null 2>&1; then
+        PKG="zypper"
+    else
+        PKG="unknown"
+    fi
+    echo -e "${BLUE}[INFO] Gerenciador de pacotes detectado: ${PKG}${NC}"
+}
+
+# ------------------------------------------------------------
+# 2. Liberar e otimizar RAM
+# ------------------------------------------------------------
+free_ram() {
+    echo -e "\n${CYAN}=== Liberando e otimizando RAM ===${NC}"
+
+    echo -e "${YELLOW}Memória antes:${NC}"
+    free -h
+
+    # Sincroniza e limpa caches de página, dentries e inodes
+    sync
+    echo 3 > /proc/sys/vm/drop_caches
+    echo -e "${GREEN}[OK] Caches de página, dentries e inodes limpos.${NC}"
+
+    # Limpa swap se estiver usando pouco (opcional e seguro)
+    if [[ $(swapon --show | wc -l) -gt 1 ]]; then
+        if confirm "Deseja limpar a swap também? (recomendado se estiver com pouca memória livre)"; then
+            swapoff -a && swapon -a
+            echo -e "${GREEN}[OK] Swap limpa e reativada.${NC}"
+        fi
+    fi
+
+    echo -e "${YELLOW}Memória depois:${NC}"
+    free -h
+}
+
+# ------------------------------------------------------------
+# 3. Otimizar / limpar disco
+# ------------------------------------------------------------
+clean_disk() {
+    echo -e "\n${CYAN}=== Limpando e otimizando disco ===${NC}"
+
+    # Espaço antes
+    echo -e "${YELLOW}Espaço em disco antes:${NC}"
+    df -h / | tail -1
+
+    # Limpeza de logs antigos do journald
+    if command -v journalctl >/dev/null 2>&1; then
+        journalctl --vacuum-time=7d
+        echo -e "${GREEN}[OK] Logs do journald com mais de 7 dias removidos.${NC}"
+    fi
+
+    # Limpeza de arquivos temporários
+    rm -rf /tmp/* 2>/dev/null
+    rm -rf /var/tmp/* 2>/dev/null
+    echo -e "${GREEN}[OK] /tmp e /var/tmp limpos.${NC}"
+
+    # Limpeza específica por gerenciador
+    case $PKG in
+        apt)
+            apt clean
+            apt autoclean
+            apt autoremove -y
+            echo -e "${GREEN}[OK] Cache do APT e pacotes órfãos removidos.${NC}"
+            ;;
+        dnf)
+            dnf clean all
+            dnf autoremove -y
+            echo -e "${GREEN}[OK] Cache do DNF e pacotes órfãos removidos.${NC}"
+            ;;
+        pacman)
+            pacman -Sc --noconfirm
+            # Remove órfãos
+            orphans=$(pacman -Qtdq)
+            if [[ -n "$orphans" ]]; then
+                pacman -Rns $orphans --noconfirm
+                echo -e "${GREEN}[OK] Pacotes órfãos removidos.${NC}"
+            else
+                echo -e "${GREEN}[OK] Nenhum pacote órfão encontrado.${NC}"
+            fi
+            ;;
+        zypper)
+            zypper clean --all
+            zypper packages --unneeded | awk 'NR>2 {print $5}' | xargs -r zypper remove -y
+            echo -e "${GREEN}[OK] Cache do Zypper limpo.${NC}"
+            ;;
+        *)
+            echo -e "${YELLOW}[AVISO] Gerenciador desconhecido. Limpeza de cache de pacotes pulada.${NC}"
+            ;;
+    esac
+
+    # Limpa thumbnails antigos do usuário (se existir)
+    if [[ -d /home ]]; then
+        find /home -type d -name ".thumbnails" -exec rm -rf {} + 2>/dev/null
+        find /home -type d -name "thumbnails" -exec rm -rf {} + 2>/dev/null
+        echo -e "${GREEN}[OK] Thumbnails antigos removidos.${NC}"
+    fi
+
+    # Espaço depois
+    echo -e "${YELLOW}Espaço em disco depois:${NC}"
+    df -h / | tail -1
+}
+
+# ------------------------------------------------------------
+# 4. Definir CPU para máxima performance
+# ------------------------------------------------------------
+set_cpu_performance() {
+    echo -e "\n${CYAN}=== Configurando CPU para máxima performance ===${NC}"
+
+    # Verifica se o governor está disponível
+    if [[ ! -d /sys/devices/system/cpu/cpu0/cpufreq ]]; then
+        echo -e "${YELLOW}[AVISO] cpufreq não disponível (talvez seja máquina virtual ou kernel sem suporte).${NC}"
+        return
+    fi
+
+    # Lista governadores disponíveis
+    available=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors 2>/dev/null)
+    echo -e "${BLUE}Governadores disponíveis: $available${NC}"
+
+    if echo "$available" | grep -q "performance"; then
+        for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+            echo "performance" > "$cpu" 2>/dev/null
+        done
+        echo -e "${GREEN}[OK] Todos os núcleos definidos para 'performance'.${NC}"
+
+        # Mostra frequência atual
+        echo -e "${YELLOW}Frequências atuais:${NC}"
+        grep MHz /proc/cpuinfo | head -n $(nproc)
+    else
+        echo -e "${YELLOW}[AVISO] Governor 'performance' não disponível.${NC}"
+    fi
+
+    # Desativa alguns recursos de economia de energia (opcional)
+    if confirm "Deseja também desativar o Intel P-State em modo passive / forçar max (se aplicável)?"; then
+        if [[ -f /sys/devices/system/cpu/intel_pstate/status ]]; then
+            echo "active" > /sys/devices/system/cpu/intel_pstate/status 2>/dev/null
+            echo -e "${GREEN}[OK] Intel P-State ajustado.${NC}"
+        fi
+    fi
+}
+
+# ------------------------------------------------------------
+# 5. Remover processos residentes desnecessários
+# ------------------------------------------------------------
+kill_unnecessary() {
+    echo -e "\n${CYAN}=== Processos residentes (cuidado!) ===${NC}"
+
+    echo -e "${YELLOW}Processos que mais consomem memória agora:${NC}"
+    ps aux --sort=-%mem | head -15
+
+    echo
+    echo -e "${RED}ATENÇÃO: Matar processos pode fechar programas importantes!${NC}"
+    echo "Exemplos comuns de processos que as pessoas costumam matar:"
+    echo "  - tracker-miner / tracker-store (indexação GNOME)"
+    echo "  - evolution-calendar-factory, evolution-source-registry"
+    echo "  - snapd (se não usa snaps)"
+    echo "  - packagekitd"
+    echo "  - alguns agentes de atualização automática"
+
+    if confirm "Deseja tentar matar processos comuns de indexação e atualização automática?"; then
+        # Lista de processos "seguros" para tentar matar (não críticos do sistema)
+        # pgrep -x limita o nome a 15 caracteres; use -f (cmdline) para nomes longos.
+        # Âncoras evitam matar processos só porque o nome aparece em outro comando.
+        targets=(
+            "tracker-miner-fs"
+            "tracker-extract"
+            "tracker-store"
+            "evolution-calendar-factory"
+            "evolution-source-registry"
+            "evolution-addressbook-factory"
+            "packagekitd"
+            "gnome-software"
+            "update-notifier"
+        )
+
+        for proc in "${targets[@]}"; do
+            if pgrep -f "(^|/)${proc}( |$)" >/dev/null 2>&1; then
+                if pkill -f "(^|/)${proc}( |$)" 2>/dev/null; then
+                    echo -e "${GREEN}[OK] Processo $proc finalizado.${NC}"
+                else
+                    echo -e "${YELLOW}[AVISO] Não foi possível matar $proc${NC}"
+                fi
+            fi
+        done
+    fi
+
+    echo
+    if confirm "Deseja abrir o htop para matar processos manualmente? (recomendado)"; then
+        if command -v htop >/dev/null; then
+            htop
+        else
+            echo -e "${YELLOW}htop não instalado. Use: top ou instale com seu gerenciador de pacotes.${NC}"
+            top
+        fi
+    fi
+}
+
+# ------------------------------------------------------------
+# 6. Verificar pacotes órfãos (detalhado)
+# ------------------------------------------------------------
+check_orphans() {
+    echo -e "\n${CYAN}=== Verificando pacotes órfãos / não necessários ===${NC}"
+
+    case $PKG in
+        apt)
+            echo -e "${YELLOW}Pacotes que podem ser removidos (autoremove):${NC}"
+            apt autoremove --dry-run
+            if confirm "Deseja remover os pacotes listados acima?"; then
+                apt autoremove -y
+            fi
+            ;;
+        dnf)
+            echo -e "${YELLOW}Pacotes não necessários:${NC}"
+            dnf autoremove --dry-run
+            if confirm "Deseja remover?"; then
+                dnf autoremove -y
+            fi
+            ;;
+        pacman)
+            orphans=$(pacman -Qtdq)
+            if [[ -n "$orphans" ]]; then
+                echo -e "${YELLOW}Pacotes órfãos encontrados:${NC}"
+                echo "$orphans"
+                if confirm "Deseja remover estes pacotes órfãos?"; then
+                    pacman -Rns $orphans --noconfirm
+                fi
+            else
+                echo -e "${GREEN}Nenhum pacote órfão encontrado.${NC}"
+            fi
+            ;;
+        zypper)
+            echo -e "${YELLOW}Pacotes não necessários:${NC}"
+            zypper packages --unneeded
+            ;;
+        *)
+            echo -e "${YELLOW}Gerenciador não suportado para verificação de órfãos.${NC}"
+            ;;
+    esac
+}
+
+# ------------------------------------------------------------
+# 7. Executar TRIM em SSDs
+# ------------------------------------------------------------
+trim_ssd() {
+    echo -e "\\n${CYAN}=== Otimizando SSD com TRIM ===${NC}"
+
+    if ! command -v fstrim >/dev/null 2>&1; then
+        echo -e "${YELLOW}[AVISO] fstrim não está disponível neste sistema.${NC}"
+        return
+    fi
+
+    echo -e "${YELLOW}Dispositivos de bloco detectados:${NC}"
+    lsblk -o NAME,TYPE,ROTA,SIZE,MOUNTPOINTS 2>/dev/null || true
+
+    if confirm "Deseja executar fstrim em todos os sistemas de arquivos montados?"; then
+        fstrim -av 2>&1 || echo -e "${YELLOW}[AVISO] Alguns pontos de montagem não aceitaram TRIM.${NC}"
+        echo -e "${GREEN}[OK] TRIM concluído onde suportado.${NC}"
+    else
+        echo -e "${YELLOW}[INFO] TRIM cancelado.${NC}"
+    fi
+}
+
+# ------------------------------------------------------------
+# 8. Ajustar parâmetros de memória e I/O do kernel
+# ------------------------------------------------------------
+optimize_kernel() {
+    echo -e "\\n${CYAN}=== Ajustando parâmetros do kernel ===${NC}"
+    echo -e "${YELLOW}Os ajustes são temporários e podem ser revertidos com a reinicialização.${NC}"
+    echo "  vm.swappiness: $(sysctl -n vm.swappiness 2>/dev/null || echo indisponível)"
+    echo "  vm.vfs_cache_pressure: $(sysctl -n vm.vfs_cache_pressure 2>/dev/null || echo indisponível)"
+    echo "  vm.dirty_ratio: $(sysctl -n vm.dirty_ratio 2>/dev/null || echo indisponível)"
+
+    if ! confirm "Aplicar perfil equilibrado para desktop (swappiness=10, cache_pressure=50, dirty_ratio=10)?"; then
+        echo -e "${YELLOW}[INFO] Ajustes do kernel cancelados.${NC}"
+        return
+    fi
+
+    sysctl -w vm.swappiness=10 2>/dev/null || true
+    sysctl -w vm.vfs_cache_pressure=50 2>/dev/null || true
+    sysctl -w vm.dirty_ratio=10 2>/dev/null || true
+    sysctl -w vm.dirty_background_ratio=5 2>/dev/null || true
+    echo -e "${GREEN}[OK] Perfil de memória e I/O aplicado temporariamente.${NC}"
+}
+
+# ------------------------------------------------------------
+# 9. Otimizar parâmetros de rede
+# ------------------------------------------------------------
+optimize_network() {
+    echo -e "\\n${CYAN}=== Otimizando rede ===${NC}"
+    echo -e "${YELLOW}Os ajustes são temporários e podem ser revertidos com a reinicialização.${NC}"
+    echo "  net.ipv4.tcp_fastopen: $(sysctl -n net.ipv4.tcp_fastopen 2>/dev/null || echo indisponível)"
+    echo "  net.ipv4.tcp_fin_timeout: $(sysctl -n net.ipv4.tcp_fin_timeout 2>/dev/null || echo indisponível)"
+    echo "  net.core.default_qdisc: $(sysctl -n net.core.default_qdisc 2>/dev/null || echo indisponível)"
+
+    if ! confirm "Aplicar ajustes seguros de latência TCP e fila de rede?"; then
+        echo -e "${YELLOW}[INFO] Ajustes de rede cancelados.${NC}"
+        return
+    fi
+
+    sysctl -w net.ipv4.tcp_fastopen=3 2>/dev/null || true
+    sysctl -w net.ipv4.tcp_fin_timeout=30 2>/dev/null || true
+    sysctl -w net.core.default_qdisc=fq 2>/dev/null || true
+    echo -e "${GREEN}[OK] Perfil de rede aplicado onde suportado.${NC}"
+}
+
+# ------------------------------------------------------------
+# 10. Exibir relatório de saúde do sistema
+# ------------------------------------------------------------
+system_health_report() {
+    echo -e "\\n${CYAN}=== Relatório avançado de saúde do sistema ===${NC}"
+    echo -e "${YELLOW}Uptime:${NC}"
+    uptime -p 2>/dev/null || uptime
+    echo -e "${YELLOW}Carga:${NC}"
+    uptime | sed 's/^.*load average: //' || true
+    echo -e "${YELLOW}Memória:${NC}"
+    free -h
+    echo -e "${YELLOW}Discos:${NC}"
+    df -hT --exclude-type=tmpfs --exclude-type=devtmpfs 2>/dev/null || df -h
+    echo -e "${YELLOW}Swap:${NC}"
+    swapon --show 2>/dev/null || echo "Nenhuma swap ativa."
+    echo -e "${YELLOW}Temperatura disponível:${NC}"
+    if command -v sensors >/dev/null 2>&1; then
+        sensors 2>/dev/null || echo "Sensores não disponíveis."
+    else
+        echo "Instale lm-sensors para consultar temperaturas."
+    fi
+}
+
+# ------------------------------------------------------------
+# Menu separado de otimização
+# ------------------------------------------------------------
+menu_otimizacao() {
+    while true; do
+        clear
+        echo -e "${CYAN}=== Menu de otimização ===${NC}"
+        echo "  1) Liberar / otimizar RAM"
+        echo "  2) Limpar e otimizar disco"
+        echo "  3) Definir CPU para máxima performance"
+        echo "  4) Executar todas as otimizações básicas"
+        echo "  5) Executar TRIM em SSDs"
+        echo "  6) Ajustar memória e I/O do kernel"
+        echo "  7) Otimizar parâmetros de rede"
+        echo "  8) Exibir relatório avançado de saúde"
+        echo "  9) Executar todas as otimizações avançadas"
+        echo "  0) Voltar ao menu principal"
+        echo
+        read -p "Opção: " opcao_otimizacao
+
+        case $opcao_otimizacao in
+            1) clear; free_ram; pause ;;
+            2) clear; clean_disk; pause ;;
+            3) clear; set_cpu_performance; pause ;;
+            4)
+                clear
+                free_ram
+                clean_disk
+                set_cpu_performance
+                echo -e "\\n${GREEN}=== Otimização completa finalizada ===${NC}"
+                pause
+                ;;
+            5) clear; trim_ssd; pause ;;
+            6) clear; optimize_kernel; pause ;;
+            7) clear; optimize_network; pause ;;
+            8) clear; system_health_report; pause ;;
+            9)
+                clear
+                free_ram
+                clean_disk
+                set_cpu_performance
+                trim_ssd
+                optimize_kernel
+                optimize_network
+                echo -e "\\n${GREEN}=== Otimizações avançadas finalizadas ===${NC}"
+                pause
+                ;;
+            0) return 0 ;;
+            *) echo -e "${RED}Opção inválida!${NC}"; pause ;;
+        esac
+    done
+}
+
+# ------------------------------------------------------------
+# Menu principal
+# ------------------------------------------------------------
+main_menu() {
+    detect_pkg_manager
+
+    while true; do
+        echo
+        echo -e "${CYAN}Escolha uma opção:${NC}"
+        echo "  1) Liberar / otimizar RAM"
+        echo "  2) Limpar e otimizar disco"
+        echo "  3) Definir CPU para máxima performance"
+        echo "  4) Remover processos residentes desnecessários"
+        echo "  5) Verificar e remover pacotes órfãos"
+        echo "  6) Executar TUDO (recomendado com atenção)"
+        echo "  7) Abrir menu separado de otimização"
+        echo "  0) Sair"
+        echo
+        read -p "Opção: " opcao
+
+        case $opcao in
+            1) clear; free_ram; pause ;;
+            2) clear; clean_disk; pause ;;
+            3) clear; set_cpu_performance; pause ;;
+            4) clear; kill_unnecessary; pause ;;
+            5) clear; check_orphans; pause ;;
+            6)
+                clear
+                free_ram
+                clean_disk
+                set_cpu_performance
+                check_orphans
+                kill_unnecessary
+                echo -e "\n${GREEN}=== Manutenção completa finalizada ===${NC}"
+                pause
+                ;;
+            7) menu_otimizacao ;;
+            0) echo -e "${GREEN}Saindo...${NC}"; exit 0 ;;
+            *) echo -e "${RED}Opção inválida!${NC}" ;;
+        esac
+    done
+}
+
+# Inicia
+main_menu
+
+EAZY_MANUT_EOF
+    chmod +x "$dest" 2>/dev/null || true
+    printf '%s\n' "$dest"
+}
+
+eazy_abrir_manutencao_completa() {
+    local dest rc
+    clear 2>/dev/null || printf '\033c'
+    echo -e "${CYAN}=== Manutenção completa do sistema (sudo) ===${NC}"
+    echo -e "${YELLOW}RAM · Disco · CPU · Órfãos · TRIM · Kernel · Rede${NC}"
+    echo
+
+    if [ "${DRY_RUN:-0}" = "1" ]; then
+        whiptail --title "DRY-RUN" --msgbox \
+"Modo DRY RUN está LIGADO.\n\nA manutenção completa faz alterações reais no sistema e não pode ser simulada item a item.\n\nDesligue o DRY RUN (opção no menu de manutenção) para executar." 14 72
+        return 0
+    fi
+
+    if ! whiptail --title "Manutenção completa" --yesno \
+"Será aberto o menu de manutenção completa do sistema.\n\n• Requer sudo\n• Pode liberar RAM, limpar disco, ajustar CPU, etc.\n\nContinuar?" 12 70; then
+        return 0
+    fi
+
+    dest=$(eazy_instalar_script_manut_completa) || {
+        whiptail --title "Erro" --msgbox "Não foi possível preparar o script de manutenção." 8 60
+        return 1
+    }
+
+    if ! solicitar_senha_sudo; then
+        whiptail --title "sudo" --msgbox "Autenticação sudo cancelada ou recusada." 8 55
+        return 1
+    fi
+
+    clear 2>/dev/null || printf '\033c'
+    # -n: senha já validada; script exige root
+    sudo -n bash -- "$dest"
+    rc=$?
+    restaurar_terminal
+    echo
+    if [ "$rc" -eq 0 ]; then
+        echo -e "${GREEN}Manutenção completa encerrada.${NC}"
+    else
+        echo -e "${YELLOW}Manutenção completa encerrada (código $rc).${NC}"
+    fi
+    eazy_pausa_terminal "Pressione Enter para voltar ao menu do eazy."
+    return "$rc"
+}
+
 menu_manutencao_eazy() {
     local opcao
     opcao=$(whiptail --title "🧰 Manutenção do próprio eazy" --menu \
@@ -1542,13 +2079,15 @@ menu_manutencao_eazy() {
 menu_manutencao_direta() {
     local opcao
     opcao=$(whiptail --title "🛠️ Manutenção do eazy" --menu \
-        "Escolha o tipo de manutenção:" 14 78 4 \
+        "Escolha o tipo de manutenção:" 16 78 5 \
         "1" "🧹 Dados do próprio eazy (sem sudo)" \
         "2" "🖥️ Manutenção do sistema (sudo quando necessário)" \
+        "3" "🚀 Manutenção COMPLETA — RAM/Disco/CPU (sudo)" \
         "0" "Voltar" 3>&1 1>&2 2>&3) || return
     case "$opcao" in
         1) menu_manutencao_eazy ;;
         2) menu_manutencao ;;
+        3) eazy_abrir_manutencao_completa ;;
         0|*) return ;;
     esac
 }
@@ -1559,7 +2098,7 @@ menu_manutencao() {
         [ "${DRY_RUN:-0}" = "1" ] && dry_status="LIGADO 🔄"
 
         opcao=$(whiptail --title "🛠️ Manutenção do Sistema" --menu \
-            "DRY RUN: $dry_status\n\nEscolha:" 24 70 11 \
+            "DRY RUN: $dry_status\n\nEscolha:" 26 72 12 \
             "1" "📊 Diagnóstico de disco" \
             "2" "🧹 Limpeza automática (caches/logs)" \
             "3" "💾 Gerenciador de SWAP" \
@@ -1570,6 +2109,7 @@ menu_manutencao() {
             "8" "🖥️  Menu sistema (CPU/RAM/logs)" \
             "9" "🔄 Alternar DRY RUN ($dry_status)" \
             "10" "🧹 Limpar dados do próprio eazy" \
+            "11" "🚀 Manutenção COMPLETA (sudo) — RAM/Disco/CPU" \
             "0" "Voltar" \
             3>&1 1>&2 2>&3) || return
 
@@ -1584,6 +2124,7 @@ menu_manutencao() {
             8) menu_manutencao_sistema ;;
             9) toggle_dry_run ;;
             10) manutencao_dados_eazy ;;
+            11) eazy_abrir_manutencao_completa ;;
             0) return ;;
             *) return ;;
         esac
@@ -1722,6 +2263,7 @@ if [ "$1" = "--install" ]; then
     # Estrutura completa de dados do usuário; o cache de busca continua temporário.
     mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$HOME/Documentos/Easy-Notes"
     touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE"
+    eazy_instalar_script_manut_completa >/dev/null 2>&1 || true
 
     echo -e "\033[1;34mInstalando comando global em $DESTINO...\033[0m"
     if sudo install -Dm755 "$SCRIPT_ATUAL" "$DESTINO"; then
@@ -2351,11 +2893,104 @@ eazy_remark_local_selection() {
     done
 }
 
+# Monta lista de reprodução para Alt+Enter:
+# usa a multi-seleção do fzf + a seleção persistente (SELECTED_FILE),
+# porque reload (Ctrl-A/X etc.) apaga as marcas do fzf mas mantém a persistência.
+eazy_playlist_alt_enter() {
+    local dest="$1" linha p p_abs
+    : > "$dest"
+    [ -n "$dest" ] || return 1
+    # 1) itens devolvidos pelo fzf (multi-select da sessão)
+    while IFS= read -r linha; do
+        [ -z "$linha" ] && continue
+        p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+        [ -z "$p" ] && continue
+        eazy_eh_navegacao "$linha" 2>/dev/null && continue
+        [[ "$p" =~ \.\.$ ]] && continue
+        p_abs=$(caminho_absoluto "$p" 2>/dev/null || printf '%s' "$p")
+        p_abs=$(readlink -f -- "$p_abs" 2>/dev/null || printf '%s' "$p_abs")
+        [ -f "$p_abs" ] || continue
+        grep -Fxq -- "$p_abs" "$dest" 2>/dev/null || printf '%s\n' "$p_abs" >> "$dest"
+    done
+    # 2) seleção persistente global (fonte da verdade após reload)
+    if [ -f "${SELECTED_FILE:-}" ]; then
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            p_abs=$(readlink -f -- "$p" 2>/dev/null || printf '%s' "$p")
+            [ -f "$p_abs" ] || continue
+            grep -Fxq -- "$p_abs" "$dest" 2>/dev/null || printf '%s\n' "$p_abs" >> "$dest"
+        done < "$SELECTED_FILE"
+    fi
+}
+
+# Expande a seleção com a persistência (mesma regra do Alt+Enter).
+# INSERT, Del, Ctrl-K/Y/U/E usam isto — não altera Duplicados.
+eazy_expandir_escolha_acoes() {
+    local entrada="$1" tmp
+    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-sel-acoes.XXXXXX") || {
+        printf '%s\n' "$entrada"
+        return 1
+    }
+    printf '%s\n' "$entrada" | eazy_playlist_alt_enter "$tmp"
+    if [ -s "$tmp" ]; then
+        cat "$tmp"
+    else
+        printf '%s\n' "$entrada"
+    fi
+    rm -f "$tmp"
+}
+
 eazy_clear_global_confirm() {
     if whiptail --title "Limpar seleção global" --yesno \
         "Zerar toda a seleção global?\n\nTodos os arquivos marcados em todos os diretórios serão desmarcados." 10 65; then
         : > "$SELECTED_FILE"
         : > "$SELECTED_DIRS_FILE"
+    fi
+}
+
+# Inverte a seleção persistente dos itens visíveis (respeita filtro {q}).
+# Não mexe em Duplicados. Usado pelo Ctrl-R do navegador normal.
+eazy_invert_visible_global() {
+    local q="${1:-}" line
+    [ "${MODO_DUP:-0}" -eq 1 ] && return 0
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        eazy_toggle_global_item "$line"
+    done < <(eazy_lista_filtrada "$q")
+}
+
+# F12 (fora de duplicados): monta bind de load que reaplica multi-select
+# manual do fzf nos itens já persistentes do diretório/filtro atual.
+# Visual: ✓ no texto (persistente) + marcador do fzf (manual).
+eazy_build_preselect_load_bind() {
+    local q="${1:-}" cursor="${2:-1}" line p p_abs pos=0 actions="" final_pos
+    cursor=$(printf '%s' "$cursor" | tr -cd '0-9')
+    cursor=${cursor:-1}
+    [ "$cursor" -lt 1 ] && cursor=1
+    reconstruir_selecao_local
+    while IFS= read -r line; do
+        pos=$((pos + 1))
+        p=$(printf '%s\n' "$line" | awk -F '\t' '{print $NF}')
+        [ -n "$p" ] || continue
+        eazy_eh_navegacao "$line" && continue
+        p_abs=$(caminho_absoluto "$p" 2>/dev/null || printf '%s' "$p")
+        p_abs=$(readlink -f -- "$p_abs" 2>/dev/null || printf '%s' "$p_abs")
+        if grep -Fxq -- "$p_abs" "${SELECTED_LOCAL_FILE:-/dev/null}" 2>/dev/null \
+            || grep -Fxq -- "$p_abs" "${SELECTED_DIRS_FILE:-/dev/null}" 2>/dev/null \
+            || grep -Fxq -- "$p_abs" "${SELECTED_FILE:-/dev/null}" 2>/dev/null; then
+            if [ -n "$actions" ]; then
+                actions="${actions}+pos(${pos})+select"
+            else
+                actions="pos(${pos})+select"
+            fi
+        fi
+    done < <(eazy_lista_filtrada "$q")
+    final_pos=$cursor
+    [ "$pos" -gt 0 ] && [ "$final_pos" -gt "$pos" ] && final_pos=$pos
+    if [ -n "$actions" ]; then
+        printf 'load:%s+pos(%s)' "$actions" "$final_pos"
+    else
+        printf 'load:pos(%s)' "$final_pos"
     fi
 }
 
@@ -2374,13 +3009,15 @@ eazy_lista_filtrada() {
     ' "$f"
 
     # 2) demais itens — filtro + highlight (verde base + amarelo no match)
-    awk -F '\t' -v q="$q" -v OFS='\t' -v selected_local_file="${SELECTED_LOCAL_FILE:-}" -v base_dir="$(pwd -P)" '
+    awk -F '\t' -v q="$q" -v OFS='\t' -v selected_file="${SELECTED_FILE:-}" -v selected_dirs_file="${SELECTED_DIRS_FILE:-}" -v base_dir="$(pwd -P)" '
     BEGIN {
         # Match: amarelo brilhante no fundo preto do terminal
         HL = "\033[1;93m"
         OFF = "\033[0m"
-        while (selected_local_file != "" && (getline p < selected_local_file) > 0) sel[p] = 1
-        close(selected_local_file)
+        while (selected_file != "" && (getline p < selected_file) > 0) sel[p] = 1
+        close(selected_file)
+        while (selected_dirs_file != "" && (getline p < selected_dirs_file) > 0) dirs[p] = 1
+        close(selected_dirs_file)
     }
     function path_abs(p,    x) {
         if (p ~ /^\//) return p
@@ -2390,7 +3027,7 @@ eazy_lista_filtrada() {
     }
     function is_selected(p,    a) {
         a = path_abs(p)
-        return (a in sel)
+        return ((a in sel) || (a in dirs))
     }
     function mark_row(p, s) {
         if (is_selected(p)) return "✓ " s
@@ -2457,7 +3094,7 @@ eazy_lista_filtrada() {
     }
     ' "$f"
 }
-export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao arquivo_selecao_global adicionar_selecao_global remover_selecao_global expandir_diretorio_selecao remover_selecao_diretorio eazy_toggle_global_item adicionar_selecao_local remover_selecao_local reconstruir_selecao_local eazy_commit_fzf_selected eazy_remark_local_selection eazy_select_visible_global eazy_clear_local_selection eazy_clear_global_confirm 2>/dev/null || true
+export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao arquivo_selecao_global adicionar_selecao_global remover_selecao_global expandir_diretorio_selecao remover_selecao_diretorio eazy_toggle_global_item adicionar_selecao_local remover_selecao_local reconstruir_selecao_local eazy_commit_fzf_selected eazy_remark_local_selection eazy_select_visible_global eazy_clear_local_selection eazy_clear_global_confirm eazy_invert_visible_global eazy_build_preselect_load_bind eazy_playlist_alt_enter eazy_expandir_escolha_acoes 2>/dev/null || true
 
 # Salva sessão + limpa cache de busca ao sair
 trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null || true; rm -f "$LISTA_FZF_FILE" "$DUP_SELECTED_FILE" "$DUP_SELECTED_FILE.tmp" "$DUP_FIXED_FILE" "$DUP_FIXED_FILE.tmp" "$DUP_MANUAL_FILE" "$SELECTED_FILE.tmp" "$SELECTED_DIRS_FILE.tmp" 2>/dev/null || true' EXIT INT TERM
@@ -6659,8 +7296,10 @@ while true; do
         # Ctrl-T: marca de AMARELO todas as VERMELHAS (união)
         CTRL_T_BIND='ctrl-t:execute-silent(eazy_dup_select_fixed)+reload(eazy_dup_refresh_lista '\''{q}'\'')+transform-header(eazy_status_header)'
     else
-        # toggle-all / select-all nunca devem incluir .. (sempre a 1ª linha)
-        CTRL_R_BIND='ctrl-r:toggle-all+first+deselect+transform-header(eazy_status_header {+})'
+        # Ctrl-R: inverte a persistência dos itens visíveis E as marcas do fzf.
+        # A marcação original deixa de ir para a persistência — o estado invertido é salvo.
+        # first+deselect tira o .. da multi-seleção. Sem reload para não apagar as marcas do fzf.
+        CTRL_R_BIND='ctrl-r:execute-silent(bash -c '\''eazy_invert_visible_global "$1"'\'' -- {q})+toggle-all+first+deselect+transform-header(eazy_status_header)'
         CTRL_A_BIND='ctrl-a:execute-silent(bash -c '\''eazy_select_visible_global'\'')+reload(eazy_lista_filtrada '\''{q}'\'')+first+transform-header(eazy_status_header)'
         CTRL_X_BIND='ctrl-x:execute-silent(bash -c '\''eazy_clear_local_selection'\'')+reload(eazy_lista_filtrada '\''{q}'\'')+first+transform-header(eazy_status_header)'
         CTRL_T_BIND=''
@@ -6709,6 +7348,15 @@ while true; do
             --bind='shift-tab:execute-silent(bash -c '\''eazy_toggle_global_item "$1"'\'' -- {})+toggle+up+transform-header(eazy_status_header)'
         )
     fi
+    # F12: pré-seleciona no load os itens já persistentes (fora de Duplicados).
+    EAZY_LOAD_BIND="load:pos($TMP)"
+    if [ "${EAZY_PRESELECT_PERSIST:-0}" = "1" ] && [ "${MODO_DUP:-0}" -ne 1 ]; then
+        EAZY_LOAD_BIND=$(eazy_build_preselect_load_bind "$FZF_QUERY" "$TMP")
+        EAZY_PRESELECT_PERSIST=0
+        export EAZY_PRESELECT_PERSIST
+    fi
+    export EAZY_LOAD_BIND
+
     saida_fzf=$(eazy_lista_filtrada "$FZF_QUERY" | fzf --multi --ansi \
         --disabled \
         --print-query \
@@ -6742,7 +7390,7 @@ while true; do
         "${FZF_SEARCH_ESC_BIND[@]}" \
         --bind="home:first" \
         --bind="end:last" \
-        --bind="load:pos($TMP)" \
+        --bind="${EAZY_LOAD_BIND:-load:pos($TMP)}" \
         --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
             IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
@@ -6769,13 +7417,24 @@ while true; do
         rm -f -- "$EAZY_ALT_ENTER_FILE"
     fi
     escolha_raw=$(printf '%s\n' "$saida_fzf" | tail -n +3)
-    # Alt+Enter: varre fzf_selected linha a linha, remarca e reconta o estado normal.
+    # Alt+Enter: só remarca a persistência se o fzf devolveu multi-seleção real.
+    # (reload apaga marcas do fzf; remarcar com 0/1 item apagaria a seleção persistente.)
     if [ "${tecla:-}" = "alt-enter" ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
-        eazy_remark_local_selection <<< "$escolha_raw"
+        _ae_n=$(printf '%s\n' "$escolha_raw" | eazy_sem_navegacao | grep -c '^' 2>/dev/null || echo 0)
+        _ae_n=$(echo "$_ae_n" | tr -cd '0-9'); _ae_n=${_ae_n:-0}
+        if [ "$_ae_n" -gt 1 ]; then
+            eazy_remark_local_selection <<< "$escolha_raw"
+        fi
+        unset _ae_n
     fi
-    # Enter executa somente o item sob o cursor; Alt+Enter preserva todas as marcas.
-    if [ -z "${tecla:-}" ] && [ -n "${cursor_raw:-}" ]; then
-        escolha_raw="$cursor_raw"
+    # Enter (tecla vazia): SOMENTE o item sob o cursor — nunca a multi-seleção.
+    # Alt+Enter: mantém escolha_raw completa (seleção inteira).
+    if [ -z "${tecla:-}" ]; then
+        if [ -n "${cursor_raw:-}" ]; then
+            escolha_raw="$cursor_raw"
+        else
+            escolha_raw=$(printf '%s\n' "$escolha_raw" | head -n1)
+        fi
     fi
     # Remove .. / Voltar de seleções múltiplas (Ctrl-A, TAB, espaço…)
     # Mas preserva se for SÓ navegação (Enter em ".." / Voltar deve funcionar)
@@ -6823,13 +7482,14 @@ while true; do
         continue
     fi
 
-    if [ "$tecla" = "f12" ] && [ "${MODO_DUP:-0}" -eq 1 ]; then
-        # Amostragem: 1 por grupo → VERMELHO fixo + AMARELO (seleção normal acompanha)
-        DUP_SEL_COUNT=$(eazy_dup_amostra_f12)
-        DUP_SEL_COUNT=$(echo "$DUP_SEL_COUNT" | tr -cd '0-9')
-        DUP_SEL_COUNT=${DUP_SEL_COUNT:-0}
-        if [ "$DUP_SEL_COUNT" -gt 0 ]; then
-            whiptail --title "Duplicados — amostragem F12" --msgbox \
+    if [ "$tecla" = "f12" ]; then
+        if [ "${MODO_DUP:-0}" -eq 1 ]; then
+            # Amostragem: 1 por grupo → VERMELHO fixo + AMARELO (seleção normal acompanha)
+            DUP_SEL_COUNT=$(eazy_dup_amostra_f12)
+            DUP_SEL_COUNT=$(echo "$DUP_SEL_COUNT" | tr -cd '0-9')
+            DUP_SEL_COUNT=${DUP_SEL_COUNT:-0}
+            if [ "$DUP_SEL_COUNT" -gt 0 ]; then
+                whiptail --title "Duplicados — amostragem F12" --msgbox \
 "1 arquivo por grupo (amostra).
 
 ● VERMELHO = amostra F12 (fixa)
@@ -6842,10 +7502,18 @@ Depois use:
   Ctrl-A → ✓ amarelo em TODOS os arquivos
   Ctrl-R → inverte só o amarelo
   Ctrl-X → limpa só o amarelo" 16 72
-        else
-            whiptail --title "Duplicados" --msgbox "Nenhum grupo duplicado disponível para selecionar." 8 58
+            else
+                whiptail --title "Duplicados" --msgbox "Nenhum grupo duplicado disponível para selecionar." 8 58
+            fi
+            continue
         fi
-        continue
+        # Fora de duplicados: reaplica persistência como multi-select manual do fzf.
+        if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+            reconstruir_selecao_local
+            EAZY_PRESELECT_PERSIST=1
+            export EAZY_PRESELECT_PERSIST
+            continue
+        fi
     fi
 
     if [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "$DUP_SELECTED_FILE" ]; then
@@ -6854,6 +7522,16 @@ Depois use:
                 # A lista temporária é a fonte da verdade para tocar, apagar,
                 # copiar, mover, embaralhar e enviar para fila.
                 escolha=$(cat "$DUP_SELECTED_FILE" 2>/dev/null || true)
+                ;;
+        esac
+    fi
+
+    # Fora de Duplicados: INSERT / Del / ações = mesma seleção do Alt+Enter
+    # (multi-select do fzf + persistência em SELECTED_FILE).
+    if [ "${MODO_DUP:-0}" -ne 1 ]; then
+        case "$tecla" in
+            insert|del|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e)
+                escolha=$(eazy_expandir_escolha_acoes "$escolha")
                 ;;
         esac
     fi
@@ -7600,30 +8278,29 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             fi
             continue
         fi
-        # Seleção normal: toca só o que foi marcado / o item sob o cursor
+        # Enter → só o cursor. Alt+Enter → seleção inteira.
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
-        while IFS= read -r linha; do
-            [ -z "$linha" ] && continue
-            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-            [ -z "$p" ] || [[ "$p" =~ \.\.$ ]] && continue
-            # Diretórios não são mídia: só entram quando selecionados sozinhos para navegação.
-            [ -d "$p" ] && continue
-            # Já vem resolvido (absoluto) da listagem
-            printf '%s\n' "$p" >> "$playlist_sel"
-            printf '%s\n' "$p" >> "$SELECTED_FILE"
-        done <<< "$escolha"
+        if [ "${tecla:-}" = "alt-enter" ]; then
+            printf '%s\n' "$escolha" | eazy_playlist_alt_enter "$playlist_sel"
+        else
+            if [ -n "${cursor_raw:-}" ]; then
+                p=$(printf '%s\n' "$cursor_raw" | awk -F '\t' '{print $NF}')
+            else
+                p="$primeiro_caminho"
+            fi
+            [ -n "$p" ] && [[ ! "$p" =~ \.\.$ ]] && [ ! -d "$p" ] && printf '%s\n' "$p" >> "$playlist_sel"
+        fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
         total_sel=${total_sel:-0}
 
-        if [ "$total_sel" -gt 1 ]; then
+        if [ "$total_sel" -gt 1 ] && [ "${tecla:-}" = "alt-enter" ]; then
+            confirmar_alt_enter "$total_sel" || { rm -f "$playlist_sel"; continue; }
             ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
             registrar_status
             tocar_lista "$playlist_sel"
-        elif [ "$total_sel" -eq 1 ]; then
+        elif [ "$total_sel" -ge 1 ]; then
             tocado=$(head -n1 "$playlist_sel")
             ULTIMO_ARQUIVO="$tocado"
             registrar_status
@@ -7700,25 +8377,27 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         fi
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
-        while IFS= read -r linha; do
-            [ -z "$linha" ] && continue
-            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-            [ -z "$p" ] && continue
+        if [ "${tecla:-}" = "alt-enter" ]; then
+            printf '%s\n' "$escolha" | eazy_playlist_alt_enter "$playlist_sel"
+        else
+            if [ -n "${cursor_raw:-}" ]; then
+                p=$(printf '%s\n' "$cursor_raw" | awk -F '\t' '{print $NF}')
+            else
+                p="$primeiro_caminho"
+            fi
             p_abs=$(caminho_absoluto "$p")
-            printf '%s\n' "$p_abs" >> "$playlist_sel"
-            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
-        done <<< "$escolha"
+            [ -f "$p_abs" ] && printf '%s\n' "$p_abs" >> "$playlist_sel"
+        fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
         total_sel=${total_sel:-0}
 
-        if [ "$total_sel" -gt 1 ]; then
+        if [ "$total_sel" -gt 1 ] && [ "${tecla:-}" = "alt-enter" ]; then
+            confirmar_alt_enter "$total_sel" || { rm -f "$playlist_sel"; continue; }
             ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
             registrar_status
             tocar_lista "$playlist_sel"
-        elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
+        elif [ "$total_sel" -ge 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
             if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
@@ -7796,32 +8475,30 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
     fi
 
     if [ -f "$primeiro_caminho" ]; then
-        # Extrai caminhos absolutos da seleção (TAB/ESPAÇO)
+        # Enter → só o cursor. Alt+Enter → seleção inteira (com confirmação).
         playlist_sel="/tmp/eazy_sel_play_$$"
         : > "$playlist_sel"
-        # A seleção persistente não é apagada após uma ação; ela só sai quando
-        # o usuário a desmarca explicitamente no navegador.
-        while IFS= read -r linha; do
-            [ -z "$linha" ] && continue
-            p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
-            [ -z "$p" ] && continue
+        if [ "${tecla:-}" = "alt-enter" ]; then
+            printf '%s\n' "$escolha" | eazy_playlist_alt_enter "$playlist_sel"
+        else
+            if [ -n "${cursor_raw:-}" ]; then
+                p=$(printf '%s\n' "$cursor_raw" | awk -F '\t' '{print $NF}')
+            else
+                p="$primeiro_caminho"
+            fi
             p_abs=$(caminho_absoluto "$p")
-            printf '%s\n' "$p_abs" >> "$playlist_sel"
-            printf '%s\n' "$p_abs" >> "$SELECTED_FILE"
-        done <<< "$escolha"
+            [ -f "$p_abs" ] && printf '%s\n' "$p_abs" >> "$playlist_sel"
+        fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
         total_sel=${total_sel:-0}
 
-        if [ "$total_sel" -gt 1 ]; then
-            # Alt+Enter executa a seleção múltipla somente após pausa confirmatória.
-            if [ "${tecla:-}" = "alt-enter" ]; then
-                confirmar_alt_enter "$total_sel" || { rm -f "$playlist_sel"; continue; }
-            fi
+        if [ "$total_sel" -gt 1 ] && [ "${tecla:-}" = "alt-enter" ]; then
+            confirmar_alt_enter "$total_sel" || { rm -f "$playlist_sel"; continue; }
             ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
             registrar_status
             tocar_lista "$playlist_sel"
-        elif [ "$total_sel" -eq 1 ]; then
+        elif [ "$total_sel" -ge 1 ]; then
             tocado=$(head -n1 "$playlist_sel")
             ULTIMO_ARQUIVO="$tocado"
             registrar_status

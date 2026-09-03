@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Wrapper to run eazy with selection persistence module sourced.
+# If the module is missing, attempt to download it from the repository branch.
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+MODULE="$SCRIPT_DIR/eazy-persist-selection.sh"
+RAW_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/feature/persist-selection/eazy-persist-selection.sh"
+
+# Try to download the module if it's not present
+if [ ! -f "$MODULE" ]; then
+    printf "eazy-persist-selection module not found; attempting to download from %s\n" "$RAW_URL" >&2
+    mkdir -p "$SCRIPT_DIR" 2>/dev/null || true
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL -o "$MODULE" "$RAW_URL"; then
+            printf "Falha ao baixar via curl. Continuando sem o módulo.\n" >&2
+            [ -f "$MODULE" ] || rm -f -- "$MODULE" 2>/dev/null || true
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -q -O "$MODULE" "$RAW_URL"; then
+            printf "Falha ao baixar via wget. Continuando sem o módulo.\n" >&2
+            [ -f "$MODULE" ] || rm -f -- "$MODULE" 2>/dev/null || true
+        fi
+    else
+        printf "Nenhum downloader (curl/wget) disponível — não foi possível baixar o módulo.\n" >&2
+    fi
+    # make readable
+    [ -f "$MODULE" ] && chmod 644 "$MODULE" 2>/dev/null || true
+fi
+
+# Source module if available
+if [ -f "$MODULE" ]; then
+    # shellcheck source=/dev/null
+    source "$MODULE"
+fi
+
+# Exec the real eazy binary/script located next to this wrapper
+if [ -x "$SCRIPT_DIR/eazy" ]; then
+    exec "$SCRIPT_DIR/eazy" "$@"
+else
+    # fallback: try in PATH
+    exec eazy "$@"
+fi
