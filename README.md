@@ -6,6 +6,13 @@
 
 Seleção persistente entre pastas, filas temporárias, playlists, busca, duplicados, downloads e manutenção do sistema.
 
+## Release Notes
+
+**eazy-v3.2** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2)
+
+- Quebra de linha automática no editor
+- Melhorias gerais de estabilidade
+
 ## Requisitos
 
 **Obrigatórios**
