@@ -1,0 +1,232 @@
+[4mEAZY[24m(1)                                                                    User Commands                                                                   [4mEAZY[24m(1)
+
+[1mNAME[0m
+       eazy - navegador e reprodutor multimídia no terminal (fzf + mpv)
+
+[1mSYNOPSIS[0m
+       [1meazy [22m[[4mOPTIONS[24m] [[4mPATH[24m]
+
+       [1meazy -m[22m|[1m--maintenance[0m
+
+       [1meazy -a[22m|[1m--advanced-maintenance[0m
+
+       [1meazy --install[22m|[1m--uninstall[22m|[1m--config[22m|[1m--update-ytdlp[0m
+
+[1mDESCRIPTION[0m
+       [1meazy [22mé um navegador de arquivos e player multimídia para o terminal, baseado em [1mfzf[22m(1) e [1mmpv[22m(1) (ou mplayer, cvlc, ffplay).
+
+       Permite navegar pastas, marcar arquivos com [1mseleção persistente [22mentre diretórios, montar filas temporárias e playlists, buscar de forma recursiva, detectar
+       duplicados, baixar mídia online e executar manutenção do sistema.
+
+       A interface principal é o [1mfzf[22m: lista filtrável, multi-seleção visual e atalhos de teclado personalizados.
+
+[1mARGUMENTS[0m
+       [4mPATH[24m   Se  for um [1mdiretório[22m, abre o eazy nessa pasta.  Se for um [1marquivo[22m, abre a pasta pai e posiciona o cursor nesse item.  Sem argumento, usa o diretório
+              atual.
+
+[1mOPTIONS[0m
+       [1m-h[22m, [1m--help[0m
+              Mostra a ajuda resumida no terminal e sai.
+
+       [1m-V[22m, [1m--version[0m
+              Mostra a versão (ex.: [1meazy 3.2 (release)[22m) e sai.
+
+       [1m--config[0m
+              Abre o assistente de configuração (player padrão, volume, pastas, preview, etc.). Também acessível por [1mF9 [22mdentro do eazy.
+
+       [1m--install[0m
+              Instala dependências ausentes (apt/pacman/dnf/zypper/apk), copia o comando para [4m/usr/local/bin/eazy[24m, cria [4m~/.config/eazy/[24m e scripts auxiliares (ex.:
+              manutenção completa).
+
+       [1m--uninstall[0m
+              Remove [4m/usr/local/bin/eazy[24m e o launcher [4m.desktop[24m.  Preserva [4m~/.config/eazy/[24m.
+
+       [1m--update-ytdlp[0m
+              Baixa o binário oficial mais recente do [1myt-dlp [22m(sem pip).
+
+       [1m-m[22m, [1m--maintenance[0m
+              Abre o menu de manutenção:
+
+              • dados do próprio eazy (sem sudo)
+
+              • manutenção do sistema (sudo quando necessário)
+
+              • manutenção COMPLETA — RAM, disco, CPU, órfãos, TRIM, kernel, rede (sudo)
+
+       [1m-a[22m, [1m--advanced-maintenance[0m
+              Manutenção avançada com seleção fina de arquivos de dados do eazy.
+
+[1mSELECTION MODEL[0m
+       O eazy combina duas camadas de seleção:
+
+       [1mMarcas do fzf[0m
+              Multi-select visual da sessão atual (Tab/Espaço). Pode ser perdida após [1mreload [22m(Ctrl-A, filtros, etc.).
+
+       [1mSeleção persistente[0m
+              Lista de caminhos em [4m~/.config/eazy/selected_paths[24m (e estado local por diretório). Sobrevive a navegação entre pastas e a reloads do fzf.
+
+       [1mEnter [22mexecuta [1msomente [22mo item sob o cursor.
+
+       [1mAlt+Enter [22mexecuta a [1mseleção inteira [22m(união da multi-seleção do fzf com a persistência). O mesmo conjunto é usado por Insert, Del, Ctrl-K/Y/U/E.
+
+       [1mF12 [22m(fora de Duplicados) reaplica a persistência como multi-select manual do fzf (marca visual + texto ✓).
+
+       [1mCtrl-R [22minverte [1mmarcas e persistência [22mdos itens visíveis (respeita o filtro atual).
+
+[1mKEYBINDINGS[0m
+   [1mNavegação e seleção[0m
+       [1mEnter  [22mTocar / abrir só o item sob o cursor; entrar em pasta; abrir playlist [1m.m3u[22m.
+
+       [1mAlt+Enter[0m
+              Executar a seleção inteira (persistente + marcas), com confirmação se houver vários itens.
+
+       [1mTab [22m/ [1mEspaço[0m
+              Marcar ou desmarcar o item (atualiza persistência).
+
+       [1mCtrl-A [22mSelecionar todos os itens visíveis.
+
+       [1mCtrl-X [22mLimpar a seleção do diretório / filtro atual.
+
+       [1mCtrl-R [22mInverter seleção (marcas + persistência).
+
+       [1mF12    [22mReaplicar persistência como multi-select do fzf.  Em modo Duplicados: amostragem (1 arquivo por grupo).
+
+   [1mFilas e playlists[0m
+       [1mInsert [22mEnviar a seleção (mesma regra do Alt+Enter) para fila temporária 1, 2, 3 ou lista personalizada.
+
+       [1mCtrl-P [22mAlternar Filas 1 → 2 → 3 → listas → duplicados → diretório.
+
+       [1mCtrl-O [22mAbrir playlist [1m.m3u [22m/ [1m.pls[22m.
+
+       [1mCtrl-S [22mSalvar a fila/playlist ativa (quando aplicável).
+
+   [1mBusca, disco e ações[0m
+       [1mCtrl-F [22mBusca recursiva (extensão, tamanho, conteúdo).
+
+       [1mCtrl-D [22mModo duplicados.
+
+       [1mCtrl-K [22mMenu de ações sobre a seleção (mesma fonte do Alt+Enter).
+
+       [1mCtrl-Y [22m/ [1mCtrl-U[0m
+              Copiar / mover a seleção.
+
+       [1mCtrl-E [22mTocar a seleção em ordem aleatória (shuffle).
+
+       [1mDel [22m/ [1mAlt-D[0m
+              Remover da lista ou apagar do disco (conforme contexto).
+
+   [1mOutros[0m
+       [1mCtrl-B [22mFila de downloads (yt-dlp, aria2c, axel, wget).
+
+       [1mCtrl-G [22mHistórico de arquivos tocados.
+
+       [1mCtrl-L [22mIr à pasta do arquivo sob o cursor.
+
+       [1mCtrl-/ [22mLigar/desligar preview (preferência persistida).
+
+       [1mCtrl-Backspace[0m
+              Voltar ao último diretório (em fzf antigo: [1mCtrl-H[22m).
+
+       [1mF9     [22mConfiguração, overview de hardware e teste de som.
+
+       [1mF10    [22mAjuda expandida (whiptail).
+
+       [1mQ [22m/ [1mX [22m/ [1mCtrl-Q[0m
+              Sair e salvar sessão.
+
+   [1mDentro do mpv[0m
+       [1md      [22mMarcar para exclusão ao sair do player.
+
+       [1mD      [22mMarcar e ir ao próximo item.
+
+[1mMAINTENANCE[0m
+       [1meazy -m [22mabre o menu:
+
+       [1m1. Dados do eazy[0m
+              Limpeza e validação de playlists, filas, pesquisas e notas — sem sudo.
+
+       [1m2. Sistema[0m
+              Disco, SWAP, som, vídeo, diretórios vazios, DRY-RUN — sudo quando necessário.
+
+       [1m3. Completa (sudo)[0m
+              Script interativo (RAM, caches, órfãos, CPU performance, TRIM, sysctl, rede). Gravado em [4m~/.config/eazy/scripts/manut-completa.sh[24m.
+
+       Com [1mDRY RUN [22mligado, operações destrutivas são só simuladas (a manutenção completa não roda em simulação parcial).
+
+[1mFILES[0m
+       [4m~/.config/eazy/config[0m
+              Preferências (player, volume, pastas, preview).
+
+       [4m~/.config/eazy/session[0m
+              Sessão ao sair (diretório, cursor, etc.).
+
+       [4m~/.config/eazy/selected_paths[0m
+              Seleção persistente global de arquivos.
+
+       [4m~/.config/eazy/temp_playlist_1[0m
+       [4m~/.config/eazy/temp_playlist_2[0m
+       [4m~/.config/eazy/temp_playlist_3[0m
+              Filas temporárias (Insert / Ctrl-P).
+
+       [4m~/.config/eazy/history[0m
+              Histórico de reprodução.
+
+       [4m~/.config/eazy/scripts/manut-completa.sh[0m
+              Script de manutenção completa do sistema.
+
+       [4m/usr/local/bin/eazy[0m
+              Comando instalado por [1m--install [22mou pacote [1m.deb[22m.
+
+[1mENVIRONMENT[0m
+       [1mEDITOR [22mEditor usado em fluxos de notas/configuração, quando aplicável.
+
+       [1mPATH   [22mDeve incluir o diretório do binário [1meazy [22me das ferramentas [1mfzf[22m, [1mmpv[22m, etc.
+
+[1mDEPENDENCIES[0m
+   [1mObrigatórias[0m
+       [1mbash[22m(1), [1mfzf[22m(1), [1mwhiptail[22m(1) (ou libnewt), [1mfind[22m(1), [1mawk[22m(1)
+
+   [1mPlayer (um deles)[0m
+       [1mmpv[22m(1) (recomendado), [1mmplayer[22m(1), [1mcvlc[22m(1), [1mffplay[22m(1)
+
+   [1mOpcionais[0m
+       [1myt-dlp[22m(1), [1maria2c[22m(1), [1maxel[22m(1), [1mffmpeg[22m(1), [1mchafa[22m(1), p7zip, smartmontools, lm-sensors
+
+[1mEXIT STATUS[0m
+       [1m0      [22mSucesso ou saída normal pelo usuário.
+
+       [1m>0     [22mErro de instalação, dependência ausente, ou falha de operação.
+
+[1mEXAMPLES[0m
+       Abrir o diretório atual:
+              [1meazy[0m
+
+       Abrir uma pasta:
+              [1meazy ~/Vídeos[0m
+
+       Posicionar no arquivo:
+              [1meazy ~/Música/faixa.mp3[0m
+
+       Manutenção:
+              [1meazy -m[0m
+
+       Instalar / atualizar comando e deps:
+              [1meazy --install[0m
+
+       Instalar a partir de .deb (sem clonar):
+              curl -fsSL -o eazy_3.2_all.deb \
+                https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2/eazy_3.2_all.deb
+              sudo apt install ./eazy_3.2_all.deb
+
+[1mBUGS[0m
+       Reporte problemas em ]8;;https://github.com/vapesmadcat-blip/Easy_Player\https://github.com/vapesmadcat-blip/Easy_Player]8;;\
+
+[1mSEE ALSO[0m
+       [1mfzf[22m(1), [1mmpv[22m(1), [1mfind[22m(1), [1myt-dlp[22m(1), [1mwhiptail[22m(1)
+
+       Documentação do repositório: ]8;;https://github.com/vapesmadcat-blip/Easy_Player\https://github.com/vapesmadcat-blip/Easy_Player]8;;\
+
+[1mAUTHOR[0m
+       eazy contributors. Uso livre. Sem garantias.
+
+eazy 3.2                                                                    2026-09-03                                                                     [4mEAZY[24m(1)
