@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# eazy 3.2 (release) — bootstrap
+# eazy 3.2 PRONTO — conversões com seleção + F9 atalhos
 # https://github.com/vapesmadcat-blip/Easy_Player
-set -euo pipefail
+set -e
+ROOT="$(cd "$(dirname "$0")" && pwd)"
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT
-# Binário estável (pré-publicação quebrada)
-curl -fsSL "https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617135dc827bbe9110662ca79246a5b7/eazy" -o "$TMP"
+for i in $(seq 0 7); do cat "$ROOT/eazy.b64.$i"; done | base64 -d | gzip -d > "$TMP"
 chmod +x "$TMP"
-if ! head -1 "$TMP" | grep -q '^#!'; then
-  { printf '%s\n' '#!/usr/bin/env bash'; cat "$TMP"; } > "$TMP.x" && mv "$TMP.x" "$TMP" && chmod +x "$TMP"
-fi
 exec bash "$TMP" "$@"
