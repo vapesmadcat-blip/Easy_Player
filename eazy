@@ -1,15 +1,15 @@
-# Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
 #!/usr/bin/env bash
-#
-#  eazy — navegador e reprodutor multimídia no terminal
-#  https://github.com/ (local)  |  fzf + mpv/mplayer/cvlc/ffplay
+# Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
+#  eazy 3.2 (release) — navegador e reprodutor multimídia no terminal
+#  https://github.com/vapesmadcat-blip/Easy_Player
+#  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
 #  Licença: uso livre. Sem garantias.
 #
 set -o pipefail
 
-EAZY_VERSION="3.0-65"
-EAZY_CODENAME="professional"
+EAZY_VERSION="3.2"
+EAZY_CODENAME="release"
 EAZY_NAME="eazy"
 
 # --- Alertas sonoros ---
@@ -687,31 +687,43 @@ Opções:
   -h, --help         Mostra esta ajuda
   -V, --version      Mostra a versão
   --config           Assistente de configuração (player, volume, pastas…)
-  --install          Instala dependências (apt/pacman/dnf/zypper/apk) e o comando
+  --install          Instala dependências, comando global e scripts auxiliares
   --uninstall        Remove /usr/local/bin/eazy e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+  -m, --maintenance  Menu de manutenção (dados + sistema + completa)
+  -a, --advanced-maintenance
+                     Manutenção avançada (seleção fina de arquivos do eazy)
 
 Atalhos principais (dentro do eazy):
-  Enter              Tocar / entrar na pasta / abrir playlist .m3u
-  Tab · Espaço       Marcar itens
-  Ctrl-A / Ctrl-X / Ctrl-R
-                      Duplicados: todos / limpar / inverter seleção
-  Insert             Enviar para uma das 3 filas temporárias
-  Ctrl-P             Alternar Filas 1 → 2 → 3 → diretório
+  Enter              Tocar só o item sob o cursor / entrar na pasta
+  Alt+Enter          Executar a seleção inteira (persistente + marcas)
+  Tab · Espaço       Marcar itens (seleção persistente entre pastas)
+  Ctrl-A             Selecionar todos os visíveis
+  Ctrl-X             Limpar seleção do diretório atual
+  Ctrl-R             Inverter seleção (marcas + persistência)
+  Insert             Enviar seleção para fila tmp 1/2/3 ou lista personalizada
+  Ctrl-P             Alternar Filas 1 → 2 → 3 → listas → duplicados → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
   Ctrl-B             Downloads (yt-dlp, aria2c, axel, wget)
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
-  Ctrl-K             Menu de ações
+  Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
+  Ctrl-Y / Ctrl-U    Copiar / mover seleção
+  Ctrl-E             Tocar seleção em ordem aleatória
   Ctrl-L             Ir à pasta do arquivo
   Ctrl-Backspace     Voltar ao último diretório (Ctrl-H em fzf antigo)
   Ctrl-/             Preview on/off (persiste)
-  Del                Apagar (contexto: lista ou disco)
-  Alt-D              Apagar do disco (em playlists/filas)
-  F9                 Configuração, overview e teste de som · F10 Ajuda
-  F12                Duplicados: selecionar 1 arquivo por grupo
+  Del / Alt-D        Apagar da lista ou do disco
+  F9                 Configuração, overview e teste de som
+  F10                Ajuda expandida
+  F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
   Q · X · Ctrl-Q     Sair (salva sessão)
+
+Manutenção (eazy -m):
+  1  Dados do próprio eazy (sem sudo)
+  2  Manutenção do sistema (sudo quando necessário)
+  3  Manutenção COMPLETA — RAM/Disco/CPU/órfãos/TRIM (sudo)
 
 No mpv:
   d                  Marcar para exclusão ao sair
@@ -720,10 +732,12 @@ No mpv:
 Arquivos de configuração:
   ~/.config/eazy/config
   ~/.config/eazy/session
+  ~/.config/eazy/selected_paths
   ~/.config/eazy/temp_playlist_{1,2,3}
+  ~/.config/eazy/scripts/manut-completa.sh
 
 Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk
-Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, rar (oficial)
+Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools
 
 EOF
 }
@@ -734,29 +748,29 @@ exibir_help() {
         whiptail --title "eazy ${EAZY_VERSION} — Ajuda" --msgbox "\
 eazy ${EAZY_VERSION} (${EAZY_CODENAME})
 
-Uso: eazy [pasta|arquivo]
+Uso: eazy [pasta|arquivo] · eazy -m
 
-NAVEGAÇÃO
-  Enter          Tocar / entrar na pasta
-  Tab · Espaço   Marcar · Ctrl-A/X/R seleção
-  Ctrl-L         Pasta do arquivo
-  Ctrl-/         Preview (persiste)
+NAVEGAÇÃO E SELEÇÃO
+  Enter          Só o item sob o cursor
+  Alt+Enter      Seleção inteira (persistente)
+  Tab · Espaço   Marcar (persiste entre pastas)
+  Ctrl-A/X/R     Todos / limpar / inverter
+  F12            Reaplica persistência no multi-select
+  Ctrl-L · Ctrl-/  Pasta do arquivo · Preview
 
-FILAS
-  Insert         Escolhe fila 1/2/3
-  Ctrl-P         Alterna 1→2→3→dir
+FILAS E AÇÕES
+  Insert         Fila 1/2/3 ou lista nova
+  Ctrl-P         Alterna filas / listas / dir
+  Ctrl-K/Y/U/E   Ações / copiar / mover / shuffle
 
 BUSCA E DISCO
-  Ctrl-F         Busca recursiva
-  Ctrl-D         Duplicados
-  Del            Lista ou disco (conforme contexto)
-  Alt-D          Disco (em playlist/fila)
+  Ctrl-F · Ctrl-D · Del · Alt-D
 
 OUTROS
   Ctrl-B downloads · Ctrl-O playlist · Ctrl-G histórico
-  Ctrl-K ações · F9 config/overview/som · F12 1 por grupo (duplicados) · Q sair
+  F9 config · F10 ajuda · eazy -m manutenção · Q sair
 
-mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
+mpv: [d] marcar exclusão · [D] marcar+próximo" 30 72
     else
         exibir_help_cli
     fi
@@ -764,7 +778,7 @@ mpv: [d] marcar exclusão · [D] marcar+próximo" 28 70
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# EXPANSÕES EAZY v3.0 PROFISSIONAL
+# EXPANSÕES EAZY v3.2 RELEASE
 # ════════════════════════════════════════════════════════════════════════════════
 # Adições: Help expandido, Manutenção de HD, Validação M3U, Proteção com senha
 # ════════════════════════════════════════════════════════════════════════════════
@@ -783,8 +797,9 @@ exibir_help_expandido() {
 ════════════════════════════════════════════════════════════════════
 NAVEGAÇÃO, FILTROS E BUSCA
 ════════════════════════════════════════════════════════════════════
-  Enter              Tocar arquivo / entrar em pasta / abrir playlist
-  Tab / Espaço       Marcar ou alternar o item sob o cursor
+  Enter              Tocar só o item sob o cursor / entrar em pasta / abrir playlist
+  Alt+Enter          Executar a seleção inteira (persistente + marcas)
+  Tab / Espaço       Marcar ou alternar o item sob o cursor (persiste entre pastas)
   Ctrl-A             Selecionar todos os itens (fora de Duplicados)
   Ctrl-R             Inverter a seleção (fora de Duplicados)
   Ctrl-X             Limpar a seleção
@@ -2287,9 +2302,13 @@ if [ "$1" = "--install" ]; then
         command -v update-desktop-database &>/dev/null && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
     fi
 
-    echo -e "\n\033[1;32m${EAZY_NAME} ${EAZY_VERSION} instalado.\033[0m"
+    echo -e "\n\033[1;32m${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME}) instalado.\033[0m"
     echo -e "  ${EAZY_NAME} --help"
+    echo -e "  ${EAZY_NAME} --version"
     echo -e "  ${EAZY_NAME} ~/Videos"
+    echo -e "  ${EAZY_NAME} -m          # manutenção (inclui completa com sudo)"
+    echo -e "  ${EAZY_NAME} --config"
+    echo -e "\033[0;90mScripts auxiliares: ~/.config/eazy/scripts/\033[0m"
     exit 0
 
 elif [ "$1" = "--uninstall" ]; then
