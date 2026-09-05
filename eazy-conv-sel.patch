@@ -1,1 +1,208 @@
-PLACEHOLDER_PATCH
+--- a/eazy
++++ b/eazy
+@@ -6606,15 +6606,67 @@
+     fi
+ }
+ 
++# Extrai caminhos absolutos da seleção do eazy (linhas fzf / tab)
++eazy_paths_from_selecao() {
++    local selecao="${1:-}"
++    local linha p
++    [ -n "$selecao" ] || return 0
++    while IFS= read -r linha; do
++        [ -z "$linha" ] && continue
++        p=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
++        [ -z "$p" ] && continue
++        [[ "$p" =~ \.\.\$ ]] && continue
++        eazy_eh_navegacao "$p" 2>/dev/null && continue
++        p=$(caminho_absoluto "$p" 2>/dev/null || printf '%s\n' "$p")
++        [ -f "$p" ] && printf '%s\n' "$p"
++    done <<< "$selecao"
++}
++
++# Filtra lista de paths por tipo: video | imagem | pdf
++eazy_filtrar_tipo() {
++    local tipo="$1"
++    local f ext
++    while IFS= read -r f; do
++        [ -f "$f" ] || continue
++        ext=$(printf '%s' "${f##*.}" | tr '[:upper:]' '[:lower:]')
++        case "$tipo" in
++            video)  [[ "$ext" =~ ^(mp4|avi|mkv|mov|webm|mpg|mpeg|m4v|wmv|flv)$ ]] && printf '%s\n' "$f" ;;
++            imagem) [[ "$ext" =~ ^(jpg|jpeg|png|bmp|gif|webp|tif|tiff)$ ]] && printf '%s\n' "$f" ;;
++            pdf)    [[ "$ext" == "pdf" ]] && printf '%s\n' "$f" ;;
++            *)      printf '%s\n' "$f" ;;
++        esac
++    done
++}
++
++# $1 titulo $2 tipo $3 multi(0|1)  — usa EAZY_CONV_FILES se definido
+ selecionar_arquivo_conversao() {
+     local titulo="$1" tipo="$2" multi="${3:-0}" lista
+-    case "$tipo" in
+-        video) lista=$(find . -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.avi' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mpg' -o -iname '*.mpeg' \) -printf '%p\n' 2>/dev/null) ;;
+-        imagem) lista=$(find . -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.bmp' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.tif' -o -iname '*.tiff' \) -printf '%p\n' 2>/dev/null) ;;
+-        pdf) lista=$(find . -maxdepth 1 -type f -iname '*.pdf' -printf '%p\n' 2>/dev/null) ;;
+-        *) lista=$(find . -maxdepth 1 -type f -printf '%p\n' 2>/dev/null) ;;
+-    esac
+-    [ -n "$lista" ] || { whiptail --title 'Conversões' --msgbox 'Nenhum arquivo compatível encontrado nesta pasta.' 9 65; return 1; }
++    # Preferência: arquivos já selecionados no eazy
++    if [ -n "${EAZY_CONV_FILES:-}" ]; then
++        lista=$(printf '%s\n' "$EAZY_CONV_FILES" | eazy_filtrar_tipo "$tipo")
++    fi
++    if [ -z "${lista:-}" ]; then
++        case "$tipo" in
++            video) lista=$(find . -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.avi' -o -iname '*.mkv' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.mpg' -o -iname '*.mpeg' -o -iname '*.m4v' -o -iname '*.wmv' -o -iname '*.flv' \) -printf '%p\n' 2>/dev/null) ;;
++            imagem) lista=$(find . -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.bmp' -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.tif' -o -iname '*.tiff' \) -printf '%p\n' 2>/dev/null) ;;
++            pdf) lista=$(find . -maxdepth 1 -type f -iname '*.pdf' -printf '%p\n' 2>/dev/null) ;;
++            *) lista=$(find . -maxdepth 1 -type f -printf '%p\n' 2>/dev/null) ;;
++        esac
++    fi
++    [ -n "$lista" ] || { whiptail --title 'Conversões' --msgbox 'Nenhum arquivo compatível na seleção nem nesta pasta.' 9 65; return 1; }
++    # Um único arquivo e multi=0 → usa direto (sem fzf)
++    local n
++    n=$(printf '%s\n' "$lista" | grep -c '^' 2>/dev/null || echo 0)
++    n=$(echo "$n" | tr -cd '0-9'); n=${n:-0}
++    if [ "$multi" -eq 0 ] && [ "$n" -eq 1 ]; then
++        printf '%s\n' "$lista" | head -n1
++        return 0
++    fi
++    # multi=1 e lista já veio da seleção → usa todos sem reabrir fzf
++    if [ "$multi" -eq 1 ] && [ -n "${EAZY_CONV_FILES:-}" ]; then
++        printf '%s\n' "$lista"
++        return 0
++    fi
+     if [ "$multi" -eq 1 ]; then
+         printf '%s\n' "$lista" | sed 's|^\./||' | sort | fzf --multi --height=80% --border --prompt="$titulo ❯ " --header='TAB/ESPAÇO: marcar | ENTER: confirmar | ESC: cancelar'
+     else
+@@ -6623,30 +6675,61 @@
+ }
+ 
+ converter_video_video() {
+-    local src out
++    local src out ok=0 fail=0
++    local -a lista=()
+     command -v ffmpeg >/dev/null 2>&1 || { whiptail --title 'Conversão de vídeo' --msgbox 'ffmpeg não está instalado.\n\nInstale: sudo apt install ffmpeg' 9 70; return 1; }
+-    src=$(selecionar_arquivo_conversao 'Vídeo de entrada' video) || return
+-    [ -f "$src" ] || return
+-    out=$(whiptail --inputbox 'Arquivo de vídeo de saída (ex.: saida.mp4, saida.avi):' 10 80 "${src%.*}_convertido.mp4" 3>&1 1>&2 2>&3) || return
+-    [ -n "$out" ] || return
+-    if ffmpeg -hide_banner -i "$src" -y "$out" >/tmp/eazy-ffmpeg.log 2>&1; then
+-        whiptail --title 'Conversão de vídeo' --msgbox "Vídeo convertido:\n$out" 9 70
+-    else
+-        whiptail --title 'Conversão de vídeo' --msgbox "Falha na conversão.\n\n$(tail -n 8 /tmp/eazy-ffmpeg.log)" 14 80
++    mapfile -t lista < <(selecionar_arquivo_conversao 'Vídeo de entrada' video 1)
++    [ "${#lista[@]}" -gt 0 ] || return
++    if [ "${#lista[@]}" -eq 1 ]; then
++        src="${lista[0]}"
++        [ -f "$src" ] || return
++        out=$(whiptail --inputbox 'Arquivo de vídeo de saída (ex.: saida.mp4):' 10 80 "${src%.*}_convertido.mp4" 3>&1 1>&2 2>&3) || return
++        [ -n "$out" ] || return
++        if ffmpeg -hide_banner -i "$src" -y "$out" >/tmp/eazy-ffmpeg.log 2>&1; then
++            whiptail --title 'Conversão de vídeo' --msgbox "Vídeo convertido:\n$out" 9 70
++        else
++            whiptail --title 'Conversão de vídeo' --msgbox "Falha na conversão.\n\n$(tail -n 8 /tmp/eazy-ffmpeg.log)" 14 80
++        fi
++        return
+     fi
++    for src in "${lista[@]}"; do
++        [ -f "$src" ] || continue
++        out="${src%.*}_convertido.mp4"
++        if ffmpeg -hide_banner -i "$src" -y "$out" >/tmp/eazy-ffmpeg.log 2>&1; then
++            ((ok++)) || true
++        else
++            ((fail++)) || true
++        fi
++    done
++    whiptail --title 'Conversão de vídeo' --msgbox "Conversão em lote (seleção):\nOK: $ok\nFalhas: $fail\n\nSaída: *_convertido.mp4" 12 70
+ }
+ 
+ converter_imagem_imagem() {
+-    local src out
++    local src out ok=0 fail=0
++    local -a lista=()
+     if command -v magick >/dev/null 2>&1; then :; elif command -v convert >/dev/null 2>&1; then :; else
+         whiptail --title 'Conversão de imagem' --msgbox 'ImageMagick não está instalado.\n\nInstale: sudo apt install imagemagick' 9 70; return 1
+     fi
+-    src=$(selecionar_arquivo_conversao 'Imagem de entrada' imagem) || return
+-    [ -f "$src" ] || return
+-    out=$(whiptail --inputbox 'Imagem de saída (ex.: saida.png, saida.jpg):' 10 80 "${src%.*}_convertida.png" 3>&1 1>&2 2>&3) || return
+-    [ -n "$out" ] || return
+-    if command -v magick >/dev/null 2>&1; then magick "$src" "$out" >/dev/null 2>&1; else convert "$src" "$out" >/dev/null 2>&1; fi
+-    if [ -f "$out" ]; then whiptail --title 'Conversão de imagem' --msgbox "Imagem convertida:\n$out" 9 70; else whiptail --title 'Conversão de imagem' --msgbox 'Falha na conversão da imagem.' 9 60; fi
++    mapfile -t lista < <(selecionar_arquivo_conversao 'Imagem de entrada' imagem 1)
++    [ "${#lista[@]}" -gt 0 ] || return
++    if [ "${#lista[@]}" -eq 1 ]; then
++        src="${lista[0]}"
++        [ -f "$src" ] || return
++        out=$(whiptail --inputbox 'Imagem de saída (ex.: saida.png):' 10 80 "${src%.*}_convertida.png" 3>&1 1>&2 2>&3) || return
++        [ -n "$out" ] || return
++        if command -v magick >/dev/null 2>&1; then magick "$src" "$out" >/dev/null 2>&1; else convert "$src" "$out" >/dev/null 2>&1; fi
++        if [ -f "$out" ]; then whiptail --title 'Conversão de imagem' --msgbox "Imagem convertida:\n$out" 9 70
++        else whiptail --title 'Conversão de imagem' --msgbox 'Falha na conversão da imagem.' 9 60; fi
++        return
++    fi
++    for src in "${lista[@]}"; do
++        [ -f "$src" ] || continue
++        out="${src%.*}_convertida.png"
++        if command -v magick >/dev/null 2>&1; then magick "$src" "$out" >/dev/null 2>&1; else convert "$src" "$out" >/dev/null 2>&1; fi
++        if [ -f "$out" ]; then ((ok++)) || true; else ((fail++)) || true; fi
++    done
++    whiptail --title 'Conversão de imagem' --msgbox "Lote (seleção):\nOK: $ok\nFalhas: $fail\n\nSaída: *_convertida.png" 12 70
+ }
+ 
+ converter_imagem_pdf() {
+@@ -6748,14 +6831,24 @@
+ }
+ 
+ menu_conversoes() {
+-    local opcao
+-    opcao=$(whiptail --title 'Conversões multimídia' --menu 'Escolha o tipo de conversão:' 18 82 8 \
++    local opcao selecao="${1:-}" n_sel=0
++    # Usa arquivos da seleção do eazy (Ctrl-K → C)
++    EAZY_CONV_FILES=""
++    if [ -n "$selecao" ]; then
++        EAZY_CONV_FILES=$(eazy_paths_from_selecao "$selecao")
++        n_sel=$(printf '%s\n' "$EAZY_CONV_FILES" | grep -c '^' 2>/dev/null || echo 0)
++        n_sel=$(echo "$n_sel" | tr -cd '0-9'); n_sel=${n_sel:-0}
++    fi
++    export EAZY_CONV_FILES
++    local titulo='Conversões multimídia'
++    [ "$n_sel" -gt 0 ] && titulo="Conversões ($n_sel arquivo(s) selecionado(s))"
++    opcao=$(whiptail --title "$titulo" --menu 'Escolha o tipo de conversão:\n(usa a seleção atual; se vazio, escolhe na pasta)' 18 82 8 \
+         '1' 'Vídeo → Vídeo (ffmpeg: MP4/AVI/MKV...)' \
+         '2' 'Imagem → Imagem (JPG/PNG/BMP/JPEG...)' \
+         '3' 'Imagens → PDF (img2pdf)' \
+         '4' 'PDF → Imagens PNG (pdftoppm)' \
+         '5' 'PDF → Texto / HTML' \
+-        '0' 'Voltar' 3>&1 1>&2 2>&3) || return
++        '0' 'Voltar' 3>&1 1>&2 2>&3) || { unset EAZY_CONV_FILES; return; }
+     case "$opcao" in
+         1) converter_video_video ;;
+         2) converter_imagem_imagem ;;
+@@ -6763,12 +6856,13 @@
+         4) converter_pdf_imagem ;;
+         5)
+             local pdf escolha
+-            pdf=$(whiptail --inputbox 'Arquivo PDF:' 10 70 '' 3>&1 1>&2 2>&3) || return
+-            eh_arquivo_pdf "$pdf" || return
+-            escolha=$(whiptail --title 'PDF' --menu 'Conversão:' 12 60 3 '1' 'PDF → texto' '2' 'PDF → HTML' '0' 'Voltar' 3>&1 1>&2 2>&3) || return
++            pdf=$(selecionar_arquivo_conversao 'PDF' pdf) || { unset EAZY_CONV_FILES; return; }
++            eh_arquivo_pdf "$pdf" || { unset EAZY_CONV_FILES; return; }
++            escolha=$(whiptail --title 'PDF' --menu 'Conversão:' 12 60 3 '1' 'PDF → texto' '2' 'PDF → HTML' '0' 'Voltar' 3>&1 1>&2 2>&3) || { unset EAZY_CONV_FILES; return; }
+             case "$escolha" in 1) pdf_ler_texto "$pdf" ;; 2) pdf_para_html "$pdf" ;; esac
+             ;;
+     esac
++    unset EAZY_CONV_FILES
+ }
+ 
+ menu_pdf() {
+@@ -6853,7 +6947,7 @@
+             menu_manutencao
+             ;;
+         C)
+-            menu_conversoes
++            menu_conversoes "$selecao"
+             ;;
+         P)
+             # Proteção com senha
