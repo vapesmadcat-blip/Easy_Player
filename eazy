@@ -1,12 +1,27 @@
 #!/usr/bin/env bash
-# eazy 3.2 — F9 atalhos + conversões com seleção
-# https://github.com/vapesmadcat-blip/Easy_Player
-set -e
+# eazy 3.2 bootstrap — restaura binário e aplica patches do repo
+# F9 atalhos + conversões com seleção
+set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-TMP=$(mktemp)
-trap 'rm -f "$TMP"' EXIT
-for i in $(seq 0 5); do
-  cat "$ROOT/eazy.b64.$i"
-done | base64 -d | gzip -d > "$TMP"
-chmod +x "$TMP"
-exec bash "$TMP" "$@"
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+# Base estável (commit anterior à publicação quebrada)
+BASE_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617135dc827bbe9110662ca79246a5b7/eazy"
+curl -fsSL "$BASE_URL" -o "$TMPDIR/eazy"
+
+# Patches do main (se existirem no clone; senão baixa do GitHub)
+cd "$TMPDIR"
+if curl -fsSL "https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy-f9-keys.patch" -o eazy-f9-keys.patch 2>/dev/null; then
+  patch -p1 -i eazy-f9-keys.patch 2>/dev/null || true
+fi
+if curl -fsSL "https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy-conv-sel.patch" -o eazy-conv-sel.patch 2>/dev/null; then
+  patch -p1 -i eazy-conv-sel.patch 2>/dev/null || true
+fi
+
+chmod +x eazy
+# Garante shebang na linha 1
+if ! head -1 eazy | grep -q '^#!'; then
+  { echo '#!/usr/bin/env bash'; cat eazy; } > eazy.fixed && mv eazy.fixed eazy && chmod +x eazy
+fi
+exec bash "$TMPDIR/eazy" "$@"
