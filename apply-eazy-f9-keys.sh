@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/binq/env bash
 # Aplica suporte a atalhos configuráveis (F9 → Atalhos) no eazy
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"

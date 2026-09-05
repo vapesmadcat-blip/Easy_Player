@@ -738,8 +738,6 @@ while true; do
             ;;
         10) inserir "$CRLF" ;;
         *)
-
-
             if [[ -n "$codigo" ]] && (( 10#$codigo >= 32 )); then
                 char=$(printf '%b' "\\$(printf '%03o' "$codigo")")
                 if (( 10#$codigo >= 194 && 10#$codigo <= 244 )); then
