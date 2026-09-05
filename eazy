@@ -1,1 +1,12 @@
-LOADING_FROM_FILE
+#!/usr/bin/env bash
+# eazy 3.2 — F9 atalhos + conversões com seleção
+# https://github.com/vapesmadcat-blip/Easy_Player
+set -e
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+TMP=$(mktemp)
+trap 'rm -f "$TMP"' EXIT
+for i in $(seq 0 5); do
+  cat "$ROOT/eazy.b64.$i"
+done | base64 -d | gzip -d > "$TMP"
+chmod +x "$TMP"
+exec bash "$TMP" "$@"
