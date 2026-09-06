@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
-# =============================================================================
-#  eazy 3.2 — instalador (sudo → /usr/local/bin)
-#  Atalho .desktop + teclas personalizáveis (F9 → Atalhos de teclado)
-# =============================================================================
+# eazy 3.2 — instalador (sudo → /usr/local/bin)
+# F9 → Hotkeys | atalho .desktop
 set -euo pipefail
 
 VERSION="3.2"
 BIN_DIR="/usr/local/bin"
 DESKTOP_DIR="/usr/share/applications"
 BASE_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617135dc827bbe9110662ca79246a5b7/eazy"
-KEYS_PATCH_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy-keys.patch"
+PATCH_URL="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy-hotkeys.patch"
 
 echo ""
 echo "  ╔══════════════════════════════════════╗"
@@ -29,14 +27,12 @@ cd "$TMPD"
 echo "  → Baixando eazy ${VERSION}..."
 curl -fsSL "$BASE_URL" -o eazy
 
-echo "  → Aplicando atalhos personalizáveis..."
-if curl -fsSL "$KEYS_PATCH_URL" -o eazy-keys.patch 2>/dev/null; then
-  if patch -p1 --dry-run -i eazy-keys.patch >/dev/null 2>&1; then
-    patch -p1 -i eazy-keys.patch
-    echo "  → Patch de teclas aplicado"
-  else
-    echo "  → Aviso: patch de teclas incompleto (base ok)"
-  fi
+echo "  → Aplicando Hotkeys (item no F9)..."
+if curl -fsSL "$PATCH_URL" -o eazy-hotkeys.patch 2>/dev/null && patch -p1 --dry-run -i eazy-hotkeys.patch >/dev/null 2>&1; then
+  patch -p1 -i eazy-hotkeys.patch
+  echo "  → Hotkeys OK"
+else
+  echo "  → Aviso: patch hotkeys não aplicado (base instalada)"
 fi
 
 if ! head -1 eazy | grep -q '^#!'; then
@@ -50,9 +46,9 @@ sudo mkdir -p "$BIN_DIR"
 sudo cp -f eazy "${BIN_DIR}/eazy"
 sudo chmod 755 "${BIN_DIR}/eazy"
 
-echo "  → Instalando atalho (.desktop)..."
-DESKTOP_TMP=$(mktemp)
-cat > "$DESKTOP_TMP" << EOF
+echo "  → Atalho .desktop..."
+DT=$(mktemp)
+cat > "$DT" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -69,20 +65,21 @@ StartupNotify=false
 MimeType=inode/directory;video/*;audio/*;
 EOF
 sudo mkdir -p "$DESKTOP_DIR"
-sudo cp -f "$DESKTOP_TMP" "${DESKTOP_DIR}/eazy.desktop"
+sudo cp -f "$DT" "${DESKTOP_DIR}/eazy.desktop"
 sudo chmod 644 "${DESKTOP_DIR}/eazy.desktop"
-rm -f "$DESKTOP_TMP"
+rm -f "$DT"
 command -v update-desktop-database >/dev/null 2>&1 && sudo update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
 
-VER=$("${BIN_DIR}/eazy" --version 2>/dev/null || echo "eazy ${VERSION}")
 echo ""
-echo "  ✓ Binário:  ${BIN_DIR}/eazy"
-echo "  ✓ Atalho:   ${DESKTOP_DIR}/eazy.desktop"
-echo "  ✓ $VER"
+echo "  ✓ ${BIN_DIR}/eazy"
+echo "  ✓ ${DESKTOP_DIR}/eazy.desktop"
+echo "  ✓ $(${BIN_DIR}/eazy --version 2>/dev/null || echo eazy ${VERSION})"
 echo ""
-echo "  Teclas personalizadas:"
-echo "    eazy → F9 → Atalhos de teclado"
-echo "    Arquivo: ~/.config/eazy/keys"
+echo "  Menu F9:"
+echo "    • Configurar o eazy"
+echo "    • Hotkeys (atalhos de teclado)   ← novo"
+echo "    • Overview do sistema"
+echo "    • Teste de som"
 echo ""
-echo "  Uso:  eazy"
+echo "  Config hotkeys: ~/.config/eazy/keys"
 echo ""
