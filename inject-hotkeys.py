@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Injeta Hotkeys no F9 + seleção inteira: Alt+Enter, Ctrl+Espaço, F6."""
+"""Injeta Hotkeys (F9), Ctrl+Espaco/F6, eazy --restore-keys."""
 import sys
 from pathlib import Path
 
@@ -7,22 +7,21 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8", errors="replace")
 
 def fix_alt_enter(t):
-    # remove tentativa antiga ctrl-enter (fzf nao suporta)
     t = t.replace(
         ' --bind="ctrl-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
-        '',
+        "",
     )
     old_alt = 'FZF_ALT_ENTER_BIND=(--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept")'
     new_alt = (
-        'FZF_ALT_ENTER_BIND=('
+        "FZF_ALT_ENTER_BIND=("
         '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
         '--bind="ctrl-space:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
         '--bind="f6:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"'
-        ')'
+        ")"
     )
     if old_alt in t:
         t = t.replace(old_alt, new_alt)
-    elif 'ctrl-space:execute-silent' not in t and 'alt-enter:execute-silent' in t:
+    elif "ctrl-space:execute-silent" not in t and "alt-enter:execute-silent" in t:
         t = t.replace(
             '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
             '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
@@ -30,21 +29,70 @@ def fix_alt_enter(t):
             '--bind="f6:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
         )
     t = t.replace(
-        'Alt+Enter          Executar a seleção inteira (persistente + marcas)',
-        'Alt+Enter / Ctrl+Espaço / F6  Seleção inteira',
+        "  Alt+Enter          Executar a seleção inteira (persistente + marcas)",
+        "  Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)",
     )
     t = t.replace(
-        'Alt+Enter      Seleção inteira (persistente)',
-        'Alt+Enter/Ctrl+Espaço/F6  Seleção inteira',
+        "  Alt+Enter      Seleção inteira (persistente)",
+        "  Ctrl+Espaço/F6 Seleção inteira",
+    )
+    if "Ctrl+Espaço" not in t:
+        t = t.replace(
+            "  Enter              Tocar só o item sob o cursor / entrar na pasta\n",
+            "  Enter              Tocar só o item sob o cursor / entrar na pasta\n"
+            "  Ctrl+Espaço / F6   Seleção inteira (recomendado; Alt+Enter depende do terminal)\n",
+        )
+    return t
+
+def fix_restore_keys(t):
+    if '[ "$1" = "--restore-keys" ]' in t:
+        return t
+    version_block = (
+        'elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then\n'
+        '    echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"\n'
+        '    exit 0\n'
+        'elif [ "$1" = "--config" ]; then'
+    )
+    restore_block = (
+        'elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then\n'
+        '    echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"\n'
+        '    exit 0\n'
+        'elif [ "$1" = "--restore-keys" ]; then\n'
+        '    # Restaura atalhos padrão (se F9/hotkeys inacessíveis)\n'
+        '    mkdir -p "${CONFIG_DIR:-$HOME/.config/eazy}" 2>/dev/null || true\n'
+        '    if type eazy_keys_set_defaults >/dev/null 2>&1; then\n'
+        '        unset KEY_SEARCH KEY_DUPES KEY_QUEUES KEY_PLAYLIST KEY_HISTORY KEY_DOWNLOADS\n'
+        '        unset KEY_ACTIONS KEY_GOTO KEY_NOTES KEY_SAVE KEY_COPY KEY_MOVE KEY_EXPORT\n'
+        '        unset KEY_PREVIEW KEY_CONFIG KEY_HELP KEY_QUIT KEY_QUIT2 KEY_INSERT KEY_DELETE KEY_DELETE_DISK\n'
+        '        eazy_keys_set_defaults\n'
+        '        eazy_keys_save\n'
+        '        echo "Atalhos restaurados em: ${KEYS_FILE:-$HOME/.config/eazy/keys}"\n'
+        '        echo "  F9=config | Ctrl+Espaço/F6=seleção inteira"\n'
+        '    else\n'
+        '        rm -f "${KEYS_FILE:-$HOME/.config/eazy/keys}" 2>/dev/null || true\n'
+        '        echo "Arquivo de teclas removido (padrões na próxima abertura)."\n'
+        '    fi\n'
+        '    exit 0\n'
+        'elif [ "$1" = "--config" ]; then'
+    )
+    if version_block not in t:
+        print("ERRO: bloco --version/--config", file=sys.stderr)
+        sys.exit(1)
+    t = t.replace(version_block, restore_block, 1)
+    t = t.replace(
+        "  --config           Assistente de configuração (player, volume, pastas…)\n",
+        "  --config           Assistente de configuração (player, volume, pastas…)\n"
+        "  --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)\n",
     )
     return t
 
 _has_hotkeys = "configurar_hotkeys()" in text
 if _has_hotkeys:
-    print("Hotkeys já presentes — aplicando fix seleção inteira")
+    print("Hotkeys já presentes — aplicando fixes")
     text = fix_alt_enter(text)
+    text = fix_restore_keys(text)
     path.write_text(text, encoding="utf-8")
-    print("OK fix Alt+Enter/Ctrl+Espaço/F6")
+    print("OK fixes (Ctrl+Espaço/F6 + --restore-keys)")
     sys.exit(0)
 
 if "KEYS_FILE=" not in text:
@@ -154,8 +202,8 @@ configurar_hotkeys() {
     eazy_keys_set_defaults
     while true; do
         local escolha
-        escolha=$(whiptail --title "Hotkeys" \
-            --menu "Ação → tecla (formato fzf: ctrl-j, f8, alt-s)" 22 78 14 \
+        escolha=$(whiptail --title "Hotkeys — configuração completa" \
+            --menu "Ação → tecla (fzf: ctrl-j, f8, alt-s)\nSeleção inteira fixa: Ctrl+Espaço / F6\nEmergência: eazy --restore-keys" 22 78 14 \
             "search"     "Busca              [$KEY_SEARCH]" \
             "dupes"      "Duplicados         [$KEY_DUPES]" \
             "queues"     "Filas              [$KEY_QUEUES]" \
@@ -177,13 +225,13 @@ configurar_hotkeys() {
             "insert"     "Insert             [$KEY_INSERT]" \
             "delete"     "Apagar             [$KEY_DELETE]" \
             "deldisk"    "Apagar disco       [$KEY_DELETE_DISK]" \
-            "reset"      "Restaurar padrões" \
+            "reset"      "Restaurar padrões (como --restore-keys)" \
             "done"       "Salvar e voltar" \
             3>&1 1>&2 2>&3) || return 0
         case "$escolha" in
             done)
                 eazy_keys_save
-                whiptail --title "Hotkeys" --msgbox "Salvo em:\n$KEYS_FILE" 10 55
+                whiptail --title "Hotkeys" --msgbox "Salvo em:\n$KEYS_FILE\n\nSe travar os atalhos:\neazy --restore-keys" 12 55
                 return 0
                 ;;
             reset)
@@ -192,7 +240,7 @@ configurar_hotkeys() {
                 unset KEY_PREVIEW KEY_CONFIG KEY_HELP KEY_QUIT KEY_QUIT2 KEY_INSERT KEY_DELETE KEY_DELETE_DISK
                 eazy_keys_set_defaults
                 eazy_keys_save
-                whiptail --title "Hotkeys" --msgbox "Padrões restaurados." 8 40
+                whiptail --title "Hotkeys" --msgbox "Padrões restaurados.\n(igual a: eazy --restore-keys)" 10 45
                 ;;
             search|dupes|queues|playlist|history|downloads|actions|goto|notes|save|copy|move|export|preview|config|help|quit|quit2|insert|delete|deldisk)
                 local var cur label
@@ -221,7 +269,7 @@ configurar_hotkeys() {
                 esac
                 local novo
                 novo=$(whiptail --title "Hotkey: $label" \
-                    --inputbox "Tecla fzf (ex.: ctrl-j, f8, alt-s)\nAtual: $cur" 11 55 "$cur" \
+                    --inputbox "Tecla fzf (ex.: ctrl-j, f8, alt-s)\nAtual: $cur\n\nSeleção inteira fixa: Ctrl+Espaço e F6" 13 55 "$cur" \
                     3>&1 1>&2 2>&3) || continue
                 novo=$(echo "$novo" | tr '[:upper:]' '[:lower:]' | tr -d ' \t')
                 [ -z "$novo" ] && continue
@@ -235,35 +283,39 @@ configurar_hotkeys() {
 if "configurar_hotkeys()" not in text:
     text = text.replace("configurar_defaults() {", fn + "configurar_defaults() {", 1)
 
-old = """    f9_acao=$(whiptail --title \"F9 — Configuração e diagnóstico\" \\
-        --menu \"Escolha uma opção:\" 16 78 4 \\
-        \"config\" \"Configurar o eazy\" \\
-        \"overview\" \"Overview do sistema\" \\
-        \"sound\" \"Teste de som\" \\
-        \"cancel\" \"Voltar\" \\
-        3>&1 1>&2 2>&3)
-    case \"$f9_acao\" in
-        overview) mostrar_overview_sistema_completo; return ;;
-        sound) testar_som; return ;;
-        config) : ;;
-        *) return 0 ;;
-    esac"""
+old = (
+    '    f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \\\n'
+    '        --menu "Escolha uma opção:" 16 78 4 \\\n'
+    '        "config" "Configurar o eazy" \\\n'
+    '        "overview" "Overview do sistema" \\\n'
+    '        "sound" "Teste de som" \\\n'
+    '        "cancel" "Voltar" \\\n'
+    '        3>&1 1>&2 2>&3)\n'
+    '    case "$f9_acao" in\n'
+    '        overview) mostrar_overview_sistema_completo; return ;;\n'
+    '        sound) testar_som; return ;;\n'
+    '        config) : ;;\n'
+    '        *) return 0 ;;\n'
+    '    esac'
+)
 
-new = """    f9_acao=$(whiptail --title \"F9 — Configuração e diagnóstico\" \\
-        --menu \"Escolha uma opção:\" 18 78 5 \\
-        \"config\" \"Configurar o eazy\" \\
-        \"hotkeys\" \"Hotkeys (atalhos de teclado)\" \\
-        \"overview\" \"Overview do sistema\" \\
-        \"sound\" \"Teste de som\" \\
-        \"cancel\" \"Voltar\" \\
-        3>&1 1>&2 2>&3)
-    case \"$f9_acao\" in
-        overview) mostrar_overview_sistema_completo; return ;;
-        sound) testar_som; return ;;
-        hotkeys) configurar_hotkeys; return ;;
-        config) : ;;
-        *) return 0 ;;
-    esac"""
+new = (
+    '    f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \\\n'
+    '        --menu "Escolha uma opção:" 18 78 5 \\\n'
+    '        "config" "Configurar o eazy" \\\n'
+    '        "hotkeys" "Hotkeys — config completa de atalhos" \\\n'
+    '        "overview" "Overview do sistema" \\\n'
+    '        "sound" "Teste de som" \\\n'
+    '        "cancel" "Voltar" \\\n'
+    '        3>&1 1>&2 2>&3)\n'
+    '    case "$f9_acao" in\n'
+    '        overview) mostrar_overview_sistema_completo; return ;;\n'
+    '        sound) testar_som; return ;;\n'
+    '        hotkeys) configurar_hotkeys; return ;;\n'
+    '        config) : ;;\n'
+    '        *) return 0 ;;\n'
+    '    esac'
+)
 
 if old in text:
     text = text.replace(old, new, 1)
@@ -271,24 +323,27 @@ else:
     print("ERRO: menu F9", file=sys.stderr)
     sys.exit(1)
 
-old_e = """    FZF_EXPECT=\"f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X\"
-    if [ \"${MODO_DUP:-0}\" -ne 1 ]; then
-        FZF_EXPECT=\"f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X\"
-    fi"""
+old_e = (
+    '    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"\n'
+    '    if [ "${MODO_DUP:-0}" -ne 1 ]; then\n'
+    '        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"\n'
+    '    fi'
+)
 
-new_e = """    eazy_keys_set_defaults
-    FZF_EXPECT=\"f1,f2,f3,f4,f5,f6,f7,f8,f12,ctrl-h,alt-x,${EAZY_FZF_BACKSPACE_EXPECT}X\"
-    for _k in \"$KEY_DELETE\" \"$KEY_DELETE_DISK\" \"$KEY_INSERT\" \"$KEY_SAVE\" \"$KEY_PLAYLIST\" \\
-              \"$KEY_SEARCH\" \"$KEY_QUEUES\" \"$KEY_DUPES\" \"$KEY_DOWNLOADS\" \"$KEY_NOTES\" \\
-              \"$KEY_QUIT2\" \"$KEY_COPY\" \"$KEY_MOVE\" \"$KEY_HISTORY\" \"$KEY_EXPORT\" \\
-              \"$KEY_ACTIONS\" \"$KEY_GOTO\" \"$KEY_PREVIEW\" \"$KEY_CONFIG\" \"$KEY_HELP\" \"$KEY_QUIT\"; do
-        [ -n \"$_k\" ] && FZF_EXPECT=\"${FZF_EXPECT},${_k}\"
-    done
-    if [ \"${MODO_DUP:-0}\" -ne 1 ]; then
-        FZF_EXPECT=\"${FZF_EXPECT},ctrl-t\"
-    fi
-    FZF_EXPECT=$(echo \"$FZF_EXPECT\" | tr ',' '\\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
-"""
+new_e = (
+    '    eazy_keys_set_defaults\n'
+    '    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f12,ctrl-h,alt-x,${EAZY_FZF_BACKSPACE_EXPECT}X"\n'
+    '    for _k in "$KEY_DELETE" "$KEY_DELETE_DISK" "$KEY_INSERT" "$KEY_SAVE" "$KEY_PLAYLIST" \\\n'
+    '              "$KEY_SEARCH" "$KEY_QUEUES" "$KEY_DUPES" "$KEY_DOWNLOADS" "$KEY_NOTES" \\\n'
+    '              "$KEY_QUIT2" "$KEY_COPY" "$KEY_MOVE" "$KEY_HISTORY" "$KEY_EXPORT" \\\n'
+    '              "$KEY_ACTIONS" "$KEY_GOTO" "$KEY_PREVIEW" "$KEY_CONFIG" "$KEY_HELP" "$KEY_QUIT"; do\n'
+    '        [ -n "$_k" ] && FZF_EXPECT="${FZF_EXPECT},${_k}"\n'
+    '    done\n'
+    '    if [ "${MODO_DUP:-0}" -ne 1 ]; then\n'
+    '        FZF_EXPECT="${FZF_EXPECT},ctrl-t"\n'
+    '    fi\n'
+    "    FZF_EXPECT=$(echo \"$FZF_EXPECT\" | tr ',' '\\n' | awk 'NF && !seen[$0]++' | paste -sd, -)\n"
+)
 
 if old_e in text:
     text = text.replace(old_e, new_e, 1)
@@ -305,9 +360,10 @@ if 'eazy_normalize_tecla "$tecla"' not in text:
     text = text[:le] + '\n    tecla=$(eazy_normalize_tecla "$tecla")' + text[le:]
 
 text = fix_alt_enter(text)
+text = fix_restore_keys(text)
 
 if not text.startswith("#!"):
     text = "#!/usr/bin/env bash\n" + text
 
 path.write_text(text, encoding="utf-8")
-print("OK Hotkeys + seleção inteira (Alt+Enter/Ctrl+Espaço/F6)")
+print("OK Hotkeys + Ctrl+Espaço/F6 + --restore-keys")
