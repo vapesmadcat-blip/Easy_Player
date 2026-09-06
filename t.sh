@@ -34,7 +34,6 @@ EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
 CONFIG_FILE="$CONFIG_DIR/config"
-KEYS_FILE="$CONFIG_DIR/keys"
 LAST_COPY_DEST_FILE="$CONFIG_DIR/last_copy_destination"
 LAST_MOVE_DEST_FILE="$CONFIG_DIR/last_move_destination"
 DOWNLOAD_QUEUE="$CONFIG_DIR/download_queue"
@@ -84,91 +83,6 @@ export DRY_RUN
 if [ -f "$CONFIG_FILE" ]; then
     source "$CONFIG_FILE"
 fi
-
-# --- Hotkeys (F9 → Hotkeys) ---
-eazy_keys_set_defaults() {
-    KEY_SEARCH="${KEY_SEARCH:-ctrl-f}"
-    KEY_DUPES="${KEY_DUPES:-ctrl-d}"
-    KEY_QUEUES="${KEY_QUEUES:-ctrl-p}"
-    KEY_PLAYLIST="${KEY_PLAYLIST:-ctrl-o}"
-    KEY_HISTORY="${KEY_HISTORY:-ctrl-g}"
-    KEY_DOWNLOADS="${KEY_DOWNLOADS:-ctrl-b}"
-    KEY_ACTIONS="${KEY_ACTIONS:-ctrl-k}"
-    KEY_GOTO="${KEY_GOTO:-ctrl-l}"
-    KEY_NOTES="${KEY_NOTES:-ctrl-n}"
-    KEY_SAVE="${KEY_SAVE:-ctrl-s}"
-    KEY_COPY="${KEY_COPY:-ctrl-y}"
-    KEY_MOVE="${KEY_MOVE:-ctrl-u}"
-    KEY_EXPORT="${KEY_EXPORT:-ctrl-e}"
-    KEY_PREVIEW="${KEY_PREVIEW:-ctrl-/}"
-    KEY_CONFIG="${KEY_CONFIG:-f9}"
-    KEY_HELP="${KEY_HELP:-f10}"
-    KEY_QUIT="${KEY_QUIT:-q}"
-    KEY_QUIT2="${KEY_QUIT2:-ctrl-q}"
-    KEY_INSERT="${KEY_INSERT:-insert}"
-    KEY_DELETE="${KEY_DELETE:-del}"
-    KEY_DELETE_DISK="${KEY_DELETE_DISK:-alt-d}"
-}
-eazy_keys_set_defaults
-if [ -f "${KEYS_FILE:-}" ]; then
-    # shellcheck disable=SC1090
-    source "$KEYS_FILE" 2>/dev/null || true
-    eazy_keys_set_defaults
-fi
-eazy_keys_save() {
-    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-    cat > "$KEYS_FILE" <<EOF
-KEY_SEARCH="$KEY_SEARCH"
-KEY_DUPES="$KEY_DUPES"
-KEY_QUEUES="$KEY_QUEUES"
-KEY_PLAYLIST="$KEY_PLAYLIST"
-KEY_HISTORY="$KEY_HISTORY"
-KEY_DOWNLOADS="$KEY_DOWNLOADS"
-KEY_ACTIONS="$KEY_ACTIONS"
-KEY_GOTO="$KEY_GOTO"
-KEY_NOTES="$KEY_NOTES"
-KEY_SAVE="$KEY_SAVE"
-KEY_COPY="$KEY_COPY"
-KEY_MOVE="$KEY_MOVE"
-KEY_EXPORT="$KEY_EXPORT"
-KEY_PREVIEW="$KEY_PREVIEW"
-KEY_CONFIG="$KEY_CONFIG"
-KEY_HELP="$KEY_HELP"
-KEY_QUIT="$KEY_QUIT"
-KEY_QUIT2="$KEY_QUIT2"
-KEY_INSERT="$KEY_INSERT"
-KEY_DELETE="$KEY_DELETE"
-KEY_DELETE_DISK="$KEY_DELETE_DISK"
-EOF
-}
-eazy_normalize_tecla() {
-    local t="${1:-}"
-    case "$t" in
-        "$KEY_SEARCH") echo "ctrl-f" ;;
-        "$KEY_DUPES") echo "ctrl-d" ;;
-        "$KEY_QUEUES") echo "ctrl-p" ;;
-        "$KEY_PLAYLIST") echo "ctrl-o" ;;
-        "$KEY_HISTORY") echo "ctrl-g" ;;
-        "$KEY_DOWNLOADS") echo "ctrl-b" ;;
-        "$KEY_ACTIONS") echo "ctrl-k" ;;
-        "$KEY_GOTO") echo "ctrl-l" ;;
-        "$KEY_NOTES") echo "ctrl-n" ;;
-        "$KEY_SAVE") echo "ctrl-s" ;;
-        "$KEY_COPY") echo "ctrl-y" ;;
-        "$KEY_MOVE") echo "ctrl-u" ;;
-        "$KEY_EXPORT") echo "ctrl-e" ;;
-        "$KEY_PREVIEW"|"ctrl-_") echo "ctrl-/" ;;
-        "$KEY_CONFIG") echo "f9" ;;
-        "$KEY_HELP") echo "f10" ;;
-        "$KEY_QUIT") echo "q" ;;
-        "$KEY_QUIT2") echo "ctrl-q" ;;
-        "$KEY_INSERT") echo "insert" ;;
-        "$KEY_DELETE") echo "del" ;;
-        "$KEY_DELETE_DISK") echo "alt-d" ;;
-        *) echo "$t" ;;
-    esac
-}
-
 # Garante default se config antiga não tiver a chave
 PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
 SEM_AUDIO="${SEM_AUDIO:-0}"
@@ -663,97 +577,13 @@ testar_som() {
 }
 
 # --- FUNÇÃO DE CONFIGURAÇÃO (WIZARD WHIPTAIL) ---
-
-configurar_hotkeys() {
-    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-    eazy_keys_set_defaults
-    while true; do
-        local escolha
-        escolha=$(whiptail --title "Hotkeys — configuração completa" \
-            --menu "Ação → tecla (fzf: ctrl-j, f8, alt-s)\nSeleção inteira fixa: Ctrl+Espaço / F6\nEmergência: eazy --restore-keys" 22 78 14 \
-            "search"     "Busca              [$KEY_SEARCH]" \
-            "dupes"      "Duplicados         [$KEY_DUPES]" \
-            "queues"     "Filas              [$KEY_QUEUES]" \
-            "playlist"   "Playlist           [$KEY_PLAYLIST]" \
-            "history"    "Histórico          [$KEY_HISTORY]" \
-            "downloads"  "Downloads          [$KEY_DOWNLOADS]" \
-            "actions"    "Ações              [$KEY_ACTIONS]" \
-            "goto"       "Ir à pasta         [$KEY_GOTO]" \
-            "notes"      "Notas              [$KEY_NOTES]" \
-            "save"       "Salvar             [$KEY_SAVE]" \
-            "copy"       "Copiar             [$KEY_COPY]" \
-            "move"       "Mover              [$KEY_MOVE]" \
-            "export"     "Shuffle/export     [$KEY_EXPORT]" \
-            "preview"    "Preview            [$KEY_PREVIEW]" \
-            "config"     "Abrir F9           [$KEY_CONFIG]" \
-            "help"       "Ajuda              [$KEY_HELP]" \
-            "quit"       "Sair               [$KEY_QUIT]" \
-            "quit2"      "Sair alt           [$KEY_QUIT2]" \
-            "insert"     "Insert             [$KEY_INSERT]" \
-            "delete"     "Apagar             [$KEY_DELETE]" \
-            "deldisk"    "Apagar disco       [$KEY_DELETE_DISK]" \
-            "reset"      "Restaurar padrões (como --restore-keys)" \
-            "done"       "Salvar e voltar" \
-            3>&1 1>&2 2>&3) || return 0
-        case "$escolha" in
-            done)
-                eazy_keys_save
-                whiptail --title "Hotkeys" --msgbox "Salvo em:\n$KEYS_FILE\n\nSe travar os atalhos:\neazy --restore-keys" 12 55
-                return 0
-                ;;
-            reset)
-                unset KEY_SEARCH KEY_DUPES KEY_QUEUES KEY_PLAYLIST KEY_HISTORY KEY_DOWNLOADS
-                unset KEY_ACTIONS KEY_GOTO KEY_NOTES KEY_SAVE KEY_COPY KEY_MOVE KEY_EXPORT
-                unset KEY_PREVIEW KEY_CONFIG KEY_HELP KEY_QUIT KEY_QUIT2 KEY_INSERT KEY_DELETE KEY_DELETE_DISK
-                eazy_keys_set_defaults
-                eazy_keys_save
-                whiptail --title "Hotkeys" --msgbox "Padrões restaurados.\n(igual a: eazy --restore-keys)" 10 45
-                ;;
-            search|dupes|queues|playlist|history|downloads|actions|goto|notes|save|copy|move|export|preview|config|help|quit|quit2|insert|delete|deldisk)
-                local var cur label
-                case "$escolha" in
-                    search) var=KEY_SEARCH; cur="$KEY_SEARCH"; label="Busca" ;;
-                    dupes) var=KEY_DUPES; cur="$KEY_DUPES"; label="Duplicados" ;;
-                    queues) var=KEY_QUEUES; cur="$KEY_QUEUES"; label="Filas" ;;
-                    playlist) var=KEY_PLAYLIST; cur="$KEY_PLAYLIST"; label="Playlist" ;;
-                    history) var=KEY_HISTORY; cur="$KEY_HISTORY"; label="Histórico" ;;
-                    downloads) var=KEY_DOWNLOADS; cur="$KEY_DOWNLOADS"; label="Downloads" ;;
-                    actions) var=KEY_ACTIONS; cur="$KEY_ACTIONS"; label="Ações" ;;
-                    goto) var=KEY_GOTO; cur="$KEY_GOTO"; label="Ir à pasta" ;;
-                    notes) var=KEY_NOTES; cur="$KEY_NOTES"; label="Notas" ;;
-                    save) var=KEY_SAVE; cur="$KEY_SAVE"; label="Salvar" ;;
-                    copy) var=KEY_COPY; cur="$KEY_COPY"; label="Copiar" ;;
-                    move) var=KEY_MOVE; cur="$KEY_MOVE"; label="Mover" ;;
-                    export) var=KEY_EXPORT; cur="$KEY_EXPORT"; label="Shuffle/export" ;;
-                    preview) var=KEY_PREVIEW; cur="$KEY_PREVIEW"; label="Preview" ;;
-                    config) var=KEY_CONFIG; cur="$KEY_CONFIG"; label="Abrir F9" ;;
-                    help) var=KEY_HELP; cur="$KEY_HELP"; label="Ajuda" ;;
-                    quit) var=KEY_QUIT; cur="$KEY_QUIT"; label="Sair" ;;
-                    quit2) var=KEY_QUIT2; cur="$KEY_QUIT2"; label="Sair alt" ;;
-                    insert) var=KEY_INSERT; cur="$KEY_INSERT"; label="Insert" ;;
-                    delete) var=KEY_DELETE; cur="$KEY_DELETE"; label="Apagar" ;;
-                    deldisk) var=KEY_DELETE_DISK; cur="$KEY_DELETE_DISK"; label="Apagar disco" ;;
-                esac
-                local novo
-                novo=$(whiptail --title "Hotkey: $label" \
-                    --inputbox "Tecla fzf (ex.: ctrl-j, f8, alt-s)\nAtual: $cur\n\nSeleção inteira fixa: Ctrl+Espaço e F6" 13 55 "$cur" \
-                    3>&1 1>&2 2>&3) || continue
-                novo=$(echo "$novo" | tr '[:upper:]' '[:lower:]' | tr -d ' \t')
-                [ -z "$novo" ] && continue
-                eval "$var=\"\$novo\""
-                ;;
-        esac
-    done
-}
-
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
     local f9_acao
     f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \
-        --menu "Escolha uma opção:" 18 78 5 \
+        --menu "Escolha uma opção:" 16 78 4 \
         "config" "Configurar o eazy" \
-        "hotkeys" "Hotkeys — config completa de atalhos" \
         "overview" "Overview do sistema" \
         "sound" "Teste de som" \
         "cancel" "Voltar" \
@@ -761,7 +591,6 @@ configurar_defaults() {
     case "$f9_acao" in
         overview) mostrar_overview_sistema_completo; return ;;
         sound) testar_som; return ;;
-        hotkeys) configurar_hotkeys; return ;;
         config) : ;;
         *) return 0 ;;
     esac
@@ -858,7 +687,6 @@ Opções:
   -h, --help         Mostra esta ajuda
   -V, --version      Mostra a versão
   --config           Assistente de configuração (player, volume, pastas…)
-  --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
   --install          Instala dependências, comando global e scripts auxiliares
   --uninstall        Remove /usr/local/bin/eazy e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
@@ -868,7 +696,7 @@ Opções:
 
 Atalhos principais (dentro do eazy):
   Enter              Tocar só o item sob o cursor / entrar na pasta
-  Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
+  Alt+Enter          Executar a seleção inteira (persistente + marcas)
   Tab · Espaço       Marcar itens (seleção persistente entre pastas)
   Ctrl-A             Selecionar todos os visíveis
   Ctrl-X             Limpar seleção do diretório atual
@@ -924,7 +752,7 @@ Uso: eazy [pasta|arquivo] · eazy -m
 
 NAVEGAÇÃO E SELEÇÃO
   Enter          Só o item sob o cursor
-  Ctrl+Espaço/F6 Seleção inteira
+  Alt+Enter      Seleção inteira (persistente)
   Tab · Espaço   Marcar (persiste entre pastas)
   Ctrl-A/X/R     Todos / limpar / inverter
   F12            Reaplica persistência no multi-select
@@ -970,7 +798,7 @@ exibir_help_expandido() {
 NAVEGAÇÃO, FILTROS E BUSCA
 ════════════════════════════════════════════════════════════════════
   Enter              Tocar só o item sob o cursor / entrar em pasta / abrir playlist
-  Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
+  Alt+Enter          Executar a seleção inteira (persistente + marcas)
   Tab / Espaço       Marcar ou alternar o item sob o cursor (persiste entre pastas)
   Ctrl-A             Selecionar todos os itens (fora de Duplicados)
   Ctrl-R             Inverter a seleção (fora de Duplicados)
@@ -2513,21 +2341,6 @@ elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exit 0
 elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
     echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"
-    exit 0
-elif [ "$1" = "--restore-keys" ]; then
-    mkdir -p "${CONFIG_DIR:-$HOME/.config/eazy}" 2>/dev/null || true
-    if type eazy_keys_set_defaults >/dev/null 2>&1; then
-        unset KEY_SEARCH KEY_DUPES KEY_QUEUES KEY_PLAYLIST KEY_HISTORY KEY_DOWNLOADS
-        unset KEY_ACTIONS KEY_GOTO KEY_NOTES KEY_SAVE KEY_COPY KEY_MOVE KEY_EXPORT
-        unset KEY_PREVIEW KEY_CONFIG KEY_HELP KEY_QUIT KEY_QUIT2 KEY_INSERT KEY_DELETE KEY_DELETE_DISK
-        eazy_keys_set_defaults
-        eazy_keys_save
-        echo "Atalhos restaurados em: ${KEYS_FILE:-$HOME/.config/eazy/keys}"
-        echo "  F9=config | Ctrl+Espaço/F6=seleção inteira"
-    else
-        rm -f "${KEYS_FILE:-$HOME/.config/eazy/keys}" 2>/dev/null || true
-        echo "Arquivo de teclas removido (padrões na próxima abertura)."
-    fi
     exit 0
 elif [ "$1" = "--config" ]; then
     configurar_defaults
@@ -7518,19 +7331,10 @@ while true; do
     EAZY_ALT_ENTER_FILE="/tmp/eazy_alt_enter_$$"
     rm -f -- "$EAZY_ALT_ENTER_FILE"
     export EAZY_ALT_ENTER_FILE
-    eazy_keys_set_defaults
-    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f12,ctrl-h,alt-x,${EAZY_FZF_BACKSPACE_EXPECT}X"
-    for _k in "$KEY_DELETE" "$KEY_DELETE_DISK" "$KEY_INSERT" "$KEY_SAVE" "$KEY_PLAYLIST" \
-              "$KEY_SEARCH" "$KEY_QUEUES" "$KEY_DUPES" "$KEY_DOWNLOADS" "$KEY_NOTES" \
-              "$KEY_QUIT2" "$KEY_COPY" "$KEY_MOVE" "$KEY_HISTORY" "$KEY_EXPORT" \
-              "$KEY_ACTIONS" "$KEY_GOTO" "$KEY_PREVIEW" "$KEY_CONFIG" "$KEY_HELP" "$KEY_QUIT"; do
-        [ -n "$_k" ] && FZF_EXPECT="${FZF_EXPECT},${_k}"
-    done
+    FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     if [ "${MODO_DUP:-0}" -ne 1 ]; then
-        FZF_EXPECT="${FZF_EXPECT},ctrl-t"
+        FZF_EXPECT="f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,ctrl-h,del,alt-d,alt-x,insert,ctrl-s,ctrl-o,ctrl-f,ctrl-p,ctrl-d,ctrl-b,ctrl-n,ctrl-t,ctrl-q,ctrl-y,ctrl-u,ctrl-g,ctrl-e,ctrl-k,ctrl-l,${EAZY_FZF_BACKSPACE_EXPECT}ctrl-/,q,X"
     fi
-    FZF_EXPECT=$(echo "$FZF_EXPECT" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
-
     FZF_BIND_T=()
     [ -n "${CTRL_T_BIND:-}" ] && FZF_BIND_T=(--bind="$CTRL_T_BIND")
     FZF_BIND_ESC=()
@@ -7553,7 +7357,7 @@ while true; do
                 )
     else
         # Alt+Enter aceita a seleção múltipla; não depende de --expect.
-        FZF_ALT_ENTER_BIND=(--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" --bind="ctrl-space:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" --bind="f6:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept")
+        FZF_ALT_ENTER_BIND=(--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept")
         # Seleção normal: Espaço/Tab marcam arquivos ou diretórios e atualizam Sel.
         FZF_NORMAL_SELECT_BINDS=(
             --bind='space:execute-silent(bash -c '\''eazy_toggle_global_item "$1"'\'' -- {})+toggle+transform-header(eazy_status_header)'
@@ -7625,7 +7429,6 @@ while true; do
     # --print-query + --expect: linha1=query, linha2=tecla, resto=seleção
     FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p' | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
     tecla=$(printf '%s\n' "$saida_fzf" | sed -n '2p')
-    tecla=$(eazy_normalize_tecla "$tecla")
     cursor_raw=$(cat "$EAZY_CURSOR_ITEM_FILE" 2>/dev/null || true)
     rm -f "$EAZY_CURSOR_ITEM_FILE"
     if [ -e "$EAZY_ALT_ENTER_FILE" ]; then
