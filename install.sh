@@ -7,7 +7,7 @@ BASE="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617
 INJECT="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/inject-hotkeys.py"
 
 echo ""
-echo "  eazy ${VERSION} COMPLETO (Hotkeys)"
+echo "  eazy ${VERSION} COMPLETO (Hotkeys no F9)"
 echo ""
 
 command -v sudo >/dev/null || { echo "precisa sudo"; exit 1; }
@@ -21,10 +21,10 @@ cd "$TMPD"
 echo "  → Baixando eazy..."
 curl -fsSL "$BASE" -o eazy
 
-echo "  → Baixando injetor Hotkeys..."
+echo "  → Baixando injetor..."
 curl -fsSL "$INJECT" -o inject-hotkeys.py
 
-echo "  → Aplicando Hotkeys..."
+echo "  → Aplicando Hotkeys + item F9..."
 python3 inject-hotkeys.py eazy
 
 if ! head -1 eazy | grep -q '^#!'; then
@@ -32,11 +32,17 @@ if ! head -1 eazy | grep -q '^#!'; then
 fi
 chmod +x eazy
 bash -n eazy
-grep -q configurar_hotkeys eazy || { echo "Falha: Hotkeys não aplicados"; exit 1; }
+
+grep -q configurar_hotkeys eazy || { echo "Falha: função configurar_hotkeys ausente"; exit 1; }
+grep -q '"hotkeys"' eazy || { echo "Falha: item hotkeys ausente no menu F9"; exit 1; }
+grep -q 'hotkeys) configurar_hotkeys' eazy || { echo "Falha: case hotkeys ausente no F9"; exit 1; }
+echo "  → F9 com item Hotkeys OK"
 
 echo "  → Instalando $BIN ..."
 sudo cp -f eazy "$BIN"
 sudo chmod 755 "$BIN"
+
+grep -q '"hotkeys"' "$BIN" || { echo "Falha: $BIN sem item hotkeys"; exit 1; }
 
 cat > eazy.desktop << 'DEOF'
 [Desktop Entry]
@@ -54,5 +60,6 @@ sudo chmod 644 /usr/share/applications/eazy.desktop
 
 echo ""
 echo "  ✓ $($BIN --version)"
-echo "  ✓ F9 → Hotkeys (atalhos de teclado)"
+echo "  ✓ F9 deve mostrar: Hotkeys — config completa de atalhos"
+echo "  ✓ Emergência: eazy --restore-keys"
 echo ""
