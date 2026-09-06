@@ -1,3 +1,11 @@
+eazy (3.2.2) unstable; urgency=medium
+
+  * Make Ctrl+A select only items visible under the active filter.
+  * Preserve global selections from other directories.
+  * Publish the 3.2.2 Debian package.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sun, 06 Sep 2026 21:00:00 +0000
+
 eazy (3.0-77) unstable; urgency=medium
 
   * Make normal-browser selection global across directories.

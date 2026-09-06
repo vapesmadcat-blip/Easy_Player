@@ -1,3 +1,8 @@
+## 3.2.2 — Ctrl+A respeita o filtro
+- Corrigido o Ctrl+A para selecionar somente os itens atualmente visíveis no filtro.
+- Mantida a seleção global de itens em outras pastas.
+- Atualizado o pacote Debian para a versão 3.2.2.
+
 ## 3.0-62 — Navegação e manutenção avançada
 
 - `Home` vai ao primeiro item e `End` ao último item das listas, inclusive filas temporárias.

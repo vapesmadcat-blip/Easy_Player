@@ -1,11 +1,11 @@
-# eazy 3.2 — instalação .deb
+# eazy 3.2.2 — instalação .deb
 
 ```bash
-sudo apt install ./eazy_3.2_all.deb
+sudo apt install ./eazy_3.2.2_all.deb
 ```
 
 ```bash
-eazy --version   # 3.2 (release)
+eazy --version   # 3.2.2 (release)
 eazy -m          # manutenção
 ```
 
