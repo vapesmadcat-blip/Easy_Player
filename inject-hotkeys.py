@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Injeta Hotkeys no F9 do eazy + fix Alt/Ctrl+Enter."""
+"""Injeta Hotkeys no F9 + seleção inteira: Alt+Enter, Ctrl+Espaço, F6."""
 import sys
 from pathlib import Path
 
@@ -7,32 +7,44 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8", errors="replace")
 
 def fix_alt_enter(t):
+    # remove tentativa antiga ctrl-enter (fzf nao suporta)
+    t = t.replace(
+        ' --bind="ctrl-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
+        '',
+    )
     old_alt = 'FZF_ALT_ENTER_BIND=(--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept")'
     new_alt = (
         'FZF_ALT_ENTER_BIND=('
         '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
-        '--bind="ctrl-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"'
+        '--bind="ctrl-space:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
+        '--bind="f6:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"'
         ')'
     )
     if old_alt in t:
         t = t.replace(old_alt, new_alt)
-    elif 'ctrl-enter:execute-silent' not in t and 'alt-enter:execute-silent' in t:
+    elif 'ctrl-space:execute-silent' not in t and 'alt-enter:execute-silent' in t:
         t = t.replace(
             '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
-            '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" --bind="ctrl-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
+            '--bind="alt-enter:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
+            '--bind="ctrl-space:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept" '
+            '--bind="f6:execute-silent(touch -- $EAZY_ALT_ENTER_FILE)+accept"',
         )
     t = t.replace(
         'Alt+Enter          Executar a seleção inteira (persistente + marcas)',
-        'Alt+Enter/Ctrl+Enter  Seleção inteira (Ctrl+Enter se Alt direito falhar)',
+        'Alt+Enter / Ctrl+Espaço / F6  Seleção inteira',
+    )
+    t = t.replace(
+        'Alt+Enter      Seleção inteira (persistente)',
+        'Alt+Enter/Ctrl+Espaço/F6  Seleção inteira',
     )
     return t
 
 _has_hotkeys = "configurar_hotkeys()" in text
 if _has_hotkeys:
-    print("Hotkeys já presentes — aplicando fix Alt/Ctrl+Enter")
+    print("Hotkeys já presentes — aplicando fix seleção inteira")
     text = fix_alt_enter(text)
     path.write_text(text, encoding="utf-8")
-    print("OK fix Alt/Ctrl+Enter")
+    print("OK fix Alt+Enter/Ctrl+Espaço/F6")
     sys.exit(0)
 
 if "KEYS_FILE=" not in text:
@@ -298,4 +310,4 @@ if not text.startswith("#!"):
     text = "#!/usr/bin/env bash\n" + text
 
 path.write_text(text, encoding="utf-8")
-print("OK Hotkeys + Alt/Ctrl+Enter injetados")
+print("OK Hotkeys + seleção inteira (Alt+Enter/Ctrl+Espaço/F6)")
