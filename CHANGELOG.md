@@ -289,6 +289,14 @@
 
 # Changelog
 
+## 3.2-2 — Ctrl-A respeita o filtro ativo
+
+- Corrigido o **Ctrl-A** para selecionar somente os itens que correspondem ao filtro atualmente digitado.
+- Mantida a seleção persistente entre diretórios, sem incluir as entradas de navegação nas ações.
+- Mantidos Enter para executar apenas o item sob o cursor e Alt+Enter para executar a seleção acumulada.
+- Adicionado teste de regressão para validar seleção filtrada, preservação de seleção externa e exclusão de subpastas não correspondentes.
+
+
 ## 3.0-11
 
 - Restaurado o HELP EXPANDIDO do F10 com navegação, filas, duplicados, manutenção e dicas completas.
