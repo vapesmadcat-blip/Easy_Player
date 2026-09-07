@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2 (release) — navegador e reprodutor multimídia no terminal
+#  eazy 3.2.2 (release) — navegador e reprodutor multimídia no terminal
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -8,7 +8,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.2"
+EAZY_VERSION="3.2.2"
 EAZY_CODENAME="release"
 EAZY_NAME="eazy"
 
