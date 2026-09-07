@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# eazy 3.2 COMPLETO — Hotkeys no F9 | sudo → /usr/local/bin
+# eazy 3.2.2 COMPLETO — Hotkeys no F9 | sudo → /usr/local/bin
 set -euo pipefail
-VERSION="3.2"
+VERSION="3.2.2"
 BIN="/usr/local/bin/eazy"
 BASE="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617135dc827bbe9110662ca79246a5b7/eazy"
 INJECT="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/inject-hotkeys.py"

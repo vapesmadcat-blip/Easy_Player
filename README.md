@@ -1,4 +1,4 @@
-# eazy 3.2 (release)
+# eazy 3.2.2 (release)
 
 **Autor:** João Kersting  
 **Repositório:** [https://github.com/vapesmadcat-blip/Easy_Player](https://github.com/vapesmadcat-blip/Easy_Player)
@@ -9,7 +9,7 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 
 ## Release Notes
 
-**eazy-v3.2** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2)
+**eazy-v3.2.2** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2.2)
 
 - Quebra de linha automática no editor
 - Importar notas de arquivos externos

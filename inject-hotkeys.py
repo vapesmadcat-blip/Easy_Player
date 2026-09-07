@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Injeta Hotkeys (F9), Ctrl+Espaco/F6, eazy --restore-keys."""
+"""Injeta Hotkeys (F9), Ctrl+Espaco/F6, Del variants, --restore-keys."""
 import re
 import sys
 from pathlib import Path
@@ -86,6 +86,79 @@ def fix_restore_keys(t):
     )
     return t
 
+def fix_del_keys(t):
+    if "somente o arquivo sob o cursor" in t:
+        return t
+    t = t.replace(
+        '            ""|del|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e|insert)',
+        '            ""|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e|insert|shift-delete)',
+    )
+    t = t.replace(
+        '            insert|del|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e)',
+        '            insert|alt-d|shift-delete|ctrl-k|ctrl-y|ctrl-u|ctrl-e)',
+    )
+    needle = '    FZF_EXPECT=$(echo "$FZF_EXPECT" | tr \',\' \'\\n\' | awk \'NF && !seen[$0]++\' | paste -sd, -)\n'
+    add = (
+        '    FZF_EXPECT=$(echo "$FZF_EXPECT" | tr \',\' \'\\n\' | awk \'NF && !seen[$0]++\' | paste -sd, -)\n'
+        '    for _dk in shift-delete ctrl-shift-delete; do\n'
+        '        case ",$FZF_EXPECT," in *",${_dk},"*) ;; *) FZF_EXPECT="${FZF_EXPECT},${_dk}" ;; esac\n'
+        '    done\n'
+    )
+    if needle in t and "shift-delete ctrl-shift-delete" not in t:
+        t = t.replace(needle, add, 1)
+    old_del = (
+        '    elif [ "$tecla" = "del" ]; then\n'
+        '        # DEL: na playlist = só da lista; na tela principal = do disco\n'
+        '        confirmar_e_excluir "$escolha"; continue\n'
+        '    elif [ "$tecla" = "alt-d" ]; then\n'
+        '        # ALT+D: apaga do DISCO (e da playlist, se estiver nela)\n'
+        '        # (fzf não suporta ctrl-del de forma confiável)\n'
+        '        confirmar_e_excluir "$escolha" "disco"; continue\n'
+    )
+    new_del = (
+        '    elif [ "$tecla" = "del" ]; then\n'
+        '        # DEL: somente o arquivo sob o cursor\n'
+        '        if [ -n "${cursor_raw:-}" ]; then\n'
+        '            _del_item="$cursor_raw"\n'
+        '        else\n'
+        '            _del_item=$(printf \'%s\\n\' "$escolha" | head -n1)\n'
+        '        fi\n'
+        '        confirmar_e_excluir "$_del_item"\n'
+        '        unset _del_item\n'
+        '        continue\n'
+        '    elif [ "$tecla" = "shift-delete" ]; then\n'
+        '        # Shift+Del: seleção local + persistente\n'
+        '        _del_sel=$(eazy_expandir_escolha_acoes "$escolha")\n'
+        '        confirmar_e_excluir "$_del_sel"\n'
+        '        unset _del_sel\n'
+        '        continue\n'
+        '    elif [ "$tecla" = "ctrl-shift-delete" ]; then\n'
+        '        # Ctrl+Shift+Del: só seleção global (SELECTED_FILE)\n'
+        '        if [ -s "${SELECTED_FILE:-}" ]; then\n'
+        '            confirmar_e_excluir "$(cat -- "$SELECTED_FILE")"\n'
+        '        else\n'
+        '            whiptail --title "Del global" --msgbox "Seleção global vazia.\\nMarque itens (Espaço/Tab) antes." 9 50 2>/dev/null || true\n'
+        '        fi\n'
+        '        continue\n'
+        '    elif [ "$tecla" = "alt-d" ]; then\n'
+        '        # ALT+D: apaga do DISCO (e da playlist, se estiver nela)\n'
+        '        confirmar_e_excluir "$escolha" "disco"; continue\n'
+    )
+    if old_del in t:
+        t = t.replace(old_del, new_del, 1)
+    t = t.replace(
+        "  Del / Alt-D        Apagar da lista ou do disco",
+        "  Del               Apagar só o item sob o cursor\n"
+        "  Shift+Del         Apagar seleção (local + persistente)\n"
+        "  Ctrl+Shift+Del    Apagar seleção global (se fzf/terminal suportarem)\n"
+        "  Alt-D             Apagar do disco (seleção de ações)",
+    )
+    t = t.replace(
+        "# INSERT, Del, Ctrl-K/Y/U/E usam isto — não altera Duplicados.",
+        "# INSERT, Shift+Del, Ctrl-K/Y/U/E usam isto — Del = cursor. Não altera Duplicados.",
+    )
+    return t
+
 def fix_f9_hotkeys_item(t):
     if '"hotkeys"' in t and 'hotkeys) configurar_hotkeys' in t:
         return t
@@ -119,8 +192,9 @@ if _has_hotkeys:
     text = fix_alt_enter(text)
     text = fix_restore_keys(text)
     text = fix_f9_hotkeys_item(text)
+    text = fix_del_keys(text)
     path.write_text(text, encoding="utf-8")
-    print("OK fixes (Ctrl+Espaço/F6 + --restore-keys + F9)")
+    print("OK fixes (+ Del/Shift+Del)")
     sys.exit(0)
 
 if "KEYS_FILE=" not in text:
@@ -390,9 +464,10 @@ if 'eazy_normalize_tecla "$tecla"' not in text:
 text = fix_alt_enter(text)
 text = fix_restore_keys(text)
 text = fix_f9_hotkeys_item(text)
+text = fix_del_keys(text)
 
 if not text.startswith("#!"):
     text = "#!/usr/bin/env bash\n" + text
 
 path.write_text(text, encoding="utf-8")
-print("OK Hotkeys + Ctrl+Espaço/F6 + --restore-keys + F9")
+print("OK Hotkeys + Del/Shift+Del + Ctrl+Espaço/F6")

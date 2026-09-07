@@ -6,7 +6,7 @@
 
 Na página do repositório ou de um **Release**:
 
-- arquivo: `eazy_3.2_all.deb`
+- arquivo: `eazy_3.2-2_all.deb`
 
 Ou, se estiver clonando o repo e o `.deb` estiver na raiz:
 
@@ -18,13 +18,13 @@ cd Easy_Player
 ### 2) Instalar
 
 ```bash
-sudo apt install ./eazy_3.2_all.deb
+sudo apt install ./eazy_3.2-2_all.deb
 ```
 
 Alternativa:
 
 ```bash
-sudo dpkg -i eazy_3.2_all.deb
+sudo dpkg -i eazy_3.2-2_all.deb
 sudo apt-get install -f
 ```
 
