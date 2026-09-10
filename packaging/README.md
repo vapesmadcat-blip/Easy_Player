@@ -1,16 +1,16 @@
 # eazy — pacote Debian
 
-Este diretório contém o empacotamento Debian do **eazy 3.2-2 (release)**, um navegador e reprodutor multimídia no terminal.
+Este diretório contém o empacotamento Debian do **eazy 3.2.3 (release)**, um navegador e reprodutor multimídia no terminal.
 
 ## Instalação pelo GitHub Release
 
-A release atual `eazy-v3.2-2` está publicada. Em Debian ou Ubuntu, execute:
+A release atual `eazy-v3.2.3` está publicada. Em Debian ou Ubuntu, execute:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2-2/eazy_3.2-2_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2-2/eazy_3.2-2_all.deb.sha256
-sha256sum -c eazy_3.2-2_all.deb.sha256
-sudo apt install ./eazy_3.2-2_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.3/eazy_3.2.3_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.3/eazy_3.2.3_all.deb.sha256
+sha256sum -c eazy_3.2.3_all.deb.sha256
+sudo apt install ./eazy_3.2.3_all.deb
 ```
 
 O `apt` instala automaticamente as dependências declaradas pelo pacote. O comando fica disponível como `eazy`, e o launcher gráfico é instalado em `/usr/share/applications/eazy.desktop`. Ao selecionar um arquivo `.m3u` e pressionar Enter, o eazy abre a playlist no navegador interno. O menu F9 também oferece um overview do sistema (OS, RAM, discos, drives, áudio e vídeo) e um teste de som. No modo Duplicados, a seleção fica em uma lista temporária persistente: F12 seleciona um arquivo por grupo e marca esses itens com ✓; Tab/Espaço alternam a seleção manual; Ctrl-A seleciona os itens visíveis pelo filtro; Ctrl-X limpa todos; e Ctrl-R inverte a seleção atual. O cabeçalho mostra continuamente a quantidade e o total de bytes selecionados, mesmo após redesenhos da lista.
@@ -31,9 +31,9 @@ sudo apt remove eazy
 
 Os dados de sessão e configuração ficam em `~/.config/eazy/`.
 
-## Recursos documentados na versão 3.2-2
+## Recursos documentados na versão 3.2.3
 
-A versão 3.2-2 inclui busca por extensões, nomes e curingas combinada com busca por conteúdo usando **frases entre aspas** e operadores lógicos `AND`, `OR` e `NOT`, além da validação de playlists, listas temporárias e pesquisas salvas. Quando a validação encontra referências ausentes, o eazy pergunta se o usuário deseja corrigir; a confirmação é obrigatória e a correção remove somente entradas quebradas, sem apagar arquivos físicos do disco. O pacote também inclui o mini editor visual de notas, sem dependência de Vim, vi ou nano. No navegador normal, Ctrl-A seleciona somente os itens que correspondem ao filtro ativo, sem incluir as entradas de navegação. No release 3.0-57, Ctrl-S salva a lista temporária atualmente aberta, inclusive listas personalizadas, em vez de cair indevidamente na fila 1. No release 3.2-2, a limpeza automática solicita a idade dos arquivos em dias, mostra uma prévia e exige confirmação final antes de remover itens. A versão 3.2-2 consolida essa documentação com exemplos da busca avançada.
+A versão 3.2.3 inclui busca por extensões, nomes e curingas combinada com busca por conteúdo usando **frases entre aspas** e operadores lógicos `AND`, `OR` e `NOT`, além da validação de playlists, listas temporárias e pesquisas salvas. Quando a validação encontra referências ausentes, o eazy pergunta se o usuário deseja corrigir; a confirmação é obrigatória e a correção remove somente entradas quebradas, sem apagar arquivos físicos do disco. O pacote também inclui o mini editor visual de notas, sem dependência de Vim, vi ou nano. No navegador normal, Ctrl-A seleciona somente os itens que correspondem ao filtro ativo, sem incluir as entradas de navegação. No release 3.0-57, Ctrl-S salva a lista temporária atualmente aberta, inclusive listas personalizadas, em vez de cair indevidamente na fila 1. No release 3.2.3, a limpeza automática solicita a idade dos arquivos em dias, mostra uma prévia e exige confirmação final antes de remover itens. A versão 3.2.3 consolida essa documentação com exemplos da busca avançada.
 
 ## Dependências opcionais
 
@@ -48,13 +48,13 @@ chmod +x packaging/build-deb.sh packaging/eazy/build-deb.sh
 ./packaging/build-deb.sh
 ```
 
-O resultado será gerado em `packaging/eazy/dist/eazy_3.2-2_all.deb`. Para inspecionar o pacote sem instalá-lo:
+O resultado será gerado em `packaging/eazy/dist/eazy_3.2.3_all.deb`. Para inspecionar o pacote sem instalá-lo:
 
 ```bash
-dpkg-deb --info packaging/eazy/dist/eazy_3.2-2_all.deb
-dpkg-deb --contents packaging/eazy/dist/eazy_3.2-2_all.deb
+dpkg-deb --info packaging/eazy/dist/eazy_3.2.3_all.deb
+dpkg-deb --contents packaging/eazy/dist/eazy_3.2.3_all.deb
 ```
 
 ## Origem dos arquivos
 
-O pacote usa os arquivos fornecidos para esta publicação: `eazy`, `eazy.desktop`, `README.md`, `CHANGELOG.md`, `EAZY_EXPLICADO.md` e `GUIA_RAPIDO.md`. O binário instalado é `/usr/bin/eazy`; os documentos ficam em `/usr/share/doc/eazy/`.
+O pacote usa os arquivos fornecidos para esta publicação: `eazy`, `eazy.desktop`, `eazy.1`, `README.md`, `CHANGELOG.md`, `EAZY_EXPLICADO.md` e `GUIA_RAPIDO.md`. O executável principal fica em `/usr/bin/eazy` e também é instalado em `/usr/lib/eazy/eazy`; para compatibilidade, o pacote cria links em `/usr/local/bin/eazy` e `/home/jim/.local/bin/eazy`. O manual fica em `/usr/share/man/man1/eazy.1.gz` e os demais documentos em `/usr/share/doc/eazy/`.

@@ -1,5 +1,5 @@
 Package: eazy
-Version: 3.2.2
+Version: 3.2.3
 Section: video
 Priority: optional
 Architecture: all
@@ -11,7 +11,9 @@ Description: terminal media browser and player
  fzf and a command-line media player. It provides persistent queues,
  recursive search, previews, playlists, downloads, and session state.
  .
- The package installs the eazy command and its desktop launcher. User data
- is stored below ~/.config/eazy and is not removed during package removal.
+ The package installs eazy at /usr/bin/eazy and /usr/lib/eazy/eazy,
+ with compatibility links at /usr/local/bin/eazy and /home/jim/.local/bin/eazy.
+ The desktop launcher is included. User data is stored below ~/.config/eazy
+ and is not removed during package removal.
 
 

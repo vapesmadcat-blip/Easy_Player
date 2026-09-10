@@ -1,7 +1,7 @@
-## 3.2.2 — Ctrl+A respeita o filtro
+## 3.2.3 — Ctrl+A respeita o filtro
 - Corrigido o Ctrl+A para selecionar somente os itens atualmente visíveis no filtro.
 - Mantida a seleção global de itens em outras pastas.
-- Atualizado o pacote Debian para a versão 3.2.2.
+- Atualizado o pacote Debian para a versão 3.2.3.
 
 ## 3.0-62 — Navegação e manutenção avançada
 
@@ -289,7 +289,7 @@
 
 # Changelog
 
-## 3.2-2 — Ctrl-A respeita o filtro ativo
+## 3.2.3 — Ctrl-A respeita o filtro ativo
 
 - Corrigido o **Ctrl-A** para selecionar somente os itens que correspondem ao filtro atualmente digitado.
 - Mantida a seleção persistente entre diretórios, sem incluir as entradas de navegação nas ações.

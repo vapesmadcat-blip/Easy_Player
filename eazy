@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2.2 (release) — navegador e reprodutor multimídia no terminal
+#  eazy 3.2.3 (release) — navegador e reprodutor multimídia no terminal
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -860,7 +860,7 @@ Opções:
   --config           Assistente de configuração (player, volume, pastas…)
   --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
   --install          Instala dependências, comando global e scripts auxiliares
-  --uninstall        Remove /usr/local/bin/eazy e o launcher .desktop
+  --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
   -m, --maintenance  Menu de manutenção (dados + sistema + completa)
   -a, --advanced-maintenance
@@ -2442,8 +2442,14 @@ if [ "$1" = "--install" ]; then
     fi
 
     SCRIPT_ATUAL="$(readlink -f "$0")"
-    DESTINO="/usr/local/bin/eazy"
     SCRIPT_DIR="$(dirname -- "$SCRIPT_ATUAL")"
+    DEST_USR_BIN="/usr/bin/eazy"
+    DEST_USR_LIB="/usr/lib/eazy/eazy"
+    DEST_USR_LOCAL="/usr/local/bin/eazy"
+    INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
+    INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
+    [ -n "$INSTALL_HOME" ] || INSTALL_HOME="$HOME"
+    DEST_USER_LOCAL="$INSTALL_HOME/.local/bin/eazy"
     DESKTOP_SRC="$SCRIPT_DIR/eazy.desktop"
     [ -f "$DESKTOP_SRC" ] || DESKTOP_SRC="$(dirname -- "$SCRIPT_ATUAL")/../share/applications/eazy.desktop"
     EDITOR_SRC="$SCRIPT_DIR/eazy-notes-editor"
@@ -2454,13 +2460,13 @@ if [ "$1" = "--install" ]; then
     touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE"
     eazy_instalar_script_manut_completa >/dev/null 2>&1 || true
 
-    echo -e "\033[1;34mInstalando comando global em $DESTINO...\033[0m"
-    if sudo install -Dm755 "$SCRIPT_ATUAL" "$DESTINO"; then
-        echo -e "\033[1;32m✓\033[0m Comando: \033[1;37meazy\033[0m"
-    else
-        echo -e "\033[1;31m✗\033[0m Falha ao copiar para $DESTINO" >&2
-                exit 1
-    fi
+    echo -e "\033[1;34mInstalando eazy ${EAZY_VERSION} nos destinos compatíveis...\033[0m"
+    sudo install -Dm755 "$SCRIPT_ATUAL" "$DEST_USR_BIN"
+    sudo install -Dm755 "$SCRIPT_ATUAL" "$DEST_USR_LIB"
+    sudo ln -sfn "$DEST_USR_BIN" "$DEST_USR_LOCAL"
+    mkdir -p "$(dirname -- "$DEST_USER_LOCAL")"
+    install -Dm755 "$SCRIPT_ATUAL" "$DEST_USER_LOCAL"
+    printf '%s\n' "  ✓ $DEST_USR_BIN" "  ✓ $DEST_USR_LIB" "  ✓ $DEST_USR_LOCAL -> $DEST_USR_BIN" "  ✓ $DEST_USER_LOCAL"
     if [ -f "$EDITOR_SRC" ]; then
         if sudo install -Dm755 "$EDITOR_SRC" /usr/lib/eazy/eazy-notes-editor; then
             echo -e "\033[1;32m✓\033[0m Editor de notas: /usr/lib/eazy/eazy-notes-editor"
@@ -2493,6 +2499,15 @@ elif [ "$1" = "--uninstall" ]; then
     fi
     if [ -f /usr/bin/eazy ]; then
         sudo rm -f /usr/bin/eazy && echo -e "\033[1;32m✓\033[0m /usr/bin/eazy" && REMOVIDO=1
+    fi
+    if [ -f /usr/lib/eazy/eazy ]; then
+        sudo rm -f /usr/lib/eazy/eazy && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy" && REMOVIDO=1
+    fi
+    INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
+    INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
+    [ -n "$INSTALL_HOME" ] || INSTALL_HOME="$HOME"
+    if [ -f "$INSTALL_HOME/.local/bin/eazy" ] || [ -L "$INSTALL_HOME/.local/bin/eazy" ]; then
+        rm -f "$INSTALL_HOME/.local/bin/eazy" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy" && REMOVIDO=1
     fi
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     [ -f "$DESKTOP_DIR/eazy.desktop" ] && rm -f "$DESKTOP_DIR/eazy.desktop" && echo -e "\033[1;32m✓\033[0m launcher local"

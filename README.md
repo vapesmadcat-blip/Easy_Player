@@ -1,4 +1,4 @@
-# eazy 3.2.2 (release)
+# eazy 3.2.3 (release)
 
 **Autor:** João Kersting  
 **Repositório:** [https://github.com/vapesmadcat-blip/Easy_Player](https://github.com/vapesmadcat-blip/Easy_Player)
@@ -9,7 +9,7 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 
 ## Release Notes
 
-**eazy-v3.2.2** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2.2)
+**eazy-v3.2.3** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2.3)
 
 - Quebra de linha automática no editor
 - Importar notas de arquivos externos
@@ -49,9 +49,9 @@ git clone https://github.com/vapesmadcat-blip/Easy_Player.git && cd Easy_Player 
 ### Pacote .deb (Debian / Ubuntu / Mint)
 
 ```bash
-sudo apt install ./eazy_3.2_all.deb
+sudo apt install ./eazy_3.2.3_all.deb
 # ou:
-sudo dpkg -i eazy_3.2_all.deb
+sudo dpkg -i eazy_3.2.3_all.deb
 sudo apt-get install -f
 ```
 
@@ -85,7 +85,7 @@ eazy --uninstall
 sudo apt remove eazy
 ```
 
-O instalador detecta o gerenciador de pacotes, instala dependências, copia para `/usr/local/bin/eazy`, cria `~/.config/eazy/` e o script de manutenção completa.
+O instalador detecta o gerenciador de pacotes, instala dependências, cria `~/.config/eazy/` e instala o comando nos destinos `/usr/bin/eazy`, `/usr/lib/eazy/eazy`, `/usr/local/bin/eazy` e `/home/jim/.local/bin/eazy`. O pacote Debian também inclui o manual `eazy(1)` e os documentos em `/usr/share/doc/eazy/`.
 
 ```bash
 eazy --version

@@ -1,4 +1,4 @@
-.TH EAZY 1 "2026-09-03" "eazy 3.2.2" "User Commands"
+.TH EAZY 1 "2026-09-10" "eazy 3.2.3" "User Commands"
 .SH NAME
 eazy \- navegador e reprodutor multimídia no terminal (fzf + mpv)
 .SH SYNOPSIS
@@ -47,7 +47,7 @@ Mostra a ajuda resumida no terminal e sai.
 .TP
 .BR \-V ", " \-\-version
 Mostra a versão (ex.:
-.BR "eazy 3.2.2 (release)" )
+.BR "eazy 3.2.3 (release)" )
 e sai.
 .TP
 .B \-\-config
@@ -59,14 +59,14 @@ dentro do eazy.
 .B \-\-install
 Instala dependências ausentes (apt/pacman/dnf/zypper/apk), copia o
 comando para
-.IR /usr/local/bin/eazy ,
+.IR /usr/bin/eazy, /usr/lib/eazy/eazy, /usr/local/bin/eazy e ~/.local/bin/eazy ,
 cria
 .IR ~/.config/eazy/
 e scripts auxiliares (ex.: manutenção completa).
 .TP
 .B \-\-uninstall
 Remove
-.I /usr/local/bin/eazy
+.I /usr/bin/eazy, /usr/lib/eazy/eazy, /usr/local/bin/eazy e ~/.local/bin/eazy
 e o launcher
 .IR .desktop .
 Preserva
@@ -260,7 +260,7 @@ Histórico de reprodução.
 .I ~/.config/eazy/scripts/manut\-completa.sh
 Script de manutenção completa do sistema.
 .TP
-.I /usr/local/bin/eazy
+.I /usr/bin/eazy, /usr/lib/eazy/eazy, /usr/local/bin/eazy e ~/.local/bin/eazy
 Comando instalado por
 .B \-\-install
 ou pacote
@@ -326,9 +326,9 @@ Instalar / atualizar comando e deps:
 .TP
 Instalar a partir de .deb (sem clonar):
 .nf
-curl -fsSL -o eazy_3.2-2_all.deb \\
-  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2-2/eazy_3.2-2_all.deb
-sudo apt install ./eazy_3.2-2_all.deb
+curl -fsSL -o eazy_3.2.3_all.deb \\
+  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.3/eazy_3.2.3_all.deb
+sudo apt install ./eazy_3.2.3_all.deb
 .fi
 .SH BUGS
 Reporte problemas em
