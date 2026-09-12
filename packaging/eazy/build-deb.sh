@@ -13,14 +13,14 @@ VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$DEBIAN_DIR/control" | head -n1)
 ARCH="all"
 OUTPUT="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
-for required in dpkg-deb install; do
+for required in dpkg-deb install gzip; do
     command -v "$required" >/dev/null 2>&1 || {
         printf 'Erro: comando necessário não encontrado: %s\n' "$required" >&2
         exit 1
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -33,10 +33,16 @@ mkdir -p \
     "$PKGROOT/DEBIAN" \
     "$PKGROOT/usr/bin" \
     "$PKGROOT/usr/lib/eazy" \
+    "$PKGROOT/usr/local/bin" \
+    "$PKGROOT/home/jim/.local/bin" \
     "$PKGROOT/usr/share/applications" \
+    "$PKGROOT/usr/share/man/man1" \
     "$PKGROOT/usr/share/doc/$PACKAGE"
 
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
+install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/lib/eazy/eazy"
+ln -s /usr/bin/eazy "$PKGROOT/usr/local/bin/eazy"
+ln -s /usr/bin/eazy "$PKGROOT/home/jim/.local/bin/eazy"
 install -m 0755 "$SRC_DIR/eazy-notes-editor" "$PKGROOT/usr/lib/eazy/eazy-notes-editor"
 install -m 0644 "$SRC_DIR/eazy.desktop" "$PKGROOT/usr/share/applications/eazy.desktop"
 install -m 0644 "$SRC_DIR/README.md" "$PKGROOT/usr/share/doc/$PACKAGE/README.md"
@@ -46,7 +52,9 @@ install -m 0644 "$SRC_DIR/GUIA_RAPIDO.md" "$PKGROOT/usr/share/doc/$PACKAGE/GUIA_
 install -m 0644 "$DEBIAN_DIR/control" "$PKGROOT/DEBIAN/control"
 install -m 0644 "$DEBIAN_DIR/changelog" "$PKGROOT/usr/share/doc/$PACKAGE/changelog.Debian"
 install -m 0644 "$DEBIAN_DIR/copyright" "$PKGROOT/usr/share/doc/$PACKAGE/copyright"
+install -m 0644 "$SRC_DIR/eazy.1" "$PKGROOT/usr/share/man/man1/eazy.1"
 
+gzip -n -9 -f "$PKGROOT/usr/share/man/man1/eazy.1"
 gzip -n -9 -f "$PKGROOT/usr/share/doc/$PACKAGE/changelog.Debian"
 
 touch "$PKGROOT/DEBIAN/conffiles"

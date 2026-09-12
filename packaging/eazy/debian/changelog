@@ -1,3 +1,11 @@
+eazy (3.2.3) unstable; urgency=medium
+
+  * Promote the tested eazy-3.2.3 base.
+  * Install executable copies and compatibility links for all requested whereis paths.
+  * Include the eazy(1) manual in the Debian package.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 10 Sep 2026 00:00:00 +0000
+
 eazy (3.2.2) unstable; urgency=medium
 
   * Make Ctrl+A select only items visible under the active filter.
