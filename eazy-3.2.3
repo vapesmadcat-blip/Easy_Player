@@ -7741,8 +7741,8 @@ Depois use:
 
     if [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "$DUP_SELECTED_FILE" ]; then
         case "$tecla" in
-            ""|alt-d|ctrl-k|ctrl-y|ctrl-u|ctrl-e|insert)
-                # A lista temporária é a fonte da verdade para tocar, apagar,
+            ""|alt-d|shift-delete|ctrl-k|ctrl-y|ctrl-u|ctrl-e|insert)
+                # A lista temporária (amarelo) é a fonte da verdade para tocar, apagar,
                 # copiar, mover, embaralhar e enviar para fila.
                 escolha=$(cat "$DUP_SELECTED_FILE" 2>/dev/null || true)
                 ;;
@@ -7887,7 +7887,18 @@ Depois use:
         unset _del_item
         continue
     elif [ "$tecla" = "shift-delete" ]; then
-        # Shift+Del: pergunta local vs global, depois confirmação
+        # Shift+Del: em duplicados usa seleção AMARELA (DUP_SELECTED_FILE);
+        # fora, pergunta local vs global e confirma.
+        if [ "${MODO_DUP:-0}" -eq 1 ]; then
+            if [ ! -s "${DUP_SELECTED_FILE:-}" ]; then
+                whiptail --title "Duplicados" --msgbox "Seleção amarela vazia.\nUse Tab/Espaço (ou Ctrl-A) nos duplicados." 9 55 2>/dev/null || true
+                continue
+            fi
+            _del_sel=$(cat -- "$DUP_SELECTED_FILE")
+            confirmar_e_excluir "$_del_sel"
+            unset _del_sel
+            continue
+        fi
         _del_ambito=$(whiptail --title "Shift+Del — apagar seleção" --menu \
             "Qual seleção apagar?" 12 55 2 \
             "local"  "Só a seleção desta tela (fzf multi)" \
@@ -7901,7 +7912,6 @@ Depois use:
             fi
             _del_sel=$(cat -- "$SELECTED_FILE")
         else
-            # local: multi do fzf nesta saída (sem expandir persistência global)
             _del_sel=$(printf '%s\n' "$escolha" | eazy_sem_navegacao 2>/dev/null || printf '%s\n' "$escolha")
             if [ -z "$(printf '%s' "$_del_sel" | tr -d '[:space:]')" ]; then
                 whiptail --title "Del local" --msgbox "Nada selecionado nesta tela.\nUse Tab/Espaço para marcar." 9 50 2>/dev/null || true
