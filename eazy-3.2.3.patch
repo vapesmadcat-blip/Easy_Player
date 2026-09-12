@@ -1,0 +1,24 @@
+--- eazy
++++ eazy
+@@ -751,16 +751,20 @@
+ 
+     local f9_acao
+     f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \
+-        --menu "Escolha uma opção:" 18 78 5 \
++        --menu "Escolha uma opção:" 20 78 7 \
+         "config" "Configurar o eazy" \
+         "hotkeys" "Hotkeys — config completa de atalhos" \
+         "overview" "Overview do sistema" \
+         "sound" "Teste de som" \
++        "lixeira" "Abrir lixeira do sistema" \
++        "export_notas" "Exportar notas → Documentos/Easy-Notes" \
+         "cancel" "Voltar" \
+         3>&1 1>&2 2>&3)
+     case "$f9_acao" in
+         overview) mostrar_overview_sistema_completo; return ;;
+         sound) testar_som; return ;;
++        lixeira) abrir_lixeira; return ;;
++        export_notas) exportar_notas_eazy; return ;;
+         hotkeys) configurar_hotkeys; return ;;
+         config) : ;;
+         *) return 0 ;;

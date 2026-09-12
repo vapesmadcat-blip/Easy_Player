@@ -20,6 +20,20 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 - Filtros com extensões no prompt
 
 
+<<<<<<< HEAD
+=======
+### Novidades nesta linha 3.2.3
+
+- **Del** apaga só o item sob o cursor; **Shift+Del** pergunta local/global (nos duplicados usa a seleção amarela)
+- Ao apagar do disco, a **seleção global** (`~/.config/eazy/selected_paths`) é atualizada e caminhos mortos são removidos (prune)
+- Itens apagados saem também da **playlist/fila** aberta e da seleção amarela de duplicados
+- **F9 → Lixeira** — entra em `~/.local/share/Trash/files`
+- **F9 → Exportar notas** — copia notas para `~/Documentos/Easy-Notes/`
+- **Enter** em `.html` / links `http(s)` abre no browser (`xdg-open`)
+- Filtros **Videos / Audios / Imgs / Compactados** mostram as **extensões** no prompt
+- Zerar seleção global informa **quantidade de arquivos e bytes**
+- Ctrl+A respeita o filtro ativo (só itens visíveis)
+>>>>>>> e75456e8ed3e5762134030cdfe70cacc19dde9b9
 
 ## Requisitos
 
@@ -195,5 +209,10 @@ Uso livre. Sem garantias.
 
 ---
 
+<<<<<<< HEAD
 **eazy 3.2.4 · release**  
 Desenvolvido por João Kersting
+=======
+**eazy 3.2.3 · release**  
+Desenvolvido por João Kersting
+>>>>>>> e75456e8ed3e5762134030cdfe70cacc19dde9b9

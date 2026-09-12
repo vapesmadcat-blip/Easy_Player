@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ## 3.2.4 — HTML/URL no browser + revisão no cabeçalho
 
 - Enter em HTML/HTM e links `http(s)` abre o browser (`xdg-open` / `gio` / Firefox / Chromium).
@@ -5,6 +6,8 @@
 - Cabeçalho do script: `Revisão 3.2.4` e `EAZY_VERSION="3.2.4"`.
 - Mantidos: Del/Shift+Del, lixeira (F9), export notas (F9), prune da seleção global, filtros com extensões.
 
+=======
+>>>>>>> e75456e8ed3e5762134030cdfe70cacc19dde9b9
 ## 3.2.3 — Lixeira, HTML, prune da seleção, Del e filtros
 
 - **Del** apaga somente o item sob o cursor; **Shift+Del** pergunta seleção local ou global (em duplicados usa a seleção amarela).
