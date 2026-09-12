@@ -1,10 +1,11 @@
-# Instalação em ~/prj/Easy_Player
+# Instalação
+
 ```bash
+cd ~/prj
+unzip -o eazy-3.2.6-release.zip
+cp -f eazy-3.2.6-release/* ~/prj/Easy_Player/
 cd ~/prj/Easy_Player
-unzip -o eazy-3.2.5-release.zip
-cp -f eazy-3.2.5-release/* .
-chmod +x eazy install.sh eazy-notes-editor
+chmod +x eazy install.sh
 ./eazy --install
-eazy --shell-init >> ~/.bashrc && source ~/.bashrc
-git add -A && git commit -m "eazy 3.2.5" && git push
+git add -A && git commit -m "eazy 3.2.6: PYTHON_CMD, Enter/Ctrl-K .py" && git push
 ```
