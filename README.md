@@ -1,4 +1,4 @@
-# eazy 3.2.3 (release)
+# eazy 3.2.4 (release)
 
 **Autor:** João Kersting  
 **Repositório:** [https://github.com/vapesmadcat-blip/Easy_Player](https://github.com/vapesmadcat-blip/Easy_Player)
@@ -9,11 +9,17 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 
 ## Release Notes
 
-**eazy-v3.2.3** — [Release Page](https://github.com/vapesmadcat-blip/Easy_Player/releases/tag/eazy-v3.2.3)
+**eazy-v3.2.4**
 
-- Quebra de linha automática no editor
-- Importar notas de arquivos externos
-- Melhorias gerais de estabilidade
+- **Enter** em `.html` / `.htm` / URL abre o **browser** (`xdg-open`, `gio`, Firefox, Chromium…)
+- Caminho absoluto + `file://`; proteção em `tocar_arquivo` para não ir ao mpv
+- Cabeçalho com **Revisão 3.2.4**
+- Del = cursor; Shift+Del = seleção (amarelo nos duplicados)
+- F9 → Lixeira, Exportar notas
+- Prune da seleção global após delete
+- Filtros com extensões no prompt
+
+
 
 ## Requisitos
 
@@ -27,6 +33,7 @@ Seleção persistente entre pastas, filas temporárias, playlists, busca, duplic
 - `yt-dlp`, `aria2c`, `axel`, `wget` — downloads  
 - `ffmpeg`, `chafa`, `imagemagick`, `poppler-utils`, `img2pdf` — preview e conversões  
 - `p7zip`, `unzip` — arquivos compactados  
+- `xdg-utils` — abrir HTML e links no browser  
 - `smartmontools`, `lm-sensors` — diagnóstico  
 
 ## Instalação
@@ -85,8 +92,6 @@ eazy --uninstall
 sudo apt remove eazy
 ```
 
-O instalador detecta o gerenciador de pacotes, instala dependências, cria `~/.config/eazy/` e instala o comando nos destinos `/usr/bin/eazy`, `/usr/lib/eazy/eazy`, `/usr/local/bin/eazy` e `/home/jim/.local/bin/eazy`. O pacote Debian também inclui o manual `eazy(1)` e os documentos em `/usr/share/doc/eazy/`.
-
 ```bash
 eazy --version
 eazy --help
@@ -102,21 +107,25 @@ eazy arquivo.mp4
 eazy --config
 eazy -m
 eazy --update-ytdlp
+eazy --restore-keys
 ```
 
-## Seleção (3.2)
+## Seleção (3.2.3)
 
 | Tecla | Comportamento |
 |--------|----------------|
 | **Tab / Espaço** | Marca o item — a seleção **persiste** entre pastas |
-| **Enter** | Executa **só** o item sob o cursor |
-| **Alt+Enter** | Executa a **seleção inteira** (persistente + marcas do fzf) |
-| **Ctrl-A / Ctrl-X / Ctrl-R** | Todos / limpar pasta atual / inverter (marcas + persistência) |
+| **Enter** | Executa **só** o item sob o cursor (HTML/URL → browser) |
+| **Ctrl+Espaço / F6** | Seleção inteira (recomendado; Alt+Enter depende do terminal) |
+| **Ctrl-A / Ctrl-X / Ctrl-R** | Todos visíveis / limpar pasta atual / inverter |
+| **Del** | Apaga **só o arquivo sob o cursor** |
+| **Shift+Del** | Seleção: pergunta **local** ou **global** (duplicados: seleção amarela) |
+| **Alt-D** | Apagar do disco (seleção de ações) |
 | **F12** | Reaplica a persistência como multi-select do fzf |
 | **Insert** | Envia a seleção para fila tmp 1/2/3 ou lista personalizada |
-| **Ctrl-K / Y / U / E** | Ações, copiar, mover, shuffle — mesma seleção do Alt+Enter |
+| **Ctrl-K / Y / U / E** | Ações, copiar, mover, shuffle |
 
-Arquivo de persistência: `~/.config/eazy/selected_paths`
+Arquivo de persistência: `~/.config/eazy/selected_paths` (atualizado automaticamente quando há delete)
 
 ## Atalhos principais
 
@@ -128,16 +137,15 @@ Arquivo de persistência: `~/.config/eazy/selected_paths`
 | Ctrl-O | Abrir playlist `.m3u` / `.pls` |
 | Ctrl-G | Histórico |
 | Ctrl-B | Downloads |
+| Ctrl-N | Notas rápidas |
 | Ctrl-L | Ir à pasta do arquivo |
 | Ctrl-/ | Preview on/off |
-| Del / Alt-D | Remover da lista ou apagar do disco |
-| F9 | Configuração / overview / som |
+| F4–F7 | Filtros (audios / videos / imgs / compactados) com extensões no prompt |
+| F9 | Config, Hotkeys, overview, som, **lixeira**, **exportar notas** |
 | F10 | Ajuda expandida |
 | Q / X / Ctrl-Q | Sair (salva sessão) |
 
 ## Editor de Notas
-
-### Controles do Editor
 
 | Tecla | Ação |
 |--------|--------|
@@ -152,15 +160,7 @@ Arquivo de persistência: `~/.config/eazy/selected_paths`
 | `Ctrl-I` | Importar notas de arquivo externo |
 | `Ctrl-X` | Exporta para `~/Documentos/Easy-Notes/` |
 
-### Importar Notas
-
-O eazy 3.2 permite importar notas de arquivos de texto externos. Use a combinação **Ctrl-I** no editor para:
-
-- Selecionar arquivos de texto (`.txt`, `.md`, etc)
-- Importar o conteúdo como nova nota
-- Manter os arquivos originais intactos
-
-Os arquivos importados são convertidos automaticamente para o formato de notas do eazy.
+Também: **F9 → Exportar notas** no navegador principal.
 
 ## Manutenção (`eazy -m`)
 
@@ -181,10 +181,12 @@ Arquivos em `~/.config/eazy/`:
 | Arquivo | Uso |
 |---------|-----|
 | `config` | Player, volume, pastas, preview |
+| `keys` | Atalhos personalizados (F9 → Hotkeys) |
 | `session` | Sessão ao sair |
 | `selected_paths` | Seleção persistente |
 | `temp_playlist_1..3` | Filas temporárias |
 | `history` | Histórico |
+| `notas/` | Notas rápidas |
 | `scripts/manut-completa.sh` | Manutenção completa |
 
 ## Licença
@@ -193,5 +195,5 @@ Uso livre. Sem garantias.
 
 ---
 
-**eazy 3.2 · release**  
+**eazy 3.2.4 · release**  
 Desenvolvido por João Kersting
