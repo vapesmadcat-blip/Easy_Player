@@ -1,14 +1,13 @@
-# eazy 3.2.7 (release)
+# eazy 3.2.10 (release)
 
 https://github.com/vapesmadcat-blip/Easy_Player
 
-## Instalação (zip em ~/prj → repo ~/prj/Easy_Player)
+## Destaques
+- Enter em `.py` / `.sh` / `.html`: menu estilo PDF (Executar | Ver | Editar | Voltar)
+- PYTHON_CMD / SHELL_CMD no F9
+- Alt-X com quantidade e bytes
+- F9 shell + EXIT_DIR_MODE + --shell-init
+- HTML no browser, Del/Shift+Del, lixeira
 
-```bash
-cd ~/prj
-unzip -o eazy-3.2.7-release.zip
-cp -f eazy-3.2.7-release/* ~/prj/Easy_Player/
-cd ~/prj/Easy_Player
-chmod +x eazy install.sh
-./eazy --install
-```
+## Instalação
+Ver INSTALL.md
