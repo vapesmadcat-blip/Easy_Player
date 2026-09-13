@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2.10 (release) — navegador e reprodutor multimídia no terminal
-#  Revisão 3.2.10 — Enter principal: menu py/sh/html
+#  eazy 3.2.11 (release) — navegador e reprodutor multimídia no terminal
+#  Revisão 3.2.11 — py/sh/html fora do texto genérico; menu Enter reforçado
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.2.10"
+EAZY_VERSION="3.2.11"
 EAZY_CODENAME="release"
 EAZY_NAME="eazy"
 
@@ -6028,8 +6028,9 @@ abrir_editor_notas() {
 
 eh_arquivo_python() {
     local f="$1" base ext
-    [ -z "$f" ] || [ ! -f "$f" ] && return 1
+    [ -z "$f" ] && return 1
     base="${f##*/}"
+    base="${base%%\?*}"
     ext="${base##*.}"
     ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
     case "$ext" in py|pyw|py3|pyx) return 0 ;; esac
@@ -6097,16 +6098,18 @@ menu_arquivo_python() {
 }
 
 eh_arquivo_shell() {
-    local f="$1" base ext
-    [ -z "$f" ] || [ ! -f "$f" ] && return 1
+    local f="$1" base ext line
+    [ -z "$f" ] && return 1
     base="${f##*/}"
+    base="${base%%\?*}"
     ext="${base##*.}"
     ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
     case "$ext" in sh|bash|zsh|ksh) return 0 ;; esac
-    # shebang
-    local line
-    line=$(head -n1 -- "$f" 2>/dev/null)
-    [[ "$line" =~ ^#!/.*/(ba)?sh ]] && return 0
+    if [ -f "$f" ]; then
+        line=$(head -n1 -- "$f" 2>/dev/null)
+        [[ "$line" =~ ^#!/.*/(ba)?sh ]] && return 0
+        [[ "$line" =~ ^#!/usr/bin/env\ +(ba)?sh ]] && return 0
+    fi
     return 1
 }
 
@@ -6193,7 +6196,7 @@ eh_arquivo_texto() {
     local ext
     ext=$(echo "${f##*.}" | tr '[:upper:]' '[:lower:]')
     case "$ext" in
-        txt|md|log|conf|cfg|ini|json|xml|csv|sh|bash|py|c|h|cpp|hpp|js|ts|html|htm|css|yaml|yml|toml|nfo|srt|ass|ssa|cue|m3u|pls|lst|org|rst|tex|sql|r|rb|go|rs|java|kt|swift|php|pl|lua|vim|diff|patch|gitignore|dockerfile|makefile|readme|license|changelog)
+        txt|md|log|conf|cfg|ini|json|xml|csv|c|h|cpp|hpp|js|ts|css|yaml|yml|toml|nfo|srt|ass|ssa|cue|m3u|pls|lst|org|rst|tex|sql|r|rb|go|rs|java|kt|swift|php|pl|lua|vim|diff|patch|gitignore|dockerfile|makefile|readme|license|changelog)
             return 0
             ;;
     esac
@@ -7464,6 +7467,46 @@ menu_conversoes() {
     esac
 }
 
+
+eazy_abrir_arquivo_enter() {
+    local tocado="$1"
+    [ -z "$tocado" ] && return 1
+    if [[ "$tocado" =~ ^https?:// ]]; then
+        abrir_html_ou_link "$tocado"
+        return $?
+    fi
+    if eh_playlist_m3u "$tocado" 2>/dev/null; then
+        abrir_playlist_no_navegador "$tocado"
+        return $?
+    fi
+    if eh_arquivo_pdf "$tocado" 2>/dev/null; then
+        menu_pdf "$tocado"
+        return $?
+    fi
+    if eh_arquivo_html "$tocado" 2>/dev/null; then
+        menu_arquivo_html "$tocado"
+        return $?
+    fi
+    if eh_arquivo_shell "$tocado" 2>/dev/null; then
+        menu_arquivo_shell "$tocado"
+        return $?
+    fi
+    if eh_arquivo_python "$tocado" 2>/dev/null; then
+        menu_arquivo_python "$tocado"
+        return $?
+    fi
+    if eh_arquivo_imagem "$tocado" 2>/dev/null; then
+        mostrar_imagem_com_pausa "$tocado"
+        return $?
+    fi
+    if eh_arquivo_texto "$tocado" 2>/dev/null; then
+        mostrar_texto "$tocado"
+        return $?
+    fi
+    tocar_arquivo "$tocado"
+    return $?
+}
+
 menu_pdf() {
     local pdf="$1" opcao
     eh_arquivo_pdf "$pdf" || return 1
@@ -7591,23 +7634,7 @@ menu_acoes_selecao() {
                     tocado=$(head -n1 "$playlist_sel")
                     ULTIMO_ARQUIVO="$tocado"
                     registrar_status
-                    if eh_arquivo_pdf "$tocado"; then
-                        menu_pdf "$tocado"
-                    elif [[ "$tocado" =~ ^https?:// ]]; then
-                        abrir_html_ou_link "$tocado"
-                    elif eh_arquivo_html "$tocado"; then
-                        menu_arquivo_html "$tocado"
-                    elif eh_arquivo_shell "$tocado"; then
-                        menu_arquivo_shell "$tocado"
-                    elif eh_arquivo_python "$tocado"; then
-                        menu_arquivo_python "$tocado"
-                    elif eh_arquivo_texto "$tocado"; then
-                        mostrar_texto "$tocado"
-                    elif eh_arquivo_imagem "$tocado"; then
-                        mostrar_imagem_com_pausa "$tocado"
-                    else
-                        tocar_arquivo "$tocado"
-                    fi
+                    eazy_abrir_arquivo_enter "$tocado"
                 fi
             fi
             rm -f "$playlist_sel"
@@ -9095,25 +9122,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             ULTIMO_ARQUIVO="$tocado"
             registrar_status
             if [ -f "$tocado" ]; then
-                if eh_playlist_m3u "$tocado"; then
-                    abrir_playlist_no_navegador "$tocado"
-                elif eh_arquivo_pdf "$tocado"; then
-                    menu_pdf "$tocado"
-                elif [[ "$tocado" =~ ^https?:// ]]; then
-                    abrir_html_ou_link "$tocado"
-                elif eh_arquivo_html "$tocado"; then
-                    menu_arquivo_html "$tocado"
-                elif eh_arquivo_shell "$tocado"; then
-                    menu_arquivo_shell "$tocado"
-                elif eh_arquivo_python "$tocado"; then
-                    menu_arquivo_python "$tocado"
-                elif eh_arquivo_texto "$tocado"; then
-                    mostrar_texto "$tocado"
-                elif eh_arquivo_imagem "$tocado"; then
-                    mostrar_imagem_com_pausa "$tocado"
-                else
-                    tocar_arquivo "$tocado"
-                fi
+                eazy_abrir_arquivo_enter "$tocado"
             else
                 whiptail --title "Arquivo ausente" --msgbox "Arquivo não encontrado:\n$tocado" 9 60
             fi
@@ -9153,25 +9162,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         elif [ "$total_sel" -eq 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
-            if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
-                abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_pdf "$ULTIMO_ARQUIVO"; then
-                menu_pdf "$ULTIMO_ARQUIVO"
-            elif [[ "$ULTIMO_ARQUIVO" =~ ^https?:// ]]; then
-                abrir_html_ou_link "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_html "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_html "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_shell "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_shell "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_python "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_python "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
-                mostrar_texto "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_imagem "$ULTIMO_ARQUIVO"; then
-                mostrar_imagem_com_pausa "$ULTIMO_ARQUIVO"
-            else
-                tocar_arquivo "$ULTIMO_ARQUIVO"
-            fi
+            eazy_abrir_arquivo_enter "$ULTIMO_ARQUIVO"
         fi
         rm -f "$playlist_sel"
         continue
@@ -9206,25 +9197,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         elif [ "$total_sel" -ge 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
-            if eh_playlist_m3u "$ULTIMO_ARQUIVO"; then
-                abrir_playlist_no_navegador "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_pdf "$ULTIMO_ARQUIVO"; then
-                menu_pdf "$ULTIMO_ARQUIVO"
-            elif [[ "$ULTIMO_ARQUIVO" =~ ^https?:// ]]; then
-                abrir_html_ou_link "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_html "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_html "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_shell "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_shell "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_python "$ULTIMO_ARQUIVO"; then
-                menu_arquivo_python "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_texto "$ULTIMO_ARQUIVO"; then
-                mostrar_texto "$ULTIMO_ARQUIVO"
-            elif eh_arquivo_imagem "$ULTIMO_ARQUIVO"; then
-                mostrar_imagem_com_pausa "$ULTIMO_ARQUIVO"
-            else
-                tocar_arquivo "$ULTIMO_ARQUIVO"
-            fi
+            eazy_abrir_arquivo_enter "$ULTIMO_ARQUIVO"
         fi
         rm -f "$playlist_sel"
         continue
@@ -9316,25 +9289,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             tocado=$(head -n1 "$playlist_sel")
             ULTIMO_ARQUIVO="$tocado"
             registrar_status
-            if eh_playlist_m3u "$tocado"; then
-                abrir_playlist_no_navegador "$tocado"
-            elif eh_arquivo_pdf "$tocado"; then
-                menu_pdf "$tocado"
-            elif [[ "$tocado" =~ ^https?:// ]]; then
-                abrir_html_ou_link "$tocado"
-            elif eh_arquivo_html "$tocado"; then
-                menu_arquivo_html "$tocado"
-            elif eh_arquivo_shell "$tocado"; then
-                menu_arquivo_shell "$tocado"
-            elif eh_arquivo_python "$tocado"; then
-                menu_arquivo_python "$tocado"
-            elif eh_arquivo_texto "$tocado"; then
-                mostrar_texto "$tocado"
-            elif eh_arquivo_imagem "$tocado"; then
-                mostrar_imagem_com_pausa "$tocado"
-            else
-                tocar_arquivo "$tocado"
-            fi
+            eazy_abrir_arquivo_enter "$tocado"
         fi
         rm -f "$playlist_sel"
     fi
