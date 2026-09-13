@@ -1,11 +1,6 @@
 [Desktop Entry]
-Version=1.0
 Type=Application
 Name=eazy
-GenericName=Terminal Media Browser
-Comment=Navegador e reprodutor multimídia no terminal (fzf + mpv)
 Exec=eazy %F
-TryExec=eazy
-Icon=multimedia-player
 Terminal=true
 Categories=AudioVideo;Player;ConsoleOnly;

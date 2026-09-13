@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2.7 (release) — navegador e reprodutor multimídia no terminal
-#  Revisão 3.2.7 — Enter .sh/.html: Executar|Ver|Editar (como .py)
+#  eazy 3.2.8 (release) — navegador e reprodutor multimídia no terminal
+#  Revisão 3.2.8 — Alt-X mostra qtd e bytes da seleção global
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.2.7"
+EAZY_VERSION="3.2.8"
 EAZY_CODENAME="release"
 EAZY_NAME="eazy"
 
@@ -3445,10 +3445,38 @@ abrir_html_ou_link() {
 
 
 eazy_clear_global_confirm() {
-    if whiptail --title "Limpar seleção global" --yesno \
-        "Zerar toda a seleção global?\n\nTodos os arquivos marcados em todos os diretórios serão desmarcados." 10 65; then
+    local n=0 bytes=0 p sz msg dirs=0
+    if [ -f "${SELECTED_FILE:-}" ]; then
+        while IFS= read -r p || [ -n "$p" ]; do
+            [ -z "$p" ] && continue
+            n=$((n + 1))
+            if [ -e "$p" ]; then
+                sz=$(du -sb -- "$p" 2>/dev/null | awk '{print $1}')
+                bytes=$((bytes + ${sz:-0}))
+            fi
+        done < "$SELECTED_FILE"
+    fi
+    if [ -f "${SELECTED_DIRS_FILE:-}" ]; then
+        dirs=$(grep -cve '^[[:space:]]*$' "$SELECTED_DIRS_FILE" 2>/dev/null || echo 0)
+        dirs=$(printf '%s' "$dirs" | tr -cd '0-9')
+        dirs=${dirs:-0}
+    fi
+    if [ "$n" -eq 0 ] && [ "${dirs:-0}" -eq 0 ]; then
+        whiptail --title "Seleção global" --msgbox "Seleção global vazia.\nNada a limpar." 8 45 2>/dev/null || true
+        return 0
+    fi
+    msg="Zerar a seleção global?\n\n"
+    msg+="Arquivos/itens: $n\n"
+    msg+="Tamanho: $(formatar_bytes_label "$bytes")"
+    if [ "${dirs:-0}" -gt 0 ]; then
+        msg+="\nDirs marcados: $dirs"
+    fi
+    msg+="\n\nIsso só desmarca — não apaga do disco."
+    if whiptail --title "Limpar seleção global" --yesno "$msg" 14 60; then
         : > "$SELECTED_FILE"
-        : > "$SELECTED_DIRS_FILE"
+        : > "${SELECTED_DIRS_FILE:-/dev/null}"
+        [ -n "${SELECTED_DIRS_FILE:-}" ] && : > "$SELECTED_DIRS_FILE"
+        whiptail --title "Seleção global" --msgbox "Seleção limpa.\n($n item(ns), $(formatar_bytes_label "$bytes"))" 9 50 2>/dev/null || true
     fi
 }
 
