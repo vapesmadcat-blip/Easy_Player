@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2.12 (release) — navegador e reprodutor multimídia no terminal
-#  Revisão 3.2.12 — cache listas/pesquisa/playlist; ext com categoria; sel global qtd/bytes; hotkeys Ctrl/Alt; notas; OP sel; data/hora; limpeza caches; links browser|download; lista global
+#  eazy 3.2.11 (release) — navegador e reprodutor multimídia no terminal
+#  Revisão 3.2.11 — py/sh/html fora do texto genérico; menu Enter reforçado
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.2.12"
+EAZY_VERSION="3.2.11"
 EAZY_CODENAME="release"
 EAZY_NAME="eazy"
 
@@ -91,11 +91,6 @@ fi
 EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
-SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
-IA_ATIVA="${IA_ATIVA:-0}"
-IA_NOME="${IA_NOME:-smithi}"
-MOSTRAR_EXT="${MOSTRAR_EXT:-1}"
-MOSTRAR_DATA="${MOSTRAR_DATA:-1}"
 EAZY_START_DIR="$(pwd -P 2>/dev/null || pwd)"
 EAZY_EXIT_CD_FILE="${CONFIG_DIR}/exit_cd"
 
@@ -187,14 +182,6 @@ eazy_normalize_tecla() {
 PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
 SEM_AUDIO="${SEM_AUDIO:-0}"
 DRY_RUN="${DRY_RUN:-0}"
-# OP = seleção global opcional (0=desligada em memória efêmera | 1=persistente em arquivo)
-SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
-# IA ativa (ex.: smithi) — 0=off | 1=on (placeholder de integração)
-IA_ATIVA="${IA_ATIVA:-0}"
-IA_NOME="${IA_NOME:-smithi}"
-MOSTRAR_EXT="${MOSTRAR_EXT:-1}"
-MOSTRAR_DATA="${MOSTRAR_DATA:-1}"
-
 
 # ============================================================
 # SUDO + DRY RUN
@@ -772,26 +759,16 @@ configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
     local f9_acao
-    local agora op_lab ia_lab
-    agora=$(date "+%Y-%m-%d %H:%M:%S")
-    op_lab="$([ "${SEL_GLOBAL_OP:-1}" = "1" ] && echo "persistente" || echo "só sessão")"
-    ia_lab="$([ "${IA_ATIVA:-0}" = "1" ] && echo "ON (${IA_NOME:-smithi})" || echo "OFF")"
-    f9_acao=$(whiptail --title "F9 — eazy ${EAZY_VERSION} · $agora" \
-        --menu "Config · diagnóstico · seleção\nOP sel: $op_lab · IA: $ia_lab" 24 78 14 \
+    f9_acao=$(whiptail --title "F9 — Configuração e diagnóstico" \
+        --menu "Escolha uma opção:" 22 78 9 \
         "config" "Configurar o eazy" \
         "hotkeys" "Hotkeys — config completa de atalhos" \
-        "hot_ctrl" "Ver atalhos CTRL" \
-        "hot_alt" "Ver atalhos ALT" \
-        "hot_fn" "Ver teclas de função" \
-        "sel_list" "Mostrar seleção global (qtd · bytes · lista)" \
-        "sel_op" "Alternar seleção global OP (persistente/sessão)" \
-        "overview" "Overview do sistema (completo)" \
+        "overview" "Overview do sistema" \
         "sound" "Teste de som" \
         "shell" "Shell do sistema (neste diretório)" \
         "exitdir" "Ao sair: dir do navegador ou o anterior" \
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
-        "ia" "IA ativa: $ia_lab" \
         "cancel" "Voltar" \
         3>&1 1>&2 2>&3)
     case "$f9_acao" in
@@ -802,23 +779,6 @@ configurar_defaults() {
         lixeira) abrir_lixeira; return ;;
         export_notas) exportar_notas_eazy; return ;;
         hotkeys) configurar_hotkeys; return ;;
-        hot_ctrl) eazy_mostrar_hotkeys_modificador ctrl; return ;;
-        hot_alt) eazy_mostrar_hotkeys_modificador alt; return ;;
-        hot_fn) eazy_mostrar_hotkeys_modificador fn; return ;;
-        sel_list) mostrar_selecao_global; return ;;
-        sel_op) eazy_toggle_sel_global_op; return ;;
-        ia)
-            if [ "${IA_ATIVA:-0}" = "1" ]; then IA_ATIVA=0; else IA_ATIVA=1; fi
-            if [ -f "$CONFIG_FILE" ]; then
-                if grep -q "^IA_ATIVA=" "$CONFIG_FILE" 2>/dev/null; then
-                    sed -i "s|^IA_ATIVA=.*|IA_ATIVA=\"$IA_ATIVA\"|" "$CONFIG_FILE"
-                else
-                    echo "IA_ATIVA=\"$IA_ATIVA\"" >> "$CONFIG_FILE"
-                fi
-            fi
-            whiptail --title "IA" --msgbox "IA ${IA_NOME:-smithi}: $([ "$IA_ATIVA" = "1" ] && echo ATIVA || echo desligada)\n\n(Integração placeholder — use para marcar preferência.)" 11 60
-            return
-            ;;
         config) : ;;
         *) return 0 ;;
     esac
@@ -2560,16 +2520,6 @@ if [ "$1" = "--install" ]; then
         command -v update-desktop-database &>/dev/null && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
     fi
 
-    MAN_SRC="$SCRIPT_DIR/eazy.1"
-    [ -f "$MAN_SRC" ] || MAN_SRC="$(dirname -- "$SCRIPT_ATUAL")/eazy.1"
-    if [ -f "$MAN_SRC" ]; then
-        if sudo install -Dm644 "$MAN_SRC" /usr/share/man/man1/eazy.1; then
-            sudo gzip -n -9 -f /usr/share/man/man1/eazy.1 2>/dev/null || true
-            echo -e "\033[1;32m✓\033[0m Man page: /usr/share/man/man1/eazy.1.gz"
-            command -v mandb &>/dev/null && sudo mandb -q 2>/dev/null || true
-        fi
-    fi
-
     echo -e "\n\033[1;32m${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME}) instalado.\033[0m"
     echo -e "  ${EAZY_NAME} --help"
     echo -e "  ${EAZY_NAME} --version"
@@ -2600,11 +2550,6 @@ elif [ "$1" = "--uninstall" ]; then
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     [ -f "$DESKTOP_DIR/eazy.desktop" ] && rm -f "$DESKTOP_DIR/eazy.desktop" && echo -e "\033[1;32m✓\033[0m launcher local"
     [ -f /usr/share/applications/eazy.desktop ] && sudo rm -f /usr/share/applications/eazy.desktop && echo -e "\033[1;32m✓\033[0m launcher sistema"
-    if [ -f /usr/share/man/man1/eazy.1 ] || [ -f /usr/share/man/man1/eazy.1.gz ]; then
-        sudo rm -f /usr/share/man/man1/eazy.1 /usr/share/man/man1/eazy.1.gz
-        echo -e "\033[1;32m✓\033[0m man page (/usr/share/man/man1/eazy.1.gz)"
-        command -v mandb &>/dev/null && sudo mandb -q 2>/dev/null || true
-    fi
     # Pacote .deb / rpm instalado
     if command -v dpkg &>/dev/null && dpkg -l eazy &>/dev/null; then
         echo -e "Pacote deb detectado: \033[1;33msudo apt remove eazy\033[0m"
@@ -2696,14 +2641,7 @@ TMP_FILE="/tmp/fzf_tmp_$$"
 DUP_FILE="/tmp/fzf_dup_$$"
 DUP_SELECTED_FILE="/tmp/fzf_dup_selected_$$"
 DUP_FIXED_FILE="/tmp/fzf_dup_fixed_$$"   # F12 amostragem — marca VERMELHA fixa (não inverte)
-# Seleção global: persistente (OP=1) ou só da sessão (OP=0)
-if [ -n "${EAZY_SELECTED_FILE:-}" ]; then
-    SELECTED_FILE="$EAZY_SELECTED_FILE"
-elif [ "${SEL_GLOBAL_OP:-1}" = "0" ]; then
-    SELECTED_FILE="/tmp/eazy_selected_$$"
-else
-    SELECTED_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/eazy/selected_paths"
-fi
+SELECTED_FILE="${EAZY_SELECTED_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/eazy/selected_paths}"
 DUP_MANUAL_FILE="/tmp/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" 2>/dev/null || true
 # Migra fila legada e garante 3 filas
@@ -3020,7 +2958,7 @@ elif ! carregar_sessao; then
     fi
 fi
 
-TODAS_EXT=(mp4 wmv flv mkv avi mov webm m4v mpg mpeg ts mp3 m4a wav flac ogg webp jpg jpeg png gif zip tar gz bz2 xz rar 7z m3u pls pdf txt sh py html)
+TODAS_EXT=(mp4 wmv flv mkv avi mov webm m4v mp3 m4a wav flac webp jpg jpeg png gif zip tar gz bz2 xz rar 7z m3u pls)
 EXT_TODAS="${TODAS_EXT[*]}"
 EXT_BUSCA=""
 EXT_DUP=""
@@ -3410,160 +3348,6 @@ abrir_lixeira() {
     return 1
 }
 
-
-mostrar_selecao_global() {
-    local n=0 bytes=0 p sz tmp
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-sel-global.XXXXXX") || return 1
-    {
-        printf 'eazy — SELEÇÃO GLOBAL\n'
-        printf '========================================\n'
-        printf 'Arquivo: %s\n' "${SELECTED_FILE:-}"
-        printf 'Persistente (OP): %s\n' "$([ "${SEL_GLOBAL_OP:-1}" = "1" ] && echo SIM || echo NÃO — só sessão)"
-        printf 'Gerado em: %s\n\n' "$(date "+%Y-%m-%d %H:%M:%S")"
-        if [ ! -s "${SELECTED_FILE:-}" ]; then
-            printf '(vazia)\n'
-        else
-            printf "%-12s  %-8s  %s\n" "TAMANHO" "EXT" "CAMINHO"
-            printf "%-12s  %-8s  %s\n" "------------" "--------" "--------"
-            while IFS= read -r p || [ -n "$p" ]; do
-                [ -z "$p" ] && continue
-                n=$((n + 1))
-                sz=0
-                if [ -e "$p" ]; then
-                    sz=$(du -sb -- "$p" 2>/dev/null | awk "{print \$1}")
-                    bytes=$((bytes + ${sz:-0}))
-                fi
-                ext="${p##*.}"
-                [ "$ext" = "$p" ] && ext="—"
-                ext=$(printf "%s" "$ext" | tr "[:upper:]" "[:lower:]" | cut -c1-8)
-                printf "%-12s  %-8s  %s\n" "$(formatar_bytes_label "${sz:-0}" 2>/dev/null || echo "${sz:-0}")" "$ext" "$p"
-            done < "$SELECTED_FILE"
-            printf "\nTotal: %s item(ns) · %s\n" "$n" "$(formatar_bytes_label "$bytes" 2>/dev/null || echo "$bytes bytes")"
-        fi
-    } > "$tmp"
-    if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Seleção global ($n · $(formatar_bytes_label "$bytes" 2>/dev/null || echo "$bytes B"))" --textbox "$tmp" 28 100 --scrolltext
-    else
-        cat "$tmp"
-    fi
-    rm -f "$tmp"
-}
-
-eazy_mostrar_hotkeys_modificador() {
-    local mod="${1:-ctrl}"
-    local msg
-    case "$mod" in
-        ctrl|CTRL)
-            msg="Atalhos com CTRL
-
-Ctrl+F  Busca recursiva
-Ctrl+D  Duplicados
-Ctrl+P  Filas / playlists temporárias
-Ctrl+O  Abrir playlist .m3u
-Ctrl+G  Histórico
-Ctrl+B  Downloads (editar / adicionar)
-Ctrl+K  Menu de ações
-Ctrl+L  Ir à pasta
-Ctrl+N  Notas
-Ctrl+S  Salvar playlist / pesquisa
-Ctrl+Y  Copiar seleção
-Ctrl+U  Mover seleção
-Ctrl+E  Shuffle / exportar
-Ctrl+/  Preview on/off
-Ctrl+A  Selecionar visíveis
-Ctrl+X  Limpar seleção local
-Ctrl+R  Inverter seleção
-Ctrl+Q  Sair
-Ctrl+Espaço / F6  Seleção inteira"
-            ;;
-        alt|ALT)
-            msg="Atalhos com ALT
-
-Alt+Enter  Executar seleção acumulada
-Alt+D      Apagar do disco
-Alt+X      Zerar seleção global (com qtd/bytes)"
-            ;;
-        f|F|fn)
-            msg="Teclas de função
-
-F9   Configuração / overview / hotkeys
-F10  Ajuda expandida
-F12  Reaplicar persistência / amostra duplicados
-F1/F2/F3  Ordenação (tamanho/nome/data)"
-            ;;
-        *)
-            msg="Modificadores: Ctrl · Alt · F-keys
-Use F10 para a ajuda completa."
-            ;;
-    esac
-    whiptail --title "Hotkeys — $mod" --msgbox "$msg" 22 60 2>/dev/null || printf "%s\n" "$msg"
-}
-
-eazy_toggle_sel_global_op() {
-    if [ "${SEL_GLOBAL_OP:-1}" = "1" ]; then
-        SEL_GLOBAL_OP="0"
-        # sessão efêmera
-        local novo="/tmp/eazy_selected_$$"
-        [ -f "${SELECTED_FILE:-}" ] && cp -f "$SELECTED_FILE" "$novo" 2>/dev/null || : > "$novo"
-        SELECTED_FILE="$novo"
-        SELECTED_DIRS_FILE="${SELECTED_FILE}.dirs"
-        SELECTED_LOCAL_FILE="${SELECTED_FILE}.local"
-        touch "$SELECTED_FILE" "$SELECTED_DIRS_FILE" "$SELECTED_LOCAL_FILE"
-        msg="Seleção global agora é OPCIONAL (só desta sessão).\nNão grava em ~/.config/eazy/selected_paths"
-    else
-        SEL_GLOBAL_OP="1"
-        SELECTED_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/eazy/selected_paths"
-        SELECTED_DIRS_FILE="${SELECTED_FILE}.dirs"
-        SELECTED_LOCAL_FILE="${SELECTED_FILE}.local"
-        mkdir -p "$(dirname "$SELECTED_FILE")"
-        touch "$SELECTED_FILE" "$SELECTED_DIRS_FILE" "$SELECTED_LOCAL_FILE"
-        msg="Seleção global PERSISTENTE reativada.\nArquivo: $SELECTED_FILE"
-    fi
-    # salva preferência
-    if [ -f "$CONFIG_FILE" ]; then
-        if grep -q "^SEL_GLOBAL_OP=" "$CONFIG_FILE" 2>/dev/null; then
-            sed -i "s|^SEL_GLOBAL_OP=.*|SEL_GLOBAL_OP=\"$SEL_GLOBAL_OP\"|" "$CONFIG_FILE"
-        else
-            echo "SEL_GLOBAL_OP=\"$SEL_GLOBAL_OP\"" >> "$CONFIG_FILE"
-        fi
-    fi
-    whiptail --title "Seleção global OP" --msgbox "$msg" 11 65 2>/dev/null || true
-}
-
-eazy_editar_fila_downloads() {
-    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-    touch "$DOWNLOAD_QUEUE"
-    if [ ! -s "$DOWNLOAD_QUEUE" ]; then
-        whiptail --title "Downloads" --msgbox "Fila de downloads vazia.\nUse Ctrl+B → Adicionar link." 9 55
-        return 0
-    fi
-    local tmp escolhido linha engine url rest novo
-    tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-dl-edit.XXXXXX") || return 1
-    # mostra linhas numeradas
-    nl -ba "$DOWNLOAD_QUEUE" > "$tmp"
-    escolhido=$(fzf --prompt="Editar download ❯ " --header="ENTER editar · ESC cancelar" < "$tmp") || { rm -f "$tmp"; return 0; }
-    rm -f "$tmp"
-    [ -z "$escolhido" ] && return 0
-    # extrai número da linha
-    local num
-    num=$(printf "%s" "$escolhido" | awk "{print \$1}")
-    linha=$(sed -n "${num}p" "$DOWNLOAD_QUEUE")
-    [ -z "$linha" ] && return 0
-    engine=$(printf "%s" "$linha" | cut -d"|" -f1)
-    url=$(printf "%s" "$linha" | cut -d"|" -f2)
-    rest=$(printf "%s" "$linha" | cut -d"|" -f3-)
-    novo=$(whiptail --title "Editar link download #$num" --inputbox "URL / link:\nMotor: $engine" 12 78 "$url" 3>&1 1>&2 2>&3) || return 0
-    [ -z "$novo" ] && return 0
-    # reescreve linha
-    local out="${DOWNLOAD_QUEUE}.tmp"
-    awk -v n="$num" -v eng="$engine" -v u="$novo" -v r="$rest" -F"|" "
-        NR==n { print eng \"|\" u \"|\" r; next }
-        { print }
-    " "$DOWNLOAD_QUEUE" > "$out" && mv -f "$out" "$DOWNLOAD_QUEUE"
-    whiptail --title "Downloads" --msgbox "Link #$num atualizado.\n$novo" 10 70
-}
-
-
 exportar_notas_eazy() {
     local dest="$HOME/Documentos/Easy-Notes"
     mkdir -p "$dest" "$NOTES_DIR" 2>/dev/null || true
@@ -3631,37 +3415,10 @@ eazy_spawn_open() {
 }
 
 abrir_html_ou_link() {
-    local alvo="$1" abs escolha
+    local alvo="$1" abs
     [ -z "$alvo" ] && return 1
 
-    if [[ "$alvo" =~ ^https?:// ]]; then
-        escolha=$(whiptail --title "Link detectado" --menu "\n$alvo\n\nO que deseja fazer?" 16 72 3 \
-            "browser" "Abrir no browser" \
-            "download" "Adicionar à fila de downloads (Ctrl+B)" \
-            "cancel" "Cancelar" \
-            3>&1 1>&2 2>&3) || return 0
-        case "$escolha" in
-            browser)
-                eazy_spawn_open "$alvo" && return 0
-                whiptail --title "Abrir link" --msgbox "Não abriu o browser.\n\n$alvo\n\nInstale: sudo apt install xdg-utils" 12 60 2>/dev/null || true
-                return 1
-                ;;
-            download)
-                # Reusa fluxo de adicionar download com link pré-preenchido
-                if type adicionar_download >/dev/null 2>&1; then
-                    EAZY_PREFILL_URL="$alvo" adicionar_download
-                else
-                    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
-                    touch "$DOWNLOAD_QUEUE"
-                    echo "ytdlp|$alvo|" >> "$DOWNLOAD_QUEUE"
-                    whiptail --title "Downloads" --msgbox "Adicionado à fila (yt-dlp):\n$alvo" 10 70
-                fi
-                return 0
-                ;;
-            *) return 0 ;;
-        esac
-    fi
-    if [[ "$alvo" =~ ^file:// ]]; then
+    if [[ "$alvo" =~ ^https?:// ]] || [[ "$alvo" =~ ^file:// ]]; then
         eazy_spawn_open "$alvo" && return 0
         whiptail --title "Abrir link" --msgbox "Não abriu o browser.\n\n$alvo\n\nInstale: sudo apt install xdg-utils" 12 60 2>/dev/null || true
         return 1
@@ -3869,7 +3626,7 @@ eazy_lista_filtrada() {
     }
     ' "$f"
 }
-export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao arquivo_selecao_global adicionar_selecao_global remover_selecao_global expandir_diretorio_selecao remover_selecao_diretorio eazy_toggle_global_item adicionar_selecao_local remover_selecao_local reconstruir_selecao_local eazy_commit_fzf_selected eazy_remark_local_selection eazy_select_visible_global eazy_clear_local_selection eazy_clear_global_confirm eazy_invert_visible_global eazy_build_preselect_load_bind eazy_playlist_alt_enter eazy_expandir_escolha_acoes mostrar_selecao_global eazy_mostrar_hotkeys_modificador eazy_toggle_sel_global_op eazy_editar_fila_downloads 2>/dev/null || true
+export -f eazy_lista_filtrada eazy_eh_navegacao eazy_sem_navegacao arquivo_selecao_global adicionar_selecao_global remover_selecao_global expandir_diretorio_selecao remover_selecao_diretorio eazy_toggle_global_item adicionar_selecao_local remover_selecao_local reconstruir_selecao_local eazy_commit_fzf_selected eazy_remark_local_selection eazy_select_visible_global eazy_clear_local_selection eazy_clear_global_confirm eazy_invert_visible_global eazy_build_preselect_load_bind eazy_playlist_alt_enter eazy_expandir_escolha_acoes 2>/dev/null || true
 
 # Salva sessão + limpa cache de busca ao sair
 trap 'salvar_sessao 2>/dev/null || true; rm -rf "$BUSCA_CACHE_DIR" 2>/dev/null || true; rm -f "$LISTA_FZF_FILE" "$DUP_SELECTED_FILE" "$DUP_SELECTED_FILE.tmp" "$DUP_FIXED_FILE" "$DUP_FIXED_FILE.tmp" "$DUP_MANUAL_FILE" "$SELECTED_FILE.tmp" "$SELECTED_DIRS_FILE.tmp" 2>/dev/null || true' EXIT INT TERM
@@ -3925,23 +3682,8 @@ selecionar_extensoes() {
     dialog_args+=("TODOS_COMPACTADOS" "[ ATALHO: TODOS OS COMPACTADOS ]" "OFF")
     dialog_args+=("DIGITAR" "[ DIGITAR extensões ou nomes com curingas ]" "OFF")
 
-    # Categorias para rótulo: INCLUIR EXT — CATEGORIA
-    eazy_cat_ext() {
-        case "$1" in
-            mp4|wmv|flv|mkv|avi|mov|webm|m4v|mpg|mpeg|ts|m2ts) echo "VÍDEOS" ;;
-            mp3|m4a|wav|flac|ogg|opus|aac) echo "ÁUDIOS" ;;
-            webp|jpg|jpeg|png|gif|bmp|tiff|svg) echo "IMAGENS" ;;
-            zip|tar|gz|bz2|xz|rar|7z|tgz) echo "COMPACTADOS" ;;
-            m3u|pls|m3u8) echo "PLAYLISTS" ;;
-            pdf|txt|md|doc|docx|epub) echo "DOCS" ;;
-            sh|bash|py|js|html|htm) echo "SCRIPTS/WEB" ;;
-            *) echo "OUTROS" ;;
-        esac
-    }
     for ext in "${TODAS_EXT[@]}"; do
-        catg=$(eazy_cat_ext "$ext")
-        ext_up=$(printf '%s' "$ext" | tr '[:lower:]' '[:upper:]')
-        dialog_args+=("$ext" "INCLUIR ${ext_up} — CATEGORIA ${catg}" "OFF")
+        dialog_args+=("$ext" "Formato .$ext" "OFF")
     done
 
     local resultado
@@ -4441,14 +4183,10 @@ eazy_status_header() {
     fi
     sel_h=$(formatar_bytes_label "$sel_bytes")
     atual_h=$(formatar_bytes_label "$atual_bytes")
-    local agora op_s ia_s
-    agora=$(date "+%H:%M:%S")
-    op_s="$([ "${SEL_GLOBAL_OP:-1}" = "1" ] && echo OP || echo sess)"
-    ia_s="$([ "${IA_ATIVA:-0}" = "1" ] && echo "IA:${IA_NOME:-smithi}" || echo "")"
     if [ "${MODO_DUP:-0}" -eq 1 ]; then
-        printf "[%s] DRY:%s | HD %s/%s | Sel %s (%s) %s %s" "$agora" "$([ "${DRY_RUN:-0}" = "1" ] && echo ON || echo off)" "$livre_h" "$total_h" "$sel_h" "$sel_count" "$op_s" "$ia_s"
+        printf "DRY-RUN: %s  |  HD livre: %s / %s  |  Sel: %s (%s item(ns))" "$([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" "$livre_h" "$total_h" "$sel_h" "$sel_count"
     else
-        printf "[%s] DRY:%s | HD %s/%s | Global %s (%s) [%s] | Dir %s (%s) %s" "$agora" "$([ "${DRY_RUN:-0}" = "1" ] && echo ON || echo off)" "$livre_h" "$total_h" "$sel_h" "$sel_count" "$op_s" "$atual_h" "$atual_count" "$ia_s"
+        printf "DRY-RUN: %s  |  HD livre: %s / %s  |  Sel global: %s (%s)  |  Dir atual: %s (%s)" "$([ "${DRY_RUN:-0}" = "1" ] && echo LIGADO || echo DESLIGADO)" "$livre_h" "$total_h" "$sel_h" "$sel_count" "$atual_h" "$atual_count"
     fi
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
@@ -4564,12 +4302,7 @@ encontrar_ytdlp() {
 
 adicionar_download() {
     local link
-    if [ -n "${EAZY_PREFILL_URL:-}" ]; then
-        link="$EAZY_PREFILL_URL"
-        unset EAZY_PREFILL_URL
-    else
-        link=$(whiptail --title "Gerenciador de Downloads" --inputbox "Digite ou cole o Link para Download:" 10 70 3>&1 1>&2 2>&3)
-    fi
+    link=$(whiptail --title "Gerenciador de Downloads" --inputbox "Digite ou cole o Link para Download:" 10 70 3>&1 1>&2 2>&3)
     [ -z "$link" ] && return
 
     local gerenciador extra=""
@@ -5252,23 +4985,8 @@ limpar_cache_sistema() {
         fi
         rm -rf ~/.cache/thumbnails/* 2>/dev/null || true
         rm -rf ~/.cache/fontconfig/* 2>/dev/null || true
-        # Gradle / Android
-        rm -rf ~/.gradle/caches/* 2>/dev/null || true
-        echo "  · gradle caches"
-        # Snap (só cache do usuário; listagem se snap existir)
-        if command -v snap >/dev/null 2>&1; then
-            rm -rf ~/snap/*/common/.cache/* 2>/dev/null || true
-            echo "  · snap user caches"
-        fi
-        # pip / npm / yarn / cargo (caches seguros do usuário)
-        rm -rf ~/.cache/pip/* 2>/dev/null || true
-        rm -rf ~/.npm/_cacache/* 2>/dev/null || true
-        rm -rf ~/.cache/yarn/* 2>/dev/null || true
-        rm -rf ~/.cache/cargo/* 2>/dev/null || true
-        echo "  · pip/npm/yarn caches"
-        # eazy busca cache
-        rm -rf "${BUSCA_CACHE_DIR:-$HOME/.config/eazy/busca_cache}"/* 2>/dev/null || true
-        echo "  · eazy busca cache"
+        # Não apaga /tmp inteiro sem root e com risco — só arquivos do usuário com +30 dias seria melhor;
+        # mantém a intenção original mas evita falha silenciosa.
         find /tmp -maxdepth 1 -type f -user "$(id -un)" -delete 2>/dev/null || true
         echo "✅ Limpeza concluída!"
     } | eazy_mostrar_texto "Limpeza de Cache" 12 60
@@ -6132,31 +5850,26 @@ obter_lista_rapida() {
                 nome_exib = "..." substr(nome_exib, length(nome_exib) - 41)
             }
             mb = sprintf("%.1f", bytes / 1048576)
-            dt = strftime("%d/%m/%y %H:%M", int(mtime))
             chave = (modo == "data") ? int(mtime) : bytes
+            info = (modo == "data") ? strftime("%d/%m/%y %H:%M", int(mtime)) : mb " MB"
+
             n = split(nome, ext_arr, ".")
-            ext = (n > 1) ? tolower(ext_arr[n]) : "?"
-            info = sprintf("%s · %sMB · .%s", dt, mb, ext)
+            ext = tolower(ext_arr[n])
 
             if (ext ~ /^(m3u|pls)$/) {
-                printf "%015d	%s📜 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📜 %-45s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
-            } else if (ext ~ /^(mp3|m4a|wav|flac|ogg)$/) {
-                printf "%015d	%s🎵 %-42s%s	%s[%s]%s	%s
-",
+            } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
+                printf "%015d\t%s🎵 %-45s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-                printf "%015d	%s🖼️ %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🖼️ %-45s%s\t%s[%s]%s\t%s\n",
                     chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-                printf "%015d	%s📦 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📦 %-45s%s\t%s[%s]%s\t%s\n",
                     chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else {
-                printf "%015d	%s🎬 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🎬 %-45s%s\t%s[%s]%s\t%s\n",
                     chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
@@ -6213,8 +5926,7 @@ obter_lista_rapida() {
 
     find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null | awk -F'\t' \
         -v c_dir="$C_DIR" -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
-        -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" \
-        -v c_ord1=$'\033[1;36m' -v c_ord2=$'\033[1;35m' -v c_ord3=$'\033[0;33m' '
+        -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" '
     {
         bytes = $1
         mtime = $2
@@ -6223,47 +5935,34 @@ obter_lista_rapida() {
         caminho = $5
 
         sub(/^\.\//, "", caminho)
-        nome_exib = (length(nome) > 34) ? substr(nome, 1, 34) ".." : nome
+        nome_exib = (length(nome) > 38) ? substr(nome, 1, 38) ".." : nome
         mb = sprintf("%.1f", bytes / 1048576)
-        dt = strftime("%d/%m/%y %H:%M", int(mtime))
 
         chave = (modo == "data") ? int(mtime) : bytes
-        # Cor da coluna de índice/ordenação (cicla para identificar ordem)
-        idx++
-        c_ord = (idx % 3 == 1) ? c_ord1 : (idx % 3 == 2) ? c_ord2 : c_ord3
+        info = (modo == "data") ? strftime("%d/%m/%y %H:%M", int(mtime)) : mb " MB"
 
         n = split(nome, ext_arr, ".")
-        ext = (n > 1) ? tolower(ext_arr[n]) : "—"
-        # tipo legível; se indetectável mostra extensão
+        ext = tolower(ext_arr[n])
+
         if (tipo == "d") {
-            tipo_lab = "dir"
-            icon = "📁"; cor = c_dir
-            nome_exib = nome_exib "/"
-        } else if (ext ~ /^(m3u|pls|m3u8)$/) {
-            tipo_lab = "pls"; icon = "📜"; cor = c_aud
-        } else if (ext ~ /^(mp3|m4a|wav|flac|ogg|opus)$/) {
-            tipo_lab = "aud"; icon = "🎵"; cor = c_aud
-        } else if (ext ~ /^(webp|jpg|jpeg|png|gif|bmp)$/) {
-            tipo_lab = "img"; icon = "🖼️"; cor = c_img
+            printf "%015d\t%s📁 %-40s%s\t%s[%-9s]%s\t%s\n",
+                chave, c_dir, nome_exib "/", c_reset, c_size, (modo == "data" ? info : "-- MB"), c_reset, caminho
+        } else if (ext ~ /^(m3u|pls)$/) {
+            printf "%015d\t%s📜 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else if (ext ~ /^(mp3|m4a|wav|flac)$/) {
+            printf "%015d\t%s🎵 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
+        } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
+            printf "%015d\t%s🖼️ %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-            tipo_lab = "zip"; icon = "📦"; cor = c_zip
-        } else if (ext ~ /^(mp4|mkv|avi|mov|webm|wmv|flv|m4v|mpg|mpeg|ts)$/) {
-            tipo_lab = "vid"; icon = "🎬"; cor = c_vid
-        } else if (ext ~ /^(pdf|txt|md|html|htm|sh|py)$/) {
-            tipo_lab = ext; icon = "📄"; cor = c_size
+            printf "%015d\t%s📦 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
         } else {
-            tipo_lab = (ext == "—" ? "?" : ext); icon = "📎"; cor = c_size
+            printf "%015d\t%s🎬 %-40s%s\t%s[%s]%s\t%s\n",
+                chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
         }
-
-        # info: data · tamanho · tipo/ext
-        if (tipo == "d") {
-            info = sprintf("%s · %s", dt, tipo_lab)
-        } else {
-            info = sprintf("%s · %sMB · .%s", dt, mb, tipo_lab)
-        }
-
-        printf "%015d\t%s%s %-36s%s\t%s[%s]%s\t%s\n",
-            chave, cor, icon, nome_exib, c_reset, c_ord, info, c_reset, caminho
     }'
 }
 
@@ -8828,51 +8527,15 @@ Depois use:
         if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
             MODO_DOWNLOAD=0; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1; registrar_status
         else
-            escolha_dl=$(whiptail --title "Gerenciador de Downloads · Ctrl+B" --menu "Escolha a ação:" 16 62 5 \
-                "1" "Ver fila de downloads" \
-                "2" "Adicionar link (yt-dlp/aria/…)" \
-                "3" "Editar links da fila" \
-                "4" "Abrir link no browser (sem baixar)" \
-                "5" "Adicionar seleção global às listas/filas" \
+            escolha_dl=$(whiptail --title "Gerenciador de Downloads" --menu "Escolha a ação:" 12 50 2 \
+                "1" "Ver Fila de Downloads" \
+                "2" "Adicionar Link com Senha" \
                 3>&1 1>&2 2>&3)
-            case "$escolha_dl" in
-                1) MODO_DOWNLOAD=1; TMP=2; registrar_status ;;
-                2) adicionar_download ;;
-                3) eazy_editar_fila_downloads ;;
-                4)
-                    local url_br
-                    url_br=$(whiptail --title "Abrir no browser" --inputbox "URL:" 10 70 "https://" 3>&1 1>&2 2>&3) || true
-                    if [ -n "$url_br" ]; then
-                        if command -v xdg-open >/dev/null 2>&1; then
-                            xdg-open "$url_br" >/dev/null 2>&1 &
-                        elif command -v sensible-browser >/dev/null 2>&1; then
-                            sensible-browser "$url_br" >/dev/null 2>&1 &
-                        else
-                            whiptail --title "Browser" --msgbox "xdg-open não encontrado.\n$url_br" 9 60
-                        fi
-                    fi
-                    ;;
-                5)
-                    # pergunta: browser ou listas — já no menu; aqui adiciona sel global à fila 1
-                    local n_sel
-                    n_sel=$(grep -cve "^[[:space:]]*$" "$SELECTED_FILE" 2>/dev/null || echo 0)
-                    n_sel=$(printf "%s" "$n_sel" | tr -cd "0-9"); n_sel=${n_sel:-0}
-                    if [ "$n_sel" -eq 0 ]; then
-                        whiptail --title "Listas" --msgbox "Seleção global vazia." 8 40
-                    else
-                        touch "$PLAYLIST_1"
-                        local addc=0 p
-                        while IFS= read -r p; do
-                            [ -z "$p" ] && continue
-                            if ! grep -Fxq -- "$p" "$PLAYLIST_1" 2>/dev/null; then
-                                printf "%s\n" "$p" >> "$PLAYLIST_1"
-                                addc=$((addc+1))
-                            fi
-                        done < "$SELECTED_FILE"
-                        whiptail --title "Listas" --msgbox "Adicionados $addc de $n_sel item(ns) à Fila 1." 9 55
-                    fi
-                    ;;
-            esac
+            if [ "$escolha_dl" = "2" ]; then
+                adicionar_download
+            elif [ "$escolha_dl" = "1" ]; then
+                MODO_DOWNLOAD=1; TMP=2; registrar_status
+            fi
         fi
         continue
     elif [ "$tecla" = "ctrl-o" ]; then
@@ -8908,24 +8571,6 @@ Depois use:
         fi
         continue
     elif [ "$tecla" = "ctrl-f" ]; then
-        # Pesquisa dentro da lista/playlist aberta (filtra itens da lista atual)
-        if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
-            local q_lista item_hit
-            q_lista=$(whiptail --title "Pesquisar na lista" --inputbox "Filtrar itens da lista aberta:\n$(basename "$ARQUIVO_PLAYLIST_ABERTO")" 11 60 "" 3>&1 1>&2 2>&3) || true
-            if [ -n "$q_lista" ]; then
-                item_hit=$(grep -i -- "$q_lista" "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null | fzf --prompt="Na lista ❯ " --multi) || true
-                if [ -n "$item_hit" ]; then
-                    while IFS= read -r _hit; do
-                        [ -z "$_hit" ] && continue
-                        _hit=$(printf "%s" "$_hit" | sed "s/^#.*//;s/^[[:space:]]*//;s/[[:space:]]*$//")
-                        [ -z "$_hit" ] && continue
-                        adicionar_selecao_global "$(caminho_absoluto "$_hit")" 2>/dev/null || printf "%s\n" "$(caminho_absoluto "$_hit")" >> "$SELECTED_FILE"
-                    done <<< "$item_hit"
-                    whiptail --title "Pesquisa na lista" --msgbox "Itens marcados na seleção global.\nFiltro: $q_lista" 10 55 2>/dev/null || true
-                fi
-            fi
-            continue
-        fi
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
             if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
                 MODO_BUSCA=0
