@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.5.0 — atualização completa da documentação
+- Atualizados `eazy --help`, F10, `man eazy`, README, guia rápido e documentação completa.
+- Documentado o Enter em `.deb`, instalação confirmada pelo APT, formato TAM · DATA · TIPO e ciclo idx3.
+- Removidas referências antigas de versão nos exemplos principais.
+
 ## 3.4.0 — instalar .deb com Enter
 - Pressionar Enter em um arquivo `.deb` abre o instalador integrado.
 - O pacote é conferido, mostra metadados e pede confirmação antes de usar o APT.

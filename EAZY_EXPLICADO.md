@@ -1,4 +1,4 @@
-# eazy — documentação completa de funcionamento e vantagens
+# eazy 3.5.0 — documentação completa de funcionamento e vantagens
 
 ## 1. O que é o eazy
 
@@ -493,3 +493,12 @@ A combinação de seleção múltipla, diretórios tratados corretamente, listas
 [1]: https://github.com/vapesmadcat-blip/Easy_Player "Repositório oficial do Easy_Player"
 
 O código-fonte e as versões publicadas estão disponíveis no [repositório oficial do projeto][1].
+
+
+## Atualização 3.5.0: pacotes, formato e ajuda
+
+Ao selecionar um arquivo `.deb` e pressionar **Enter**, o eazy lê os metadados do pacote, solicita confirmação e executa a instalação local com APT. O fluxo é intencionalmente confirmado para evitar instalações acidentais.
+
+A listagem mostra o tamanho antes da data e do tipo: **TAM · DATA · TIPO**. O ciclo de três cores `idx3` é uma convenção visual baseada na posição da linha; ele não representa qualidade, codec ou estado do vídeo.
+
+A documentação operacional está disponível em três níveis: `eazy --help` para comandos e atalhos no terminal, `F10` para a ajuda interativa durante a navegação e `man eazy` para a referência detalhada.

@@ -1,3 +1,10 @@
+eazy (3.5.0) unstable; urgency=medium
+
+  * Update CLI help, F10 help, man page and all user documentation.
+  * Document Enter-to-install for local .deb packages, TAM/DATA/TIPO and idx3 colors.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 20:02:00 +0000
+
 eazy (3.4.0) unstable; urgency=medium
 
   * Install local Debian packages by pressing Enter on a .deb file.

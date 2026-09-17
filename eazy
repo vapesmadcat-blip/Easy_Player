@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.4.0"
+EAZY_VERSION="3.5.0"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -965,7 +965,7 @@ Opções:
                      Manutenção avançada (seleção fina de arquivos do eazy)
 
 Atalhos principais (dentro do eazy):
-  Enter              Tocar só o item sob o cursor / entrar na pasta
+  Enter              Abrir/tocar; em .deb mostra dados e instala com confirmação
   Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
   Tab · Espaço       Marcar itens (seleção persistente entre pastas)
   Ctrl-A             Selecionar todos os visíveis
@@ -988,7 +988,7 @@ Atalhos principais (dentro do eazy):
   Shift+Del         Apagar seleção (pergunta: local ou global)
   Alt-D             Apagar do disco
   F9                 Configuração, overview e teste de som
-  F10                Ajuda expandida
+  F10                Ajuda expandida (atalhos, instalação .deb e configuração)
   F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
   Q · X · Ctrl-Q     Sair (salva sessão)
 
@@ -1007,6 +1007,9 @@ Arquivos de configuração:
   ~/.config/eazy/selected_paths
   ~/.config/eazy/temp_playlist_{1,2,3}
   ~/.config/eazy/scripts/manut-completa.sh
+
+Em um arquivo .deb: pressione Enter para conferir o pacote e instalar com APT.
+A lista usa TAM · DATA · TIPO e mantém o ciclo visual idx3 de três cores.
 
 Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk
 Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools

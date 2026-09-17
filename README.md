@@ -1,4 +1,4 @@
-# eazy 3.4.0 (release)
+# eazy 3.5.0 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 
@@ -85,3 +85,10 @@ Detalhes: [INSTALL.md](INSTALL.md) · Ajuda: `man eazy` · `eazy --help`
 ## Licença
 
 Uso livre. Sem garantias.
+
+## Atualização 3.5.0
+
+- **Enter em `.deb`**: exibe os metadados, pede confirmação e instala pelo APT.
+- **Lista**: mostra `TAM · DATA · TIPO`; as cores seguem o ciclo visual `idx3`.
+- **Ajuda**: `eazy --help` e `F10` incluem os atalhos e o fluxo de instalação.
+- **Manual**: `man eazy` documenta todos esses recursos.

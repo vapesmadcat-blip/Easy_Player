@@ -1,4 +1,4 @@
-# Guia rápido do eazy
+# Guia rápido do eazy 3.5.0
 
 ## Iniciar
 
@@ -62,3 +62,15 @@ Ao **zerar a seleção global**, o diálogo mostra a **quantidade de arquivos** 
 Use `eazy -m`, `eazy -a` ou o menu `Ctrl-K`. O modo **DRY-RUN** mostra o que seria feito sem remover dados.
 
 O guia completo está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md).
+
+## Instalar pacotes `.deb` com Enter
+
+Navegue até um arquivo `.deb` e pressione **Enter**. O eazy mostra nome, versão e descrição, pede confirmação e chama o APT para instalar o pacote. A instalação requer confirmação explícita.
+
+## Formato e cores da lista
+
+A informação aparece como **TAM · DATA · TIPO**. As cores seguem o ciclo visual **idx3** de três cores por posição da linha; isso é apenas uma marca visual e não indica diferença entre vídeos.
+
+## Ajuda e manual
+
+Use `eazy --help` para a ajuda no terminal, `F10` para a ajuda interativa e `man eazy` para a referência completa.
