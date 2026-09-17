@@ -2495,27 +2495,62 @@ if [ "$1" = "--install" ]; then
         esac
     }
 
+    # Detecta desktop (GNOME / KDE / outro) para deps e integração de menu
+    DESKTOP_ENV="outro"
+    case "${XDG_CURRENT_DESKTOP:-}${DESKTOP_SESSION:-}${XDG_SESSION_DESKTOP:-}" in
+        *[Kk][Dd][Ee]*|*[Pp]lasma*) DESKTOP_ENV="kde" ;;
+        *[Gg][Nn][Oo][Mm][Ee]*|*[Cc]innamon*|*Unity*) DESKTOP_ENV="gnome" ;;
+    esac
+    [ -n "${KDE_FULL_SESSION:-}" ] && DESKTOP_ENV="kde"
+    [ -n "${GNOME_DESKTOP_SESSION_ID:-}" ] && DESKTOP_ENV="gnome"
+    echo -e "Desktop detectado: \033[1;37m${DESKTOP_ENV}\033[0m"
+
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapt\033[0m"
+        # Core + player + utilitários de mídia
         instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
+        # Diagnóstico / sistema
         instalar_pkgs apt inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils
-        echo -e "\033[0;90mRAR oficial é opcional e depende do repositório non-free; a leitura de listas .rar continua disponível.\033[0m"
+        # PipeWire (comum em GNOME e KDE modernos)
+        instalar_pkgs apt pipewire pipewire-pulse wireplumber 2>/dev/null || true
+        case "$DESKTOP_ENV" in
+            kde)
+                echo -e "\033[0;90mIntegrando KDE (opcional)…\033[0m"
+                instalar_pkgs apt konsole dolphin kate kio-extras breeze-icon-theme 2>/dev/null || true
+                ;;
+            gnome)
+                echo -e "\033[0;90mIntegrando GNOME (opcional)…\033[0m"
+                instalar_pkgs apt gnome-terminal nautilus gedit evince 2>/dev/null || true
+                ;;
+        esac
+        echo -e "\033[0;90mRAR oficial é opcional (repo non-free); leitura de .rar continua via p7zip.\033[0m"
     elif command -v pacman &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mpacman\033[0m"
-        # Arch: rar costuma estar no AUR; 7z como fallback na extração
-        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 unzip p7zip yt-dlp ffmpeg imagemagick poppler chafa xdg-utils
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs pacman konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs pacman gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v dnf &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mdnf\033[0m"
-        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip p7zip-plugins yt-dlp
+        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip p7zip-plugins yt-dlp ffmpeg ImageMagick poppler-utils chafa xdg-utils
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs dnf konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs dnf gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v zypper &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mzypper\033[0m"
         instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs zypper konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs zypper gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v apk &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapk\033[0m (Alpine)"
         instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
     else
         echo -e "\033[1;31mNenhum gerenciador conhecido (apt/pacman/dnf/zypper/apk).\033[0m" >&2
-        echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget" >&2
+        echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget xdg-utils" >&2
         exit 1
     fi
 
@@ -2556,8 +2591,18 @@ if [ "$1" = "--install" ]; then
     if [ -f "$DESKTOP_SRC" ]; then
         mkdir -p "$DESKTOP_DIR"
         cp "$DESKTOP_SRC" "$DESKTOP_DIR/eazy.desktop"
+        # Cópia no sistema (menu GNOME/KDE de todos os usuários)
+        if sudo install -Dm644 "$DESKTOP_SRC" /usr/share/applications/eazy.desktop 2>/dev/null; then
+            echo -e "\033[1;32m✓\033[0m Launcher sistema: /usr/share/applications/eazy.desktop"
+        fi
         echo -e "\033[1;32m✓\033[0m Launcher: $DESKTOP_DIR/eazy.desktop"
         command -v update-desktop-database &>/dev/null && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+        command -v update-desktop-database &>/dev/null && sudo update-desktop-database /usr/share/applications 2>/dev/null || true
+        # KDE: regenera cache do menu
+        command -v kbuildsycoca6 &>/dev/null && kbuildsycoca6 --noincremental 2>/dev/null || true
+        command -v kbuildsycoca5 &>/dev/null && kbuildsycoca5 --noincremental 2>/dev/null || true
+        # GNOME: atualiza cache de apps se disponível
+        command -v glib-compile-schemas &>/dev/null && true
     fi
 
     MAN_SRC="$SCRIPT_DIR/eazy.1"
@@ -4453,6 +4498,16 @@ eazy_status_header() {
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
     fi
+    # Legenda de cores (linha inferior da janela / header)
+    # Separadores ASCII 195 (0xC3) e 180 (0xB4) — abrem espaço visual (├ … ┤ em CP437)
+    # Em UTF-8 usamos os box-drawing equivalentes para legibilidade.
+    local leg_l=$'\u251c' leg_r=$'\u2524'
+    # Fallback se o shell não expandir \u: bytes ASCII 195/180
+    if [ "${#leg_l}" -ne 1 ] && [ "${#leg_l}" -ne 3 ]; then
+        leg_l=$(printf '\303')  # 195
+        leg_r=$(printf '\264')  # 180
+    fi
+    printf "\n%s \033[1;34m📁 DIR\033[0m \033[1;36m🎬 VID\033[0m \033[1;33m🎵 AUD\033[0m \033[1;35m🖼️ IMG\033[0m \033[1;31m📦 ZIP\033[0m \033[0;32m📄 DOC\033[0m \033[0;90m· idx=ordem\033[0m %s" "$leg_l" "$leg_r"
 }
 
 # Pergunta filtro de tamanho para a busca recursiva

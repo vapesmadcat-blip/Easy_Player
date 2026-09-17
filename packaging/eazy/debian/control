@@ -5,15 +5,11 @@ Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
 Depends: bash, fzf, whiptail, gawk, findutils, sed, wget | curl, mpv | mplayer | vlc | ffmpeg
-Suggests: yt-dlp, aria2, axel, chafa, ffmpeg, p7zip-full, rar, pciutils, alsa-utils, pulseaudio-utils, lshw, smartmontools, dmidecode, inxi, usbutils, x11-xserver-utils, mesa-utils, vulkan-tools, iw, network-manager, upower, lm-sensors
-Description: terminal media browser and player
+Recommends: xdg-utils, ffmpeg
+Suggests: yt-dlp, aria2, axel, chafa, imagemagick, poppler-utils, p7zip-full, rar, konsole, dolphin, kate, kio-extras, gnome-terminal, nautilus, gedit, evince, pipewire-pulse, alsa-utils, pulseaudio-utils, inxi, lm-sensors, smartmontools
+Description: terminal media browser and player (GNOME/KDE)
  eazy is a keyboard-driven terminal media browser and player built around
- fzf and a command-line media player. It provides persistent queues,
- recursive search, previews, playlists, downloads, and session state.
+ fzf and mpv/mplayer. Works on GNOME, KDE Plasma and other desktops.
  .
- The package installs eazy at /usr/bin/eazy and /usr/lib/eazy/eazy,
- with compatibility links at /usr/local/bin/eazy and /home/jim/.local/bin/eazy.
- The desktop launcher is included. User data is stored below ~/.config/eazy
- and is not removed during package removal.
-
-
+ Installs binary, notes editor, desktop launcher and full man page.
+ User data in ~/.config/eazy is kept on removal.

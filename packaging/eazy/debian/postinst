@@ -1,0 +1,7 @@
+#!/bin/sh
+set -e
+command -v mandb >/dev/null 2>&1 && mandb -q 2>/dev/null || true
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database -q /usr/share/applications 2>/dev/null || true
+command -v kbuildsycoca6 >/dev/null 2>&1 && kbuildsycoca6 --noincremental 2>/dev/null || true
+command -v kbuildsycoca5 >/dev/null 2>&1 && kbuildsycoca5 --noincremental 2>/dev/null || true
+exit 0
