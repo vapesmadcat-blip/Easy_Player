@@ -1,4 +1,4 @@
-# eazy 3.3.1 (release)
+# eazy 3.3.2 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 
@@ -40,9 +40,9 @@ projeto não é incluída no código nem no pacote.
 ## Instalação rápida
 
 ```bash
-sudo dpkg -i eazy_3.3.1_all.deb && sudo apt-get install -f
-# GNOME: sudo apt install ./eazy-gnome_3.3.1_all.deb
-# KDE Plasma: sudo apt install ./eazy-kde_3.3.1_all.deb
+sudo dpkg -i eazy_3.3.2_all.deb && sudo apt-get install -f
+# GNOME: sudo apt install ./eazy-gnome_3.3.2_all.deb
+# KDE Plasma: sudo apt install ./eazy-kde_3.3.2_all.deb
 # ou
 ./eazy --install
 ```

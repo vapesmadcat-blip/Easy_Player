@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.2 — tela de processos
+- Corrigida a janela “Processos Pesados”: comandos longos não quebram mais a interface.
+- Lista agora usa colunas compactas de usuário, PID, CPU, memória, RSS, estado, tempo e comando.
+
 ## 3.3.1 — GNOME/KDE
 - Saída de `eazy --version` exibida em verde.
 - Manual `eazy(1)` atualizado para 3.3.1, IA e integração de desktops.

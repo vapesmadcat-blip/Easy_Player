@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.3.1"
+EAZY_VERSION="3.3.2"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -5431,12 +5431,16 @@ verificar_disco_smart() {
 
 processos_pesados() {
     {
-        echo "10 Processos que mais usam CPU:"
-        ps aux --sort=-%cpu 2>/dev/null | head -11 || true
+        printf '%-10s %7s %6s %6s %8s %6s %8s %s\n' \
+            USER PID '%CPU' '%MEM' RSS STAT TEMPO COMANDO
+        ps -eo user=,pid=,%cpu=,%mem=,rss=,stat=,etime=,comm= --sort=-%cpu 2>/dev/null | \
+            head -n 10 || true
         echo ""
-        echo "10 Processos que mais usam memória:"
-        ps aux --sort=-%mem 2>/dev/null | head -11 || true
-    } | eazy_mostrar_texto "Processos Pesados" 26 90
+        printf '%-10s %7s %6s %6s %8s %6s %8s %s\n' \
+            USER PID '%CPU' '%MEM' RSS STAT TEMPO COMANDO
+        ps -eo user=,pid=,%cpu=,%mem=,rss=,stat=,etime=,comm= --sort=-%mem 2>/dev/null | \
+            head -n 10 || true
+    } | eazy_mostrar_texto "Processos Pesados" 26 88
 }
 
 estatisticas_rede() {
