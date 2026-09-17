@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.4 — integração sem dependência APT
+- Metapacotes GNOME/KDE não exigem mais que `eazy` esteja registrado como pacote Debian.
+- Corrige instalação em sistemas onde o eazy foi instalado por script ou pacote local diferente.
+
 ## 3.3.3 — metapacotes compatíveis
 - Pacotes GNOME/KDE agora dependem de `eazy (>= 3.3)`, aceitando instalações existentes da série 3.3.
 

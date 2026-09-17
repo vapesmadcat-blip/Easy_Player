@@ -2,7 +2,7 @@
 
 O pacote `eazy` base é compatível com GNOME, KDE Plasma e outros ambientes. Os
 metapacotes opcionais apenas declaram as ferramentas recomendadas para cada
-desktop e dependem da mesma versão do pacote base:
+desktop e são independentes do registro APT do pacote base:
 
 ```bash
 sudo apt install ./eazy_3.3.3_all.deb

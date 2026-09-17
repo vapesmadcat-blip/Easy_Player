@@ -1,11 +1,10 @@
 Package: eazy-kde
-Version: 3.3.2
+Version: 3.3.4
 Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
-Depends: eazy (>= 3.3)
 Recommends: konsole, dolphin, kate, kio-extras, xdg-utils
 Description: eazy desktop integration for Kde
- Meta-package for eazy with recommended Kde terminal, file manager and
+ Integration package for eazy with recommended Kde terminal, file manager and
  desktop utilities. The eazy executable is provided by the base eazy package.
