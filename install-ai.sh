@@ -26,7 +26,7 @@ if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
 fi
 
 printf 'Cole sua chave OpenRouter (não será exibida): '
-IFS= read -r -s API_KEY
+IFS= read -r -s API_KEY < /dev/tty
 echo
 if [[ -z "$API_KEY" ]]; then
   echo "Erro: nenhuma chave foi informada." >&2

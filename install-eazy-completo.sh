@@ -2,7 +2,12 @@
 set -e
 
 echo "Cole sua chave OpenRouter e pressione Enter:"
-read -r -s -p "API key: " API_KEY
+if [ -r /dev/tty ]; then
+  read -r -s -p "API key: " API_KEY < /dev/tty
+else
+  echo "Erro: execute o instalador em um terminal para informar a chave." >&2
+  exit 1
+fi
 echo
 
 if [ -z "$API_KEY" ]; then
