@@ -17,6 +17,26 @@ Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ff
 - **Instalador** com detecção **GNOME** e **KDE** + deps do ambiente
 - Pacote `.deb` compatível com GNOME e KDE Plasma
 
+## IA integrada
+
+O eazy inclui um chat opcional via API compatível com OpenRouter. Configure a chave
+sem gravá-la no código:
+
+```bash
+export EAZY_AI_API_KEY="sua-chave"
+eazy --ai
+```
+
+Também é possível criar `~/.config/eazy/ai.env` com permissão `600`:
+
+```text
+EAZY_AI_API_KEY=sua-chave
+EAZY_AI_MODEL=gryphe/mythomax-l2-13b
+```
+
+O chat também pode ser aberto em **F9 → Abrir chat com IA**. A chave enviada ao
+projeto não é incluída no código nem no pacote.
+
 ## Instalação rápida
 
 ```bash

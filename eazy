@@ -34,6 +34,8 @@ LAST_NOTE_FILE="$NOTES_DIR/.ultima_nota"
 EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
+EAZY_AI_CLIENT="${EAZY_AI_CLIENT:-$EAZY_INSTALL_DIR/eazy-ai.py}"
+[ -f "$EAZY_AI_CLIENT" ] || EAZY_AI_CLIENT="/usr/lib/eazy/eazy-ai.py"
 CONFIG_FILE="$CONFIG_DIR/config"
 KEYS_FILE="$CONFIG_DIR/keys"
 LAST_COPY_DEST_FILE="$CONFIG_DIR/last_copy_destination"
@@ -69,6 +71,18 @@ PREVIEW_ATIVO="0"   # 0=desligado (padrão) | 1=ligado — persiste entre sessõ
 EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"  # navegador | anterior — diretório do terminal ao sair
 PYTHON_CMD="${PYTHON_CMD:-python3}"          # interpretador para .py (python3, python, py, …)
 SHELL_CMD="${SHELL_CMD:-bash}"               # shell para .sh (bash, sh, …)
+
+eazy_ia_chat() {
+    if [ ! -f "$EAZY_AI_CLIENT" ]; then
+        printf '%s\n' "Cliente de IA não encontrado: $EAZY_AI_CLIENT" >&2
+        return 1
+    fi
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+        printf '%s\n' "Python não encontrado: $PYTHON_CMD" >&2
+        return 1
+    fi
+    "$PYTHON_CMD" "$EAZY_AI_CLIENT"
+}
 
 # --- CORES (terminal) ---
 RED='\033[0;31m'
@@ -792,6 +806,7 @@ configurar_defaults() {
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
         "ia" "IA ativa: $ia_lab" \
+        "ia_chat" "Abrir chat com IA" \
         "cancel" "Voltar" \
         3>&1 1>&2 2>&3)
     case "$f9_acao" in
@@ -816,7 +831,11 @@ configurar_defaults() {
                     echo "IA_ATIVA=\"$IA_ATIVA\"" >> "$CONFIG_FILE"
                 fi
             fi
-            whiptail --title "IA" --msgbox "IA ${IA_NOME:-smithi}: $([ "$IA_ATIVA" = "1" ] && echo ATIVA || echo desligada)\n\n(Integração placeholder — use para marcar preferência.)" 11 60
+            whiptail --title "IA" --msgbox "IA ${IA_NOME:-smithi}: $([ "$IA_ATIVA" = "1" ] && echo ATIVA || echo desligada)\n\nUse 'Abrir chat com IA' depois de configurar EAZY_AI_API_KEY ou OPENROUTER_API_KEY." 11 70
+            return
+            ;;
+        ia_chat)
+            eazy_ia_chat
             return
             ;;
         config) : ;;
@@ -935,6 +954,7 @@ Opções:
   -h, --help         Mostra esta ajuda
   -V, --version      Mostra a versão
   --config           Assistente de configuração (player, volume, pastas…)
+  --ai               Abre o chat de IA configurado via OpenRouter
   --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
   --shell-init       Imprime função bash: eazy muda de pasta ao sair
   --install          Instala dependências, comando global e scripts auxiliares
@@ -2567,6 +2587,8 @@ if [ "$1" = "--install" ]; then
     [ -f "$DESKTOP_SRC" ] || DESKTOP_SRC="$(dirname -- "$SCRIPT_ATUAL")/../share/applications/eazy.desktop"
     EDITOR_SRC="$SCRIPT_DIR/eazy-notes-editor"
     [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
+    AI_SRC="$SCRIPT_DIR/eazy-ai.py"
+    [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     # Estrutura completa de dados do usuário; o cache de busca continua temporário.
     mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$HOME/Documentos/Easy-Notes"
@@ -2585,6 +2607,14 @@ if [ "$1" = "--install" ]; then
             echo -e "\033[1;32m✓\033[0m Editor de notas: /usr/lib/eazy/eazy-notes-editor"
         else
             echo -e "\033[1;31m✗\033[0m Falha ao instalar o editor de notas" >&2
+            exit 1
+        fi
+    fi
+    if [ -f "$AI_SRC" ]; then
+        if sudo install -Dm755 "$AI_SRC" /usr/lib/eazy/eazy-ai.py; then
+            echo -e "\033[1;32m✓\033[0m Cliente de IA: /usr/lib/eazy/eazy-ai.py"
+        else
+            echo -e "\033[1;31m✗\033[0m Falha ao instalar o cliente de IA" >&2
             exit 1
         fi
     fi
@@ -2635,6 +2665,9 @@ elif [ "$1" = "--uninstall" ]; then
     fi
     if [ -f /usr/lib/eazy/eazy ]; then
         sudo rm -f /usr/lib/eazy/eazy && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy" && REMOVIDO=1
+    fi
+    if [ -f /usr/lib/eazy/eazy-ai.py ]; then
+        sudo rm -f /usr/lib/eazy/eazy-ai.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-ai.py" && REMOVIDO=1
     fi
     INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
     INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
@@ -2702,6 +2735,9 @@ elif [ "$1" = "--restore-keys" ]; then
 elif [ "$1" = "--config" ]; then
     configurar_defaults
     exit 0
+elif [ "$1" = "--ai" ]; then
+    eazy_ia_chat
+    exit $?
 elif [ "$1" = "--update-ytdlp" ]; then
     # Atualiza yt-dlp SEM pip (baixa binário oficial do GitHub)
     DEST_YT="$HOME/.local/bin"

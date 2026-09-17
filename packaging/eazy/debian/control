@@ -4,12 +4,12 @@ Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
-Depends: bash, fzf, whiptail, gawk, findutils, sed, wget | curl, mpv | mplayer | vlc | ffmpeg
+Depends: bash, python3, fzf, whiptail, gawk, findutils, sed, wget | curl, mpv | mplayer | vlc | ffmpeg
 Recommends: xdg-utils, ffmpeg
 Suggests: yt-dlp, aria2, axel, chafa, imagemagick, poppler-utils, p7zip-full, rar, konsole, dolphin, kate, kio-extras, gnome-terminal, nautilus, gedit, evince, pipewire-pulse, alsa-utils, pulseaudio-utils, inxi, lm-sensors, smartmontools
 Description: terminal media browser and player (GNOME/KDE)
  eazy is a keyboard-driven terminal media browser and player built around
  fzf and mpv/mplayer. Works on GNOME, KDE Plasma and other desktops.
  .
- Installs binary, notes editor, desktop launcher and full man page.
+ Installs binary, notes editor, IA client, desktop launcher and full man page.
  User data in ~/.config/eazy is kept on removal.

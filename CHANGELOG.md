@@ -11,6 +11,8 @@
 - Exportação de notas, preferência IA (smithi) e data/hora no status.
 - Cache de busca/listas e limpeza gradle/snap na manutenção.
 - Pacote `.deb` com suporte GNOME/KDE e `xdg-utils`.
+- Chat de IA integrado via OpenRouter com `eazy --ai` e opção no menu F9.
+- Cliente Python sem chave embutida; configuração por variável de ambiente ou `~/.config/eazy/ai.env`.
 
 ## 3.2.11
 - Correção da man page no pacote (antes era stub de 45 bytes).
