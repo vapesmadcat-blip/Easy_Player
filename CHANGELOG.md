@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.3.3 — metapacotes compatíveis
+- Pacotes GNOME/KDE agora dependem de `eazy (>= 3.3)`, aceitando instalações existentes da série 3.3.
+
 ## 3.3.2 — tela de processos
 - Corrigida a janela “Processos Pesados”: comandos longos não quebram mais a interface.
 - Lista agora usa colunas compactas de usuário, PID, CPU, memória, RSS, estado, tempo e comando.

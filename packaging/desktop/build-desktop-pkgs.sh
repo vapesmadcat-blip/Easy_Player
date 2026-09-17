@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-VERSION="${1:-3.3.2}"
+VERSION="${1:-3.3.3}"
 DIST="$ROOT/packaging/desktop/dist"
 rm -rf "$ROOT/packaging/desktop/pkgroot-gnome" "$ROOT/packaging/desktop/pkgroot-kde"
 mkdir -p "$DIST"
