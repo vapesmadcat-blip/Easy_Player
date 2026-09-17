@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="3.2.12"
+VERSION="3.3"
 PACKAGE="eazy_${VERSION}_all.deb"
 URL="https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v${VERSION}/${PACKAGE}"
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/eazy"

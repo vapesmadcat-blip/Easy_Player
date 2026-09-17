@@ -1,10 +1,10 @@
-# eazy 3.2.12 (release)
+# eazy 3.3 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 
 **Repo:** https://github.com/vapesmadcat-blip/Easy_Player
 
-## Destaques 3.2.12
+## Destaques 3.3
 
 - **Man page completa** no `.deb` e no `eazy --install`
 - **Legenda de cores** na linha inferior (DIR / VID / AUD / IMG / ZIP / DOC)
@@ -40,7 +40,7 @@ projeto não é incluída no código nem no pacote.
 ## Instalação rápida
 
 ```bash
-sudo dpkg -i eazy_3.2.12_all.deb && sudo apt-get install -f
+sudo dpkg -i eazy_3.3_all.deb && sudo apt-get install -f
 # ou
 ./eazy --install
 ```

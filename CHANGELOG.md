@@ -1,6 +1,6 @@
 # Changelog
 
-## 3.2.12 — release
+## 3.3 — release
 - Man page completa no deb e em `eazy --install` / `--uninstall`.
 - Legenda de cores na linha inferior do header (DIR/VID/AUD/IMG/ZIP/DOC + idx).
 - `eazy --install` detecta GNOME e KDE e instala dependências do ambiente.

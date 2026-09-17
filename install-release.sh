@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPO="vapesmadcat-blip/Easy_Player"
-VERSION="3.2.12"
+VERSION="3.3"
 ASSET="eazy_${VERSION}_all.deb"
 URL="https://github.com/${REPO}/releases/download/eazy-v${VERSION}/${ASSET}"
 TMP_DIR="$(mktemp -d)"

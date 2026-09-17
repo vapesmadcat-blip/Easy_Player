@@ -20,14 +20,15 @@ printf 'EAZY_AI_API_KEY=%s\n' "$API_KEY" > "$HOME/.config/eazy/ai.env"
 chmod 600 "$HOME/.config/eazy/ai.env"
 unset API_KEY
 
-echo "Baixando eazy 3.2.12 com IA..."
-curl -fL --retry 3 \
-  -o /tmp/eazy_3.2.12_all.deb \
-  "https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.12/eazy_3.2.12_all.deb"
+PACKAGE="eazy_3.3_all.deb"
+URL="https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.3/$PACKAGE"
+echo "Baixando eazy 3.3 com IA para ./..."
+curl -fL --retry 3 -o "./$PACKAGE" "$URL"
 
-echo "Instalando..."
-sudo apt-get install --reinstall -y /tmp/eazy_3.2.12_all.deb
+echo "Instalando eazy completo com IA integrada..."
+sudo apt-get install --reinstall -y "./$PACKAGE"
 
 echo
 echo "Instalação concluída."
-echo "Teste com: eazy --ai"
+echo "Teste com: eazy --version"
+echo "Abra a IA com: eazy --ai"

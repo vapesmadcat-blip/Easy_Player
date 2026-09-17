@@ -1,4 +1,4 @@
-eazy (3.2.12) unstable; urgency=medium
+eazy (3.3) unstable; urgency=medium
 
   * Deb for GNOME and KDE: launcher, man page, notes editor, docs.
   * eazy --install detects desktop and installs matching deps.
