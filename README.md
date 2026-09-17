@@ -1,4 +1,4 @@
-# eazy 3.3.9 (release)
+# eazy 3.4.0 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 

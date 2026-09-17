@@ -1,3 +1,10 @@
+eazy (3.4.0) unstable; urgency=medium
+
+  * Install local Debian packages by pressing Enter on a .deb file.
+  * Show package metadata and request confirmation before apt installation.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 19:58:00 +0000
+
 eazy (3.3.9) unstable; urgency=medium
 
   * Restore the idx3 three-color visual cycle requested for file rows.

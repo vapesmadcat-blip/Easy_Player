@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.4.0 — instalar .deb com Enter
+- Pressionar Enter em um arquivo `.deb` abre o instalador integrado.
+- O pacote é conferido, mostra metadados e pede confirmação antes de usar o APT.
+
 ## 3.3.9 — idx3 restaurado
 - Restaurado o ciclo visual de três cores por índice nas linhas de arquivos.
 
