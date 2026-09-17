@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.6.0 — destino de downloads configurável
+- Default de downloads: `~/Downloads`.
+- Configuração disponível em **F9 → Configurar → Pasta Padrão de Downloads**.
+- A configuração é salva em `~/.config/eazy/config`; `DOWNLOAD_DIR` também pode ser usado no ambiente.
+
 ## 3.5.0 — atualização completa da documentação
 - Atualizados `eazy --help`, F10, `man eazy`, README, guia rápido e documentação completa.
 - Documentado o Enter em `.deb`, instalação confirmada pelo APT, formato TAM · DATA · TIPO e ciclo idx3.

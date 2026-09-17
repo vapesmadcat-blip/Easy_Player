@@ -1,4 +1,4 @@
-# eazy 3.5.0 — documentação completa de funcionamento e vantagens
+# eazy 3.6.0 — documentação completa de funcionamento e vantagens
 
 ## 1. O que é o eazy
 
@@ -502,3 +502,8 @@ Ao selecionar um arquivo `.deb` e pressionar **Enter**, o eazy lê os metadados 
 A listagem mostra o tamanho antes da data e do tipo: **TAM · DATA · TIPO**. O ciclo de três cores `idx3` é uma convenção visual baseada na posição da linha; ele não representa qualidade, codec ou estado do vídeo.
 
 A documentação operacional está disponível em três níveis: `eazy --help` para comandos e atalhos no terminal, `F10` para a ajuda interativa durante a navegação e `man eazy` para a referência detalhada.
+
+
+## Destino configurável dos downloads
+
+O destino padrão dos downloads é `~/Downloads`, evitando que arquivos baixados sejam misturados com a pasta que está sendo navegada. A configuração é feita em F9, fica persistida em `~/.config/eazy/config` na variável `DOWNLOAD_DIR` e pode ser sobrescrita pela variável de ambiente de mesmo nome. O eazy cria o diretório quando necessário e usa o mesmo destino para yt-dlp, aria2c, axel e wget.

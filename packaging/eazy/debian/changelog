@@ -1,3 +1,10 @@
+eazy (3.6.0) unstable; urgency=medium
+
+  * Add configurable download destination in F9 configuration.
+  * Use ~/Downloads as the default destination instead of the current directory.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 21:14:00 +0000
+
 eazy (3.5.0) unstable; urgency=medium
 
   * Update CLI help, F10 help, man page and all user documentation.

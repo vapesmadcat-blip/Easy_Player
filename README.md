@@ -1,4 +1,4 @@
-# eazy 3.5.0 (release)
+# eazy 3.6.0 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 
@@ -92,3 +92,8 @@ Uso livre. Sem garantias.
 - **Lista**: mostra `TAM · DATA · TIPO`; as cores seguem o ciclo visual `idx3`.
 - **Ajuda**: `eazy --help` e `F10` incluem os atalhos e o fluxo de instalação.
 - **Manual**: `man eazy` documenta todos esses recursos.
+
+
+## Destino dos downloads
+
+O destino padrão é **`~/Downloads`**. Para alterar, use **F9 → Configurar → Pasta Padrão de Downloads**. A escolha fica salva em `~/.config/eazy/config`. Também é possível iniciar com `DOWNLOAD_DIR=/caminho eazy`.

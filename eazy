@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.5.0"
+EAZY_VERSION="3.6.0"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -65,6 +65,7 @@ OSD_PADRAO="1"
 VOL_PADRAO="100"
 DIR_PADRAO="$PWD"
 PLAYLIST_DIR_PADRAO="${HOME}/Playlists"
+DOWNLOAD_DIR="${HOME}/Downloads"  # padrão: ~/Downloads
 PLAYER_PADRAO="mpv"
 SEM_AUDIO="0"       # 1 = vídeo sem áudio (mute)
 PREVIEW_ATIVO="0"   # 0=desligado (padrão) | 1=ligado — persiste entre sessões
@@ -105,6 +106,7 @@ fi
 EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
 SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
 IA_ATIVA="${IA_ATIVA:-0}"
 IA_NOME="${IA_NOME:-smithi}"
@@ -792,7 +794,7 @@ configurar_defaults() {
     ia_lab="$([ "${IA_ATIVA:-0}" = "1" ] && echo "ON (${IA_NOME:-smithi})" || echo "OFF")"
     f9_acao=$(whiptail --title "F9 — eazy ${EAZY_VERSION} · $agora" \
         --menu "Config · diagnóstico · seleção\nOP sel: $op_lab · IA: $ia_lab" 24 78 14 \
-        "config" "Configurar o eazy" \
+        "config" "Configurar o eazy (inclui destino de downloads)" \
         "hotkeys" "Hotkeys — config completa de atalhos" \
         "hot_ctrl" "Ver atalhos CTRL" \
         "hot_alt" "Ver atalhos ALT" \
@@ -872,6 +874,13 @@ configurar_defaults() {
         3>&1 1>&2 2>&3)
     [ -n "$novo_dir" ] && DIR_PADRAO="$novo_dir"
 
+    local novo_download_dir
+    novo_download_dir=$(whiptail --title "Configuração: Pasta Padrão de Downloads" \
+        --inputbox "Pasta onde os downloads serão salvos por padrão:\n(default: $HOME/Downloads)" 11 72 "$DOWNLOAD_DIR" \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_download_dir" ] && DOWNLOAD_DIR="$novo_download_dir"
+    DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+
     local novo_pl_dir
     novo_pl_dir=$(whiptail --title "Configuração: Pasta Padrão de Playlists" \
         --inputbox "Pasta onde as playlists serão salvas por padrão:\n(ex: $HOME/Playlists)" 11 70 "$PLAYLIST_DIR_PADRAO" \
@@ -927,6 +936,7 @@ OSD_PADRAO="$OSD_PADRAO"
 VOL_PADRAO="$VOL_PADRAO"
 DIR_PADRAO="$DIR_PADRAO"
 PLAYLIST_DIR_PADRAO="$PLAYLIST_DIR_PADRAO"
+DOWNLOAD_DIR="$DOWNLOAD_DIR"
 PLAYER_PADRAO="$PLAYER_PADRAO"
 SEM_AUDIO="$SEM_AUDIO"
 PREVIEW_ATIVO="$preview_keep"
@@ -934,7 +944,7 @@ EXIT_DIR_MODE="$exit_keep"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
 EOF
-    whiptail --title "Sucesso" --msgbox "Configurações salvas em:\n$CONFIG_FILE\n\nPlayer: $PLAYER_PADRAO\nPython: ${PYTHON_CMD:-python3}\nShell: ${SHELL_CMD:-bash}\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 14 55
+    whiptail --title "Sucesso" --msgbox "Configurações salvas em:\n$CONFIG_FILE\n\nDownloads: $DOWNLOAD_DIR\nPlayer: $PLAYER_PADRAO\nPython: ${PYTHON_CMD:-python3}\nShell: ${SHELL_CMD:-bash}\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 14 55
 }
 
 # --- FUNÇÃO DE AJUDA VISUAL (WHIPTAIL) ---
@@ -953,7 +963,7 @@ Argumentos:
 Opções:
   -h, --help         Mostra esta ajuda
   -V, --version      Mostra a versão
-  --config           Assistente de configuração (player, volume, pastas…)
+  --config           Assistente de configuração (inclui pasta de downloads)
   --ai               Abre o chat de IA configurado via OpenRouter
   --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
   --shell-init       Imprime função bash: eazy muda de pasta ao sair
@@ -975,7 +985,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-P             Alternar Filas 1 → 2 → 3 → listas → duplicados → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
-  Ctrl-B             Downloads (yt-dlp, aria2c, axel, wget)
+  Ctrl-B             Downloads (destino padrão: $HOME/Downloads)
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
@@ -9353,13 +9363,15 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
         nome_esperado=$(obter_nome_do_link "$link_alvo")
         dir_antes=$(pwd)
+        download_dir="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+        mkdir -p -- "$download_dir" || { echo "Não foi possível criar o destino: $download_dir"; read -p "Pressione Enter para continuar..."; continue; }
 
         # Downloads: tamanho remoto costuma ser desconhecido — exige folga mínima no disco
         {
             read -r _livre_dl _tot_dl < <(info_disco ".")
             _livre_dl=$(echo "${_livre_dl:-0}" | tr -cd '0-9'); _livre_dl=${_livre_dl:-0}
             # Reserva “virtual” de 1 GB para avisar; bloqueio se < mínimo seguro
-            if ! verificar_espaco_disco "$((1024*1024*1024))" "." "Download" \
+            if ! verificar_espaco_disco "$((1024*1024*1024))" "$download_dir" "Download" \
                 "$((1024*1024*1024))|${link_alvo} (estimativa mínima de reserva)"; then
                 continue
             fi
@@ -9418,10 +9430,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 \
                                 "${ARIA_ARGS[@]}" \
-                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         else
                             $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 \
-                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                --no-playlist -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         fi
                     else
                         if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
@@ -9429,10 +9441,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 --fragment-retries 5 \
                                 "${ARIA_ARGS[@]}" \
-                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         else
                             $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
-                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                --no-playlist -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         fi
                     fi
 
@@ -9443,7 +9455,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                             --extractor-args "youtube:player_client=web" \
                             --no-playlist --newline --retries 5 \
                             "${ARIA_ARGS[@]}" \
-                            -o "$out_tpl" "$link_limpo"; then
+                            -o "$download_dir/$out_tpl" "$link_limpo"; then
                             ytdlp_ok=1
                         fi
                     fi
@@ -9476,13 +9488,13 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 elif [ "$engine" = "axel" ]; then
                     if ! command -v axel &>/dev/null; then
                         echo -e "\033[1;31maxel não instalado.  sudo apt install axel\033[0m"
-                    elif axel --insecure -n 4 -o "$nome_esperado" "$link_alvo"; then
+                    elif axel --insecure -n 4 -o "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 else
                     if ! command -v wget &>/dev/null; then
                         echo -e "\033[1;31mwget não instalado.  sudo apt install wget\033[0m"
-                    elif wget --no-check-certificate -O "$nome_esperado" "$link_alvo"; then
+                    elif wget --no-check-certificate -O "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 fi
@@ -9500,13 +9512,15 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         arquivo_baixado=""
         if [ "$engine" = "ytdlp" ]; then
             # Pega o arquivo mais recente da pasta (yt-dlp define o nome)
-            arquivo_baixado=$(find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.opus" \) -printf '%T@ %p\n' 2>/dev/null \
-                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
-        elif [ -f "$nome_esperado" ]; then
-            arquivo_baixado="$nome_esperado"
+            arquivo_baixado=$(find "$download_dir" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.opus" \) -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2-
+            )
+        elif [ -f "$download_dir/$nome_esperado" ]; then
+            arquivo_baixado="$download_dir/$nome_esperado"
         else
-            arquivo_baixado=$(find . -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null \
-                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
+            arquivo_baixado=$(find "$download_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2-
+            )
         fi
 
         if [ -n "$arquivo_baixado" ] && [ -f "$arquivo_baixado" ]; then

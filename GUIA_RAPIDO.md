@@ -1,4 +1,4 @@
-# Guia rápido do eazy 3.5.0
+# Guia rápido do eazy 3.6.0
 
 ## Iniciar
 
@@ -74,3 +74,8 @@ A informação aparece como **TAM · DATA · TIPO**. As cores seguem o ciclo vis
 ## Ajuda e manual
 
 Use `eazy --help` para a ajuda no terminal, `F10` para a ajuda interativa e `man eazy` para a referência completa.
+
+
+## Destino dos downloads
+
+Por padrão, downloads feitos pelo Ctrl-B são salvos em `~/Downloads`. Altere em **F9 → Configurar → Pasta Padrão de Downloads**. O eazy cria a pasta automaticamente e mostra o destino ao iniciar o download.
