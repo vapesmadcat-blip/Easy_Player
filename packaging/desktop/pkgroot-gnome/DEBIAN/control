@@ -4,7 +4,7 @@ Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
-Depends: eazy (= 3.3.2)
+Depends: eazy (>= 3.3)
 Recommends: gnome-terminal, nautilus, gedit, evince, xdg-utils
 Description: eazy desktop integration for Gnome
  Meta-package for eazy with recommended Gnome terminal, file manager and

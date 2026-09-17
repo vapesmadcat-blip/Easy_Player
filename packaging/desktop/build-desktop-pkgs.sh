@@ -19,7 +19,7 @@ Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
-Depends: eazy (= $VERSION)
+Depends: eazy (>= 3.3)
 Recommends: $recommends
 Description: eazy desktop integration for ${flavor^}
  Meta-package for eazy with recommended ${flavor^} terminal, file manager and

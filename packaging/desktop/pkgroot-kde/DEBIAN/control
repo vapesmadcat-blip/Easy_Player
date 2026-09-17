@@ -4,7 +4,7 @@ Section: video
 Priority: optional
 Architecture: all
 Maintainer: eazy contributors <vapesmadcat-blip@users.noreply.github.com>
-Depends: eazy (= 3.3.2)
+Depends: eazy (>= 3.3)
 Recommends: konsole, dolphin, kate, kio-extras, xdg-utils
 Description: eazy desktop integration for Kde
  Meta-package for eazy with recommended Kde terminal, file manager and
