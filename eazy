@@ -6230,24 +6230,19 @@ obter_lista_rapida() {
             info = sprintf("%s · %sMB · .%s", dt, mb, ext)
 
             if (ext ~ /^(m3u|pls)$/) {
-                printf "%015d	%s📜 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📜 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(mp3|m4a|wav|flac|ogg)$/) {
-                printf "%015d	%s🎵 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🎵 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-                printf "%015d	%s🖼️ %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🖼️ %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-                printf "%015d	%s📦 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📦 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else {
-                printf "%015d	%s🎬 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🎬 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
