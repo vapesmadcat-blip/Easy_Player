@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.6 — manual alinhado
+- Man page atualizada para corresponder ao executável e às instruções atuais.
+- Instalador completo atualizado para usar o pacote base 3.3.6.
+
 ## 3.3.5 — cliente IA no pacote
 - O pacote base agora instala `eazy-ai.py` em `/usr/lib/eazy/`.
 - `eazy --ai` deixa de falhar com “Cliente de IA não encontrado”.

@@ -1,4 +1,4 @@
-eazy (3.3.5) unstable; urgency=medium
+eazy (3.3.6) unstable; urgency=medium
 
   * Include the eazy-ai.py client in the Debian package.
   * Make eazy --ai work after package installation.
