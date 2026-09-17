@@ -39,7 +39,7 @@ if ! $SUDO dpkg -i "$WORK_DIR/$BASE_PACKAGE"; then
 fi
 
 if [ -n "$FLAVOR" ]; then
-  DESKTOP_PACKAGE="eazy-${FLAVOR}_3.3.4_all.deb"
+  DESKTOP_PACKAGE="eazy-${FLAVOR}_${VERSION}_all.deb"
   fetch "$DESKTOP_PACKAGE"
   $SUDO apt-get install -y "$WORK_DIR/$DESKTOP_PACKAGE"
   echo "Integração $FLAVOR instalada."
