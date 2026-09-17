@@ -1,3 +1,9 @@
+eazy (3.3.9) unstable; urgency=medium
+
+  * Restore the idx3 three-color visual cycle requested for file rows.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 19:55:00 +0000
+
 eazy (3.3.8) unstable; urgency=medium
 
   * Use consistent colors by file type instead of cycling colors by row.

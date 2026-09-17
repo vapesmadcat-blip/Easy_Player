@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.3.9 — idx3 restaurado
+- Restaurado o ciclo visual de três cores por índice nas linhas de arquivos.
+
 ## 3.3.8 — cores consistentes
 - Vídeos, áudios, imagens, compactados e documentos mantêm uma cor fixa por tipo.
 - Removida a alternância de cores baseada na posição da linha.
