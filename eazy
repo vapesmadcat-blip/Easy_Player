@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.3.2"
+EAZY_VERSION="3.3.5"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 

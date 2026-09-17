@@ -1,6 +1,6 @@
-eazy (3.3.2) unstable; urgency=medium
+eazy (3.3.5) unstable; urgency=medium
 
-  * Fix Processos Pesados dialog by using compact process columns.
-  * Prevent long command lines from wrapping and corrupting the textbox view.
+  * Include the eazy-ai.py client in the Debian package.
+  * Make eazy --ai work after package installation.
 
- -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 18:32:00 +0000
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 17 Sep 2026 19:12:00 +0000

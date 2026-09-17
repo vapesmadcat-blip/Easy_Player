@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.5 — cliente IA no pacote
+- O pacote base agora instala `eazy-ai.py` em `/usr/lib/eazy/`.
+- `eazy --ai` deixa de falhar com “Cliente de IA não encontrado”.
+
 ## 3.3.4 — integração sem dependência APT
 - Metapacotes GNOME/KDE não exigem mais que `eazy` esteja registrado como pacote Debian.
 - Corrige instalação em sistemas onde o eazy foi instalado por script ou pacote local diferente.
