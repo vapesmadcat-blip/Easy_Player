@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.3.7 — tamanho primeiro
+- A lista principal e a busca agora exibem `TAM · data · tipo`, com o tamanho primeiro.
+
 ## 3.3.6 — manual alinhado
 - Man page atualizada para corresponder ao executável e às instruções atuais.
 - Instalador completo atualizado para usar o pacote base 3.3.6.
