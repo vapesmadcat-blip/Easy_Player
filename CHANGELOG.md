@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.8 — cores consistentes
+- Vídeos, áudios, imagens, compactados e documentos mantêm uma cor fixa por tipo.
+- Removida a alternância de cores baseada na posição da linha.
+
 ## 3.3.7 — tamanho primeiro
 - A lista principal e a busca agora exibem `TAM · data · tipo`, com o tamanho primeiro.
 

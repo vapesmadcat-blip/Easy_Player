@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.3.7"
+EAZY_VERSION="3.3.8"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -6318,9 +6318,8 @@ obter_lista_rapida() {
         dt = strftime("%d/%m/%y %H:%M", int(mtime))
 
         chave = (modo == "data") ? int(mtime) : bytes
-        # Cor da coluna de índice/ordenação (cicla para identificar ordem)
-        idx++
-        c_ord = (idx % 3 == 1) ? c_ord1 : (idx % 3 == 2) ? c_ord2 : c_ord3
+        # A cor representa o tipo do arquivo; não alterna pela posição da linha.
+        c_ord = cor
 
         n = split(nome, ext_arr, ".")
         ext = (n > 1) ? tolower(ext_arr[n]) : "—"
@@ -6353,7 +6352,7 @@ obter_lista_rapida() {
         }
 
         printf "%015d\t%s%s %-36s%s\t%s[%s]%s\t%s\n",
-            chave, cor, icon, nome_exib, c_reset, c_ord, info, c_reset, caminho
+            chave, cor, icon, nome_exib, c_reset, cor, info, c_reset, caminho
     }'
 }
 
