@@ -48,30 +48,27 @@ else
   echo "Para escolher manualmente: eazy-gnome ou eazy-kde."
 fi
 
-if [ -t 0 ] && [ -r /dev/tty ]; then
-  printf 'Configurar a chave da IA agora? [s/N] ' > /dev/tty
-  read -r answer < /dev/tty || answer=""
-  case "${answer,,}" in
-    s|sim|y|yes)
-      printf 'Chave OpenRouter: ' > /dev/tty
-      stty -echo < /dev/tty
-      read -r API_KEY < /dev/tty || API_KEY=""
-      stty echo < /dev/tty
-      printf '\n' > /dev/tty
-      if [ -n "$API_KEY" ]; then
-        mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/eazy"
-        printf 'EAZY_AI_API_KEY=%s\n' "$API_KEY" > "${XDG_CONFIG_HOME:-$HOME/.config}/eazy/ai.env"
-        chmod 600 "${XDG_CONFIG_HOME:-$HOME/.config}/eazy/ai.env"
-        unset API_KEY
-        echo "Chave salva com permissão 600."
-      else
-        echo "Nenhuma chave informada; IA não configurada."
-      fi
-      ;;
-    *) echo "IA não configurada. Você pode usar ~/.config/eazy/ai.env depois." ;;
-  esac
+if [ ! -r /dev/tty ]; then
+  echo "Erro: execute o instalador em um terminal para informar a chave da IA." >&2
+  exit 1
 fi
 
+printf 'Chave OpenRouter da IA (obrigatória): ' > /dev/tty
+stty -echo < /dev/tty
+read -r API_KEY < /dev/tty || API_KEY=""
+stty echo < /dev/tty
+printf '\n' > /dev/tty
+
+if [ -z "$API_KEY" ]; then
+  echo "Erro: nenhuma chave foi informada. A instalação foi interrompida." >&2
+  exit 1
+fi
+
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/eazy"
+printf 'EAZY_AI_API_KEY=%s\n' "$API_KEY" > "${XDG_CONFIG_HOME:-$HOME/.config}/eazy/ai.env"
+chmod 600 "${XDG_CONFIG_HOME:-$HOME/.config}/eazy/ai.env"
+unset API_KEY
+echo "Chave da IA salva com permissão 600."
 hash -r 2>/dev/null || true
 echo
 echo "Instalação concluída: eazy $VERSION"
