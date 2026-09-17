@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.3"
+EAZY_VERSION="3.3.1"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -2700,7 +2700,7 @@ elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exibir_help_cli
     exit 0
 elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
-    echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"
+    printf "\033[1;32m%s %s (%s)\033[0m\n" "$EAZY_NAME" "$EAZY_VERSION" "$EAZY_CODENAME"
     exit 0
 elif [ "$1" = "--shell-init" ]; then
     cat <<'SHELLEOF'

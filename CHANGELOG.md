@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.3.1 — GNOME/KDE
+- Saída de `eazy --version` exibida em verde.
+- Manual `eazy(1)` atualizado para 3.3.1, IA e integração de desktops.
+- Metapacote `eazy-gnome` com terminal, gerenciador de arquivos e utilitários GNOME.
+- Metapacote `eazy-kde` com Konsole, Dolphin, Kate e integração KDE.
+- Ambos os metapacotes dependem do `eazy` base e não duplicam seus arquivos.
+
 ## 3.3 — release
 - Man page completa no deb e em `eazy --install` / `--uninstall`.
 - Legenda de cores na linha inferior do header (DIR/VID/AUD/IMG/ZIP/DOC + idx).
