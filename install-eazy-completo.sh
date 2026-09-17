@@ -26,7 +26,7 @@ curl -fL --retry 3 \
   "https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.12/eazy_3.2.12_all.deb"
 
 echo "Instalando..."
-sudo apt-get install -y /tmp/eazy_3.2.12_all.deb
+sudo apt-get install --reinstall -y /tmp/eazy_3.2.12_all.deb
 
 echo
 echo "Instalação concluída."
