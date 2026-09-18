@@ -1,3 +1,10 @@
+eazy (3.6.1) unstable; urgency=medium
+
+  * Clear the terminal before local .deb installation.
+  * Pause after installation so the result remains visible before returning.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 18 Sep 2026 23:01:00 +0000
+
 eazy (3.6.0) unstable; urgency=medium
 
   * Add configurable download destination in F9 configuration.

@@ -1,4 +1,4 @@
-# Guia rápido do eazy 3.6.0
+# Guia rápido do eazy 3.6.1
 
 ## Iniciar
 

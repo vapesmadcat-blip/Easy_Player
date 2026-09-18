@@ -1,4 +1,4 @@
-# eazy 3.6.0 — documentação completa de funcionamento e vantagens
+# eazy 3.6.1 — documentação completa de funcionamento e vantagens
 
 ## 1. O que é o eazy
 

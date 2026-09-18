@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.6.1 — instalação .deb com tela limpa
+- Limpa a tela no início da instalação de um `.deb`.
+- Pausa no final para o resultado ficar visível antes de voltar ao eazy.
+
 ## 3.6.0 — destino de downloads configurável
 - Default de downloads: `~/Downloads`.
 - Configuração disponível em **F9 → Configurar → Pasta Padrão de Downloads**.

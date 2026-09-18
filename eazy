@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.6.0"
+EAZY_VERSION="3.6.1"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -7875,28 +7875,36 @@ menu_conversoes() {
 eazy_instalar_deb() {
     local pacote="$1" nome
     [ -f "$pacote" ] || return 1
+    clear 2>/dev/null || printf '\033[2J\033[H'
+    printf '\n=== Instalação de pacote Debian ===\n\n'
     nome=$(basename -- "$pacote")
     if ! command -v dpkg-deb >/dev/null 2>&1; then
         whiptail --title "Instalar pacote" --msgbox "dpkg-deb não está instalado." 8 60
+        read -r -p "Pressione Enter para voltar ao eazy..."
         return 1
     fi
     local info
     info=$(dpkg-deb -f "$pacote" Package Version Description 2>/dev/null | sed -n '1,6p') || {
         whiptail --title "Pacote inválido" --msgbox "Não foi possível ler:\n$nome" 8 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
         return 1
     }
     if ! whiptail --title "Instalar pacote Debian" --yesno "$info\n\nInstalar este pacote agora?" 16 78; then
+        read -r -p "Pressione Enter para voltar ao eazy..."
         return 0
     fi
     if ! command -v apt-get >/dev/null 2>&1; then
         whiptail --title "Instalação" --msgbox "apt-get não encontrado.\nUse: sudo dpkg -i '$pacote'" 9 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
         return 1
     fi
     if sudo apt-get install -y -- "$pacote"; then
         whiptail --title "Instalação concluída" --msgbox "Pacote instalado:\n$nome" 8 65
         hash -r 2>/dev/null || true
+        read -r -p "Instalação concluída. Pressione Enter para voltar ao eazy..."
     else
         whiptail --title "Falha na instalação" --msgbox "A instalação falhou.\nTente:\n sudo apt-get -f install" 10 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
         return 1
     fi
 }
