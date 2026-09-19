@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.9.0"
+EAZY_VERSION="3.9.1"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -1009,6 +1009,7 @@ Opções:
   --install          Instala dependências, comando global e scripts auxiliares
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+  --torrent [OPÇÕES] Executa o CLI torrent integrado (magnet/.torrent)
   -m, --maintenance  Menu de manutenção (dados + sistema + completa)
   -a, --advanced-maintenance
                      Manutenção avançada (seleção fina de arquivos do eazy)
@@ -1024,7 +1025,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-P             Alternar Filas 1 → 2 → 3 → listas → duplicados → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
-  Ctrl-B             Downloads (destino padrão: $HOME/Downloads)
+  Ctrl-B             Downloads (inclui magnets/.torrent e destino padrão: $HOME/Downloads)
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
@@ -2790,6 +2791,12 @@ elif [ "$1" = "--config" ]; then
 elif [ "$1" = "--ai" ]; then
     eazy_ia_chat
     exit $?
+elif [ "$1" = "--torrent" ]; then
+    shift
+    torrent_cmd="${EAZY_INSTALL_DIR}/torrent"
+    [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v torrent 2>/dev/null || true)"
+    [ -n "$torrent_cmd" ] || { echo "CLI torrent não encontrado. Reinstale eazy." >&2; exit 1; }
+    exec "$torrent_cmd" "$@"
 elif [ "$1" = "--update-ytdlp" ]; then
     # Atualiza yt-dlp SEM pip (baixa binário oficial do GitHub)
     DEST_YT="$HOME/.local/bin"
@@ -4726,9 +4733,16 @@ adicionar_download() {
 
     local gerenciador extra=""
     local is_video=0
+    local is_torrent=0
+    if [[ "$link" == magnet:* ]] || [[ "$link" =~ \.torrent$ ]] || [ -f "$link" ] && [[ "$link" == *.torrent ]]; then
+        is_torrent=1
+    fi
     eh_url_video_online "$link" && is_video=1
 
-    if [ "$is_video" -eq 1 ]; then
+    if [ "$is_torrent" -eq 1 ]; then
+        gerenciador="torrent"
+        extra=""
+    elif [ "$is_video" -eq 1 ]; then
         # YouTube etc. SÓ funcionam com yt-dlp (aria/wget/axel baixam HTML e falham)
         if ! encontrar_ytdlp &>/dev/null; then
             whiptail --title "yt-dlp necessário" --msgbox \
@@ -9463,6 +9477,18 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
         status_dl=1
         case "$engine" in
+            torrent)
+                torrent_cmd="$EAZY_INSTALL_DIR/torrent"
+                [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v torrent 2>/dev/null || true)"
+                if [ -z "$torrent_cmd" ]; then
+                    echo -e "\033[1;31mCLI torrent não encontrado. Reinstale eazy.\033[0m"
+                    status_dl=1
+                else
+                    torrent_args=(--dir "$download_dir")
+                    [ "$tor_item" = 1 ] && torrent_args+=(--tor)
+                    "$torrent_cmd" "${torrent_args[@]}" "$link_alvo" && status_dl=0
+                fi
+                ;;
             ytdlp)
                 YTDLP_BIN=$(encontrar_ytdlp 2>/dev/null || true)
                 if [ -z "$YTDLP_BIN" ]; then

@@ -1,3 +1,9 @@
+eazy (3.9.1) unstable; urgency=medium
+
+  * Integrate torrent CLI with eazy --torrent and download queue detection.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 01:42:00 +0000
+
 eazy (3.9.0) unstable; urgency=medium
 
   * Add torrent CLI wrapper around aria2c with magnet, seed and optional Tor support.

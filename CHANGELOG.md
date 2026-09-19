@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.9.1 — torrent integrado ao eazy
+- `eazy --torrent` chama o CLI torrent integrado.
+- Magnets e arquivos `.torrent` adicionados pelo Ctrl+B usam o módulo torrent automaticamente.
+
 ## 3.9.0 — CLI torrent
 - Incluído o comando `torrent` para arquivos `.torrent` e links magnet.
 - Suporte a destino, ratio, peers, `--no-seed`, `--show` e `--tor`.
