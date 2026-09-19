@@ -2947,6 +2947,17 @@ normalizar_snapshot_busca() {
     done < "$arquivo"
     mv -f "$tmp" "$arquivo"
 }
+caminho_absoluto_busca() {
+    local p="$1" base="${BUSCA_ORIGEM:-$(pwd -P)}"
+    [ -n "$p" ] || return 1
+    if [[ "$p" == /* ]]; then
+        printf '%s\n' "$p"
+    elif [ -d "$base" ]; then
+        (cd -- "$base" && caminho_absoluto "$p")
+    else
+        caminho_absoluto "$p"
+    fi
+}
 carregar_pesquisa_salva() {
     [ -d "$SAVED_SEARCHES_DIR" ] || return 1
     local opcoes=() arq escolha nome
@@ -2962,6 +2973,7 @@ carregar_pesquisa_salva() {
     # Arquivos são gerados pelo próprio eazy; carregam as variáveis e o snapshot.
     # shellcheck disable=SC1090
     source "$arq" 2>/dev/null || return 1
+    BUSCA_ORIGEM="${BUSCA_ORIGEM:-$(pwd -P)}"
     BUSCA_SNAPSHOT_FILE="${BUSCA_RESULTADO_FILE:-${arq%.search}.results.tsv}"
     # Migra snapshots antigos que ainda guardam o caminho relativo.
     normalizar_snapshot_busca "$BUSCA_SNAPSHOT_FILE" "${BUSCA_ORIGEM:-$(pwd -P)}"
@@ -6468,6 +6480,12 @@ obter_lista_rapida() {
 caminho_absoluto() {
     local p="$1"
     [ -z "$p" ] && return
+    # Resultados de uma pesquisa salva podem ser relativos ao diretório
+    # original da pesquisa, não ao diretório atual do navegador.
+    if [[ "$p" != /* ]] && [ "${MODO_BUSCA:-0}" -eq 1 ] && [ -n "${BUSCA_ORIGEM:-}" ] && [ -d "$BUSCA_ORIGEM" ]; then
+        (cd -- "$BUSCA_ORIGEM" && MODO_BUSCA=0 caminho_absoluto "$p")
+        return
+    fi
     # Já é absoluto?
     if [[ "$p" == /* ]]; then
         printf '%s\n' "$p"
