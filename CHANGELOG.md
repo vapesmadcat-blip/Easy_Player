@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.9.0 — CLI torrent
+- Incluído o comando `torrent` para arquivos `.torrent` e links magnet.
+- Suporte a destino, ratio, peers, `--no-seed`, `--show` e `--tor`.
+
 ## 3.8.4 — correção definitiva do checkbox Tor
 - Checkbox desligado permanece sem Tor; não herda configuração global.
 

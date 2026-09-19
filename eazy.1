@@ -1,4 +1,4 @@
-.TH EAZY 1 "2026-09-17" "eazy 3.8.4" "User Commands"
+.TH EAZY 1 "2026-09-17" "eazy 3.9.0" "User Commands"
 .SH NAME
 eazy \- navegador e reprodutor multimídia no terminal (fzf + mpv)
 .SH SYNOPSIS
@@ -47,7 +47,7 @@ Mostra a ajuda resumida no terminal e sai.
 .TP
 .BR \-V ", " \-\-version
 Mostra a versão (ex.:
-.BR "eazy 3.8.4 (IA)" )
+.BR "eazy 3.9.0 (IA)" )
 e sai.
 .TP
 .B \-\-config
@@ -282,6 +282,22 @@ nas variáveis
 .B DOWNLOAD_WGET_ARGS
 e
 .B DOWNLOAD_YTDLP_ARGS .
+
+.SH TORRENT CLI
+O pacote inclui o comando
+.B torrent
+para downloads BitTorrent via aria2c. Ele aceita arquivos .torrent e links magnet.
+.nf
+torrent arquivo.torrent
+torrent --tor "magnet:?xt=urn:btih:..."
+torrent -d /mnt/torrents --no-seed arquivo.torrent
+.fi
+O destino padrão é
+.B ~/Downloads/Torrents .
+Use
+.B --tor
+para prefixar aria2c com torsocks; isso só é ativado quando a opção é informada.
+
 .SH TOR SETUP
 A instalação pelo comando
 .B eazy --install
@@ -434,19 +450,19 @@ Instalar / atualizar comando e deps:
 .TP
 Instalar a partir de .deb (sem clonar):
 .nf
-curl -fsSL -o eazy_3.8.4_all.deb \\
-  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.8.4/eazy_3.8.4_all.deb
-sudo apt install ./eazy_3.8.4_all.deb
+curl -fsSL -o eazy_3.9.0_all.deb \\
+  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.9.0/eazy_3.9.0_all.deb
+sudo apt install ./eazy_3.9.0_all.deb
 .fi
 .TP
 Instalar integração GNOME:
 .nf
-sudo apt install ./eazy-gnome_3.8.4_all.deb
+sudo apt install ./eazy-gnome_3.9.0_all.deb
 .fi
 .TP
 Instalar integração KDE Plasma:
 .nf
-sudo apt install ./eazy-kde_3.8.4_all.deb
+sudo apt install ./eazy-kde_3.9.0_all.deb
 .fi
 .SH DISPLAY FORMAT
 A lista principal e os resultados de busca exibem as informações no formato

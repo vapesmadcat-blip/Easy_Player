@@ -519,3 +519,8 @@ Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel,
 O instalador `eazy --install` inclui `tor` e `torsocks` quando o sistema oferece esses pacotes. Manualmente, use `sudo apt update && sudo apt install tor torsocks -y` (Debian/Ubuntu/Mint), `sudo dnf install tor torsocks -y` (Fedora/RHEL) ou `sudo pacman -S tor torsocks` (Arch). Inicie com `sudo systemctl start tor` e, se desejar, `sudo systemctl enable tor`.
 
 Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `127.0.0.1:9050`. Para testar: `torsocks curl https://icanhazip.com`. Para aria2c, Axel e wget, o eazy usa `torsocks` automaticamente quando o checkbox está marcado. Teste separadamente com `torsocks curl https://icanhazip.com`.
+
+
+## CLI torrent
+
+A versão 3.9.0 inclui o comando `torrent`, baseado em aria2c, para arquivos `.torrent` e links magnet. O destino padrão é `~/Downloads/Torrents`. Exemplos: `torrent arquivo.torrent`, `torrent --tor "magnet:?xt=urn:btih:..."` e `torrent -d /mnt/torrents --no-seed arquivo.torrent`. A opção `--tor` usa `torsocks` somente quando informada.

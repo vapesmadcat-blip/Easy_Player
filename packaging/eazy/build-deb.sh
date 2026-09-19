@@ -20,7 +20,7 @@ for required in dpkg-deb install gzip; do
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/torrent" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -40,6 +40,7 @@ mkdir -p \
     "$PKGROOT/usr/share/doc/$PACKAGE"
 
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
+install -m 0755 "$SRC_DIR/torrent" "$PKGROOT/usr/bin/torrent"
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/lib/eazy/eazy"
 ln -s /usr/bin/eazy "$PKGROOT/usr/local/bin/eazy"
 ln -s /usr/bin/eazy "$PKGROOT/home/jim/.local/bin/eazy"

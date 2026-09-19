@@ -1,3 +1,9 @@
+eazy (3.9.0) unstable; urgency=medium
+
+  * Add torrent CLI wrapper around aria2c with magnet, seed and optional Tor support.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 01:40:00 +0000
+
 eazy (3.8.4) unstable; urgency=medium
 
   * Fix Tor checkbox precedence so disabled items never inherit global Tor.
