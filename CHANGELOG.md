@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.9.4 — correção do F9
+- Corrigida a lista do menu F9, incluindo a continuação da opção de diretório e removendo a duplicidade de Downloads.
+
 ## 3.9.3 — eazy-tor como downloader separado
 - O pacote instala o downloader em `/usr/bin/eazy-tor`.
 

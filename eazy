@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.9.3"
+EAZY_VERSION="3.9.4"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -840,8 +840,7 @@ configurar_defaults() {
         "overview" "Overview do sistema (completo)" \
         "sound" "Teste de som" \
         "shell" "Shell do sistema (neste diretório)" \
-        "exitdir" "Ao sair: dir do navegador ou o anterior"
-        "download" "Downloads — downloader/Tor/parâmetros"
+        "exitdir" "Ao sair: dir do navegador ou o anterior" \
         "download" "Downloads — downloader/Tor/parâmetros" \
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
