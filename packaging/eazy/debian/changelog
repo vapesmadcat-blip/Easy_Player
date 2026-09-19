@@ -1,3 +1,10 @@
+eazy (3.10.0) unstable; urgency=medium
+
+  * Add torrent batch lists, persistent logs and progress summaries.
+  * Add eazy --torrent-list to export queued torrent items.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 02:03:00 +0000
+
 eazy (3.9.4) unstable; urgency=medium
 
   * Fix F9 menu continuation and duplicate Downloads entry.

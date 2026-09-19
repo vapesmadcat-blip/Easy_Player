@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.9.4"
+EAZY_VERSION="3.10.0"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -1009,6 +1009,7 @@ Opções:
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
   --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
+  --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
   -m, --maintenance  Menu de manutenção (dados + sistema + completa)
   -a, --advanced-maintenance
                      Manutenção avançada (seleção fina de arquivos do eazy)
@@ -2790,6 +2791,18 @@ elif [ "$1" = "--config" ]; then
 elif [ "$1" = "--ai" ]; then
     eazy_ia_chat
     exit $?
+elif [ "$1" = "--torrent-list" ]; then
+    list_file="${2:-$CONFIG_DIR/torrents.list}"
+    mkdir -p "$(dirname -- "$list_file")"
+    : > "$list_file"
+    if [ -f "$DOWNLOAD_QUEUE" ]; then
+        awk -F'|' '$1 == "torrent" && $2 != "" {print $2}' "$DOWNLOAD_QUEUE" | awk '!seen[$0]++' > "$list_file"
+    fi
+    [ -s "$list_file" ] || printf '# Um magnet ou arquivo .torrent por linha
+' > "$list_file"
+    echo "Lista criada: $list_file"
+    echo "Edite e execute: eazy-tor --list "$list_file""
+    exit 0
 elif [ "$1" = "--torrent" ]; then
     shift
     torrent_cmd="${EAZY_INSTALL_DIR}/eazy-tor"

@@ -113,10 +113,15 @@ Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `
 
 ## CLI torrent
 
-A versão 3.9.4 inclui o comando `eazy-tor`, baseado em aria2c, para arquivos `.torrent` e links magnet. O destino padrão é `~/Downloads/Torrents`. Exemplos: `torrent arquivo.torrent`, `torrent --tor "magnet:?xt=urn:btih:..."` e `torrent -d /mnt/torrents --no-seed arquivo.torrent`. A opção `--tor` usa `torsocks` somente quando informada.
+A versão 3.10.0 inclui o comando `eazy-tor`, baseado em aria2c, para arquivos `.torrent` e links magnet. O destino padrão é `~/Downloads/Torrents`. Exemplos: `torrent arquivo.torrent`, `torrent --tor "magnet:?xt=urn:btih:..."` e `torrent -d /mnt/torrents --no-seed arquivo.torrent`. A opção `--tor` usa `torsocks` somente quando informada.
 
 
 O torrent também faz parte do eazy: use `eazy --torrent --help` ou `eazy --torrent arquivo.torrent`. Ao adicionar um magnet ou `.torrent` pelo Ctrl+B, o eazy identifica o item e executa o módulo torrent na fila.
 
 
 Arquitetura: o **eazy gerencia links e filas**; o downloader torrent fica separado no comando **`eazy-tor`**. O eazy chama `eazy-tor` somente quando a fila contém um magnet ou arquivo `.torrent`.
+
+
+## Lotes de torrents e monitoramento
+
+Use `eazy --torrent-list` para criar `~/.config/eazy/torrents.list` a partir dos torrents da fila. Edite o arquivo deixando um magnet ou `.torrent` por linha. Execute `eazy-tor --list ~/.config/eazy/torrents.list --log ~/.config/eazy/torrents.log`. O processamento é sequencial, continua após falhas e exibe resumo; use `--stop-on-error` quando necessário. O log persistente permite acompanhar o lote com `tail -f ~/.config/eazy/torrents.log`.

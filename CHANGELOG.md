@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.10.0 — lotes e monitoramento torrent
+- `eazy --torrent-list` cria lista a partir da fila.
+- `eazy-tor --list` processa lotes com resumo, log e opção de parar em erro.
+
 ## 3.9.4 — correção do F9
 - Corrigida a lista do menu F9, incluindo a continuação da opção de diretório e removendo a duplicidade de Downloads.
 

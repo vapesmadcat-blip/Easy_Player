@@ -1,4 +1,4 @@
-.TH EAZY 1 "2026-09-17" "eazy 3.9.4" "User Commands"
+.TH EAZY 1 "2026-09-17" "eazy 3.10.0" "User Commands"
 .SH NAME
 eazy \- navegador e reprodutor multimídia no terminal (fzf + mpv)
 .SH SYNOPSIS
@@ -47,7 +47,7 @@ Mostra a ajuda resumida no terminal e sai.
 .TP
 .BR \-V ", " \-\-version
 Mostra a versão (ex.:
-.BR "eazy 3.9.4 (IA)" )
+.BR "eazy 3.10.0 (IA)" )
 e sai.
 .TP
 .B \-\-config
@@ -451,19 +451,19 @@ Instalar / atualizar comando e deps:
 .TP
 Instalar a partir de .deb (sem clonar):
 .nf
-curl -fsSL -o eazy_3.9.4_all.deb \\
-  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.9.4/eazy_3.9.4_all.deb
-sudo apt install ./eazy_3.9.4_all.deb
+curl -fsSL -o eazy_3.10.0_all.deb \\
+  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.10.0/eazy_3.10.0_all.deb
+sudo apt install ./eazy_3.10.0_all.deb
 .fi
 .TP
 Instalar integração GNOME:
 .nf
-sudo apt install ./eazy-gnome_3.9.4_all.deb
+sudo apt install ./eazy-gnome_3.10.0_all.deb
 .fi
 .TP
 Instalar integração KDE Plasma:
 .nf
-sudo apt install ./eazy-kde_3.9.4_all.deb
+sudo apt install ./eazy-kde_3.10.0_all.deb
 .fi
 .SH DISPLAY FORMAT
 A lista principal e os resultados de busca exibem as informações no formato
@@ -500,3 +500,16 @@ Documentação do repositório:
 .UE
 .SH AUTHOR
 eazy contributors. Uso livre. Sem garantias.
+
+.SH BATCH TORRENTS
+Use
+.B eazy --torrent-list
+para criar
+.B ~/.config/eazy/torrents.list
+com os magnets e arquivos .torrent já presentes na fila. Edite o arquivo, uma entrada por linha, e monitore o lote com:
+.nf
+eazy-tor --list ~/.config/eazy/torrents.list --log ~/.config/eazy/torrents.log
+.fi
+O lote é sequencial por padrão, continua após falhas e apresenta resumo. Use
+.B --stop-on-error
+para parar no primeiro erro.
