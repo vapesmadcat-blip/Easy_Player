@@ -2914,6 +2914,7 @@ salvar_pesquisa_atual() {
         printf 'BUSCA_TAM_LABEL=%q\n' "${BUSCA_TAM_LABEL:-}"
         printf 'BUSCA_CONTEUDO=%q\n' "${BUSCA_CONTEUDO:-}"
         printf 'FZF_QUERY=%q\n' "${FZF_QUERY:-}"
+        printf 'BUSCA_ORIGEM=%q\n' "$(pwd -P)"
         printf 'BUSCA_RESULTADO_FILE=%q\n' "${arquivo%.search}.results.tsv"
     } > "$arquivo"
     # Congela o resultado que já foi calculado nesta sessão; abrir depois não refaz a busca.
@@ -2925,7 +2926,26 @@ salvar_pesquisa_atual() {
     else
         : > "${arquivo%.search}.results.tsv"
     fi
+    # O cache legado contém caminhos relativos (por exemplo, vids/y.mpg).
+    # O snapshot precisa continuar abrindo mesmo depois de mudar de pasta.
+    normalizar_snapshot_busca "${arquivo%.search}.results.tsv" "$(pwd -P)"
     whiptail --title "Pesquisa salva" --msgbox "Pesquisa salva como:\n$nome\n\nResultado congelado para reabrir sem refazer a busca." 9 65
+}
+normalizar_snapshot_busca() {
+    local arquivo="$1" base="${2:-$(pwd -P)}" tmp abs
+    [ -f "$arquivo" ] || return 0
+    tmp="${arquivo}.tmp.$$"
+    : > "$tmp" || return 1
+    while IFS=$'\t' read -r bytes mtime tipo nome caminho; do
+        [ -z "$caminho" ] && continue
+        if [[ "$caminho" == /* ]]; then
+            abs="$caminho"
+        else
+            abs=$(cd -- "$base" 2>/dev/null && caminho_absoluto "$caminho") || abs="$caminho"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\n' "$bytes" "$mtime" "$tipo" "$nome" "$abs" >> "$tmp"
+    done < "$arquivo"
+    mv -f "$tmp" "$arquivo"
 }
 carregar_pesquisa_salva() {
     [ -d "$SAVED_SEARCHES_DIR" ] || return 1
@@ -2943,6 +2963,8 @@ carregar_pesquisa_salva() {
     # shellcheck disable=SC1090
     source "$arq" 2>/dev/null || return 1
     BUSCA_SNAPSHOT_FILE="${BUSCA_RESULTADO_FILE:-${arq%.search}.results.tsv}"
+    # Migra snapshots antigos que ainda guardam o caminho relativo.
+    normalizar_snapshot_busca "$BUSCA_SNAPSHOT_FILE" "${BUSCA_ORIGEM:-$(pwd -P)}"
     BUSCA_REMAKE=0
     if whiptail --title "Pesquisa salva" --yesno "Abrir o resultado salvo sem refazer a pesquisa?\n\nSim = usar o resultado congelado\nNão = refazer agora (remake)" 12 70; then
         :
@@ -6215,7 +6237,7 @@ obter_lista_rapida() {
                 pct=$((idx * 100 / total_seg))
                 eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
                 seg_tmp="/tmp/eazy_busca_seg_$$"
-                find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+                find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                     -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
                 n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
                 n_seg=${n_seg:-0}
@@ -6230,7 +6252,7 @@ obter_lista_rapida() {
             pct=$((idx * 100 / total_seg))
             eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..."
             seg_tmp="/tmp/eazy_busca_seg_$$"
-            find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+            find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                 ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
                 -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
             n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
