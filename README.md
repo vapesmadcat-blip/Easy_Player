@@ -108,4 +108,4 @@ Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel,
 
 O instalador `eazy --install` inclui `tor` e `torsocks` quando o sistema oferece esses pacotes. Manualmente, use `sudo apt update && sudo apt install tor torsocks -y` (Debian/Ubuntu/Mint), `sudo dnf install tor torsocks -y` (Fedora/RHEL) ou `sudo pacman -S tor torsocks` (Arch). Inicie com `sudo systemctl start tor` e, se desejar, `sudo systemctl enable tor`.
 
-Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `127.0.0.1:9050`. Para testar: `torsocks curl https://icanhazip.com`. Para aria2c/Axel, o eazy usa `torsocks` automaticamente quando o checkbox está marcado. Teste separadamente com `torsocks curl https://icanhazip.com`.
+Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `127.0.0.1:9050`. Para testar: `torsocks curl https://icanhazip.com`. Para aria2c, Axel e wget, o eazy usa `torsocks` automaticamente quando o checkbox está marcado. Teste separadamente com `torsocks curl https://icanhazip.com`.

@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.8.2 — Tor nos três downloaders
+- O checkbox Tor usa `torsocks` com aria2c, Axel e wget.
+
 ## 3.8.1 — Tor para aria2c e Axel
 - O checkbox Tor agora usa `torsocks` especificamente com aria2c e Axel.
 - A documentação deixa wget fora do fluxo principal de Tor.

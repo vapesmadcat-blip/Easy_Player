@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-VERSION="3.8.1"
+VERSION="3.8.2"
 BASE_URL="https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v${VERSION}"
 WORK_DIR="${TMPDIR:-/tmp}/eazy-install-${VERSION}-$$"
 mkdir -p "$WORK_DIR"

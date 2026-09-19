@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.8.1"
+EAZY_VERSION="3.8.2"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -9429,7 +9429,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         if [ "$tor_item" = 1 ]; then
             if command -v torsocks >/dev/null 2>&1; then
                 TOR_PREFIX=(torsocks)
-                echo "   Rede: Tor via torsocks (127.0.0.1:9050)"
+                echo "   Rede: Tor via torsocks (aria2c/Axel/wget · 127.0.0.1:9050)"
             else
                 echo "   Tor marcado, mas torsocks não está instalado."
             fi
@@ -9563,7 +9563,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 else
                     if ! command -v wget &>/dev/null; then
                         echo -e "\033[1;31mwget não instalado.  sudo apt install wget\033[0m"
-                    elif wget "${WGET_EXTRA[@]}" "${WGET_TOR_ARGS[@]}" -O "$download_dir/$nome_esperado" "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" wget "${WGET_EXTRA[@]}" "${WGET_TOR_ARGS[@]}" -O "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 fi
