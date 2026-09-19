@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.8.4 — correção definitiva do checkbox Tor
+- Checkbox desligado permanece sem Tor; não herda configuração global.
+
 ## 3.8.3 — checkbox Tor com prioridade
 - Tor só é usado quando o checkbox do item está ligado.
 - O estado global não sobrescreve um checkbox desligado.

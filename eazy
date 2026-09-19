@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.8.2"
+EAZY_VERSION="3.8.4"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -9411,7 +9411,12 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         engine=$(echo "$linha_fila" | cut -d'|' -f1)
         pass=$(echo "$linha_fila" | cut -d'|' -f3)
         tor_item=$(echo "$linha_fila" | cut -d'|' -f4)
-        [ "$tor_item" != "1" ] && tor_item="${DOWNLOAD_TOR:-0}"
+        # O checkbox do item tem prioridade: 0 desligado não herda Tor global.
+        # Apenas filas antigas, sem quarto campo, usam o fallback global.
+        if [ -z "$tor_item" ]; then
+            tor_item="${DOWNLOAD_TOR:-0}"
+        fi
+        [ "$tor_item" = "1" ] || tor_item="0"
 
         if [ -z "$pass" ] && [ -f "$DOWNLOAD_PASSWORDS" ]; then
             pass=$(grep -F "$link_alvo|" "$DOWNLOAD_PASSWORDS" | tail -n1 | cut -d'|' -f2-)
