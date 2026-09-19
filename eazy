@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.8.0"
+EAZY_VERSION="3.8.1"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -9425,9 +9425,15 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         read -r -a AXEL_EXTRA <<< "${DOWNLOAD_AXEL_ARGS:---insecure -n 4}"
         read -r -a WGET_EXTRA <<< "${DOWNLOAD_WGET_ARGS:---no-check-certificate}"
         read -r -a YTDLP_EXTRA <<< "${DOWNLOAD_YTDLP_ARGS:-}"
-        WGET_TOR_ARGS=()
-        [ "$tor_item" = 1 ] && WGET_TOR_ARGS=(-e use_proxy=on -e "all_proxy=$tor_proxy")
-        [ "$tor_item" = 1 ] && echo "   Rede: Tor ($tor_proxy)"
+        TOR_PREFIX=()
+        if [ "$tor_item" = 1 ]; then
+            if command -v torsocks >/dev/null 2>&1; then
+                TOR_PREFIX=(torsocks)
+                echo "   Rede: Tor via torsocks (127.0.0.1:9050)"
+            else
+                echo "   Tor marcado, mas torsocks não está instalado."
+            fi
+        fi
         mkdir -p -- "$download_dir" || { echo "Não foi possível criar o destino: $download_dir"; read -p "Pressione Enter para continuar..."; continue; }
 
         # Downloads: tamanho remoto costuma ser desconhecido — exige folga mínima no disco
@@ -9545,13 +9551,13 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 elif [ "$engine" = "aria" ]; then
                     if ! command -v aria2c &>/dev/null; then
                         echo -e "\033[1;31maria2c não instalado.  sudo apt install aria2\033[0m"
-                    elif aria2c "${ARIA_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--all-proxy=$tor_proxy")} --allow-overwrite=true "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" aria2c "${ARIA_EXTRA[@]}" --allow-overwrite=true "$link_alvo"; then
                         status_dl=0
                     fi
                 elif [ "$engine" = "axel" ]; then
                     if ! command -v axel &>/dev/null; then
                         echo -e "\033[1;31maxel não instalado.  sudo apt install axel\033[0m"
-                    elif axel "${AXEL_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -o "$download_dir/$nome_esperado" "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" axel "${AXEL_EXTRA[@]}" -o "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 else

@@ -1,3 +1,10 @@
+eazy (3.8.1) unstable; urgency=medium
+
+  * Use torsocks specifically for aria2c and Axel when Tor is selected.
+  * Update Tor documentation to focus on aria2c and Axel.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 00:47:00 +0000
+
 eazy (3.8.0) unstable; urgency=medium
 
   * Include tor and torsocks in the optional dependency installer.

@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.1 — Tor para aria2c e Axel
+- O checkbox Tor agora usa `torsocks` especificamente com aria2c e Axel.
+- A documentação deixa wget fora do fluxo principal de Tor.
+
 ## 3.8.0 — instalação e documentação Tor
 - `eazy --install` inclui `tor` e `torsocks` nas distribuições suportadas.
 - Documentados instalação, inicialização, teste de IP e uso do checkbox Tor.
