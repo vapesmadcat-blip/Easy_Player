@@ -10,7 +10,7 @@ TARGETS=()
 print_help() { cat <<EOF
 ${CYAN}eazy-tor${NC} — baixador CLI com aria2c
 
-Uso: torrent [opções] <magnet|arquivo.torrent>
+Uso: eazy-tor [opções] <magnet|arquivo.torrent>
 
   -d, --dir DIR       Diretório de destino (padrão: ~/Downloads/Torrents)
   -r, --ratio RATIO   Ratio de seed (padrão: 1.0)
@@ -21,9 +21,9 @@ Uso: torrent [opções] <magnet|arquivo.torrent>
   -h, --help          Ajuda
 
 Exemplos:
-  torrent arquivo.torrent
-  torrent --tor 'magnet:?xt=urn:btih:...'
-  torrent -d /mnt/torrents --no-seed arquivo.torrent
+  eazy-tor arquivo.torrent
+  eazy-tor --tor 'magnet:?xt=urn:btih:...'
+  eazy-tor -d /mnt/torrents --no-seed arquivo.torrent
 EOF
 }
 

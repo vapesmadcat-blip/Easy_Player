@@ -113,7 +113,7 @@ Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `
 
 ## CLI torrent
 
-A versão 3.9.2 inclui o comando `eazy-tor`, baseado em aria2c, para arquivos `.torrent` e links magnet. O destino padrão é `~/Downloads/Torrents`. Exemplos: `torrent arquivo.torrent`, `torrent --tor "magnet:?xt=urn:btih:..."` e `torrent -d /mnt/torrents --no-seed arquivo.torrent`. A opção `--tor` usa `torsocks` somente quando informada.
+A versão 3.9.3 inclui o comando `eazy-tor`, baseado em aria2c, para arquivos `.torrent` e links magnet. O destino padrão é `~/Downloads/Torrents`. Exemplos: `torrent arquivo.torrent`, `torrent --tor "magnet:?xt=urn:btih:..."` e `torrent -d /mnt/torrents --no-seed arquivo.torrent`. A opção `--tor` usa `torsocks` somente quando informada.
 
 
 O torrent também faz parte do eazy: use `eazy --torrent --help` ou `eazy --torrent arquivo.torrent`. Ao adicionar um magnet ou `.torrent` pelo Ctrl+B, o eazy identifica o item e executa o módulo torrent na fila.

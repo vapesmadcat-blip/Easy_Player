@@ -40,7 +40,7 @@ mkdir -p \
     "$PKGROOT/usr/share/doc/$PACKAGE"
 
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
-install -m 0755 "$SRC_DIR/eazy-tor" "$PKGROOT/usr/bin/torrent"
+install -m 0755 "$SRC_DIR/eazy-tor" "$PKGROOT/usr/bin/eazy-tor"
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/lib/eazy/eazy"
 ln -s /usr/bin/eazy "$PKGROOT/usr/local/bin/eazy"
 ln -s /usr/bin/eazy "$PKGROOT/home/jim/.local/bin/eazy"

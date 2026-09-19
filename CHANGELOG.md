@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.9.3 — eazy-tor como downloader separado
+- O pacote instala o downloader em `/usr/bin/eazy-tor`.
+
 ## 3.9.2 — eazy-tor separado
 - eazy passa a gerenciar somente links e filas.
 - O download de torrents fica no executável separado `eazy-tor`.
