@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.0 — instalação e documentação Tor
+- `eazy --install` inclui `tor` e `torsocks` nas distribuições suportadas.
+- Documentados instalação, inicialização, teste de IP e uso do checkbox Tor.
+
 ## 3.7.0 — downloader automático, Tor e parâmetros
 - Links diretos usam automaticamente o downloader configurado; default: aria2c.
 - Vídeos continuam usando yt-dlp automaticamente.

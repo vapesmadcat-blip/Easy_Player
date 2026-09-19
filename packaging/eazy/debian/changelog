@@ -1,3 +1,17 @@
+eazy (3.8.0) unstable; urgency=medium
+
+  * Include tor and torsocks in the optional dependency installer.
+  * Document Tor setup, service startup, testing and per-download checkbox.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 00:45:00 +0000
+
+eazy (3.7.0) unstable; urgency=medium
+
+  * Add configurable downloader selection, optional Tor SOCKS5 proxy and per-tool arguments.
+  * Keep Axel --insecure as the default Axel parameter.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 00:37:00 +0000
+
 eazy (3.6.1) unstable; urgency=medium
 
   * Clear the terminal before local .deb installation.

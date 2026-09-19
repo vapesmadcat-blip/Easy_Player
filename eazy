@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.7.0"
+EAZY_VERSION="3.8.0"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -1037,7 +1037,7 @@ Atalhos principais (dentro do eazy):
   Shift+Del         Apagar seleção (pergunta: local ou global)
   Alt-D             Apagar do disco
   F9                 Configuração, overview e teste de som
-  F10                Ajuda expandida (atalhos, instalação .deb e configuração)
+  F10                Ajuda expandida (atalhos, .deb, downloads, Tor e configuração)
   F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
   Q · X · Ctrl-Q     Sair (salva sessão)
 
@@ -2580,7 +2580,7 @@ if [ "$1" = "--install" ]; then
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapt\033[0m"
         # Core + player + utilitários de mídia
-        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
+        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 tor torsocks unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
         # Diagnóstico / sistema
         instalar_pkgs apt inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils
         # PipeWire (comum em GNOME e KDE modernos)
@@ -2598,28 +2598,28 @@ if [ "$1" = "--install" ]; then
         echo -e "\033[0;90mRAR oficial é opcional (repo non-free); leitura de .rar continua via p7zip.\033[0m"
     elif command -v pacman &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mpacman\033[0m"
-        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 unzip p7zip yt-dlp ffmpeg imagemagick poppler chafa xdg-utils
+        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 tor torsocks unzip p7zip yt-dlp ffmpeg imagemagick poppler chafa xdg-utils
         case "$DESKTOP_ENV" in
             kde) instalar_pkgs pacman konsole dolphin kate 2>/dev/null || true ;;
             gnome) instalar_pkgs pacman gnome-terminal nautilus gedit 2>/dev/null || true ;;
         esac
     elif command -v dnf &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mdnf\033[0m"
-        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip p7zip-plugins yt-dlp ffmpeg ImageMagick poppler-utils chafa xdg-utils
+        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip p7zip-plugins yt-dlp ffmpeg ImageMagick poppler-utils chafa xdg-utils
         case "$DESKTOP_ENV" in
             kde) instalar_pkgs dnf konsole dolphin kate 2>/dev/null || true ;;
             gnome) instalar_pkgs dnf gnome-terminal nautilus gedit 2>/dev/null || true ;;
         esac
     elif command -v zypper &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mzypper\033[0m"
-        instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip yt-dlp
         case "$DESKTOP_ENV" in
             kde) instalar_pkgs zypper konsole dolphin kate 2>/dev/null || true ;;
             gnome) instalar_pkgs zypper gnome-terminal nautilus gedit 2>/dev/null || true ;;
         esac
     elif command -v apk &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapk\033[0m (Alpine)"
-        instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip yt-dlp
     else
         echo -e "\033[1;31mNenhum gerenciador conhecido (apt/pacman/dnf/zypper/apk).\033[0m" >&2
         echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget xdg-utils" >&2

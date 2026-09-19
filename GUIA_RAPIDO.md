@@ -1,4 +1,4 @@
-# Guia rápido do eazy 3.7.0
+# Guia rápido do eazy 3.8.0
 
 ## Iniciar
 
@@ -84,3 +84,10 @@ Por padrão, downloads feitos pelo Ctrl-B são salvos em `~/Downloads`. Altere e
 ## Downloaders, Tor e parâmetros
 
 Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel, wget ou yt-dlp, ative opcionalmente Tor (`socks5://127.0.0.1:9050`) e informe parâmetros extras. O default para links diretos continua sendo **aria2c**; o Axel usa **`--insecure -n 4`** por padrão. A configuração fica em `~/.config/eazy/config`.
+
+
+## Tor e torsocks
+
+O instalador `eazy --install` inclui `tor` e `torsocks` quando o sistema oferece esses pacotes. Manualmente, use `sudo apt update && sudo apt install tor torsocks -y` (Debian/Ubuntu/Mint), `sudo dnf install tor torsocks -y` (Fedora/RHEL) ou `sudo pacman -S tor torsocks` (Arch). Inicie com `sudo systemctl start tor` e, se desejar, `sudo systemctl enable tor`.
+
+Ao adicionar um link, marque **Usar Tor neste download**. O eazy usa SOCKS5 em `127.0.0.1:9050`. Para testar: `torsocks curl https://icanhazip.com`. Alternativas são `torsocks wget ...`, `wget -e use_proxy=yes -e socks_proxy=127.0.0.1:9050 ...` e `curl --socks5-hostname 127.0.0.1:9050 -O URL`.
