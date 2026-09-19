@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.7.0 — downloader automático, Tor e parâmetros
+- Links diretos usam automaticamente o downloader configurado; default: aria2c.
+- Vídeos continuam usando yt-dlp automaticamente.
+- F9 permite trocar downloader, ativar Tor e editar parâmetros.
+
+## 3.7.0 — downloaders, Tor e parâmetros
+- Downloader configurável: aria2c, Axel, wget ou yt-dlp.
+- Tor opcional via SOCKS5 em `127.0.0.1:9050`.
+- Parâmetros extras configuráveis por ferramenta; Axel usa `--insecure -n 4` por padrão.
+
 ## 3.6.1 — instalação .deb com tela limpa
 - Limpa a tela no início da instalação de um `.deb`.
 - Pausa no final para o resultado ficar visível antes de voltar ao eazy.

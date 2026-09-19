@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.6.1"
+EAZY_VERSION="3.7.0"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -66,6 +66,12 @@ VOL_PADRAO="100"
 DIR_PADRAO="$PWD"
 PLAYLIST_DIR_PADRAO="${HOME}/Playlists"
 DOWNLOAD_DIR="${HOME}/Downloads"  # padrão: ~/Downloads
+DOWNLOAD_ENGINE="aria"          # downloader automático para links diretos
+DOWNLOAD_TOR="0"                # 0=desligado | 1=SOCKS5 127.0.0.1:9050
+DOWNLOAD_ARIA_ARGS="--console-log-level=notice -x 4 -s 4 --auto-file-renaming=false"
+DOWNLOAD_AXEL_ARGS="--insecure -n 4"
+DOWNLOAD_WGET_ARGS="--no-check-certificate"
+DOWNLOAD_YTDLP_ARGS=""
 PLAYER_PADRAO="mpv"
 SEM_AUDIO="0"       # 1 = vídeo sem áudio (mute)
 PREVIEW_ATIVO="0"   # 0=desligado (padrão) | 1=ligado — persiste entre sessões
@@ -107,6 +113,12 @@ EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+DOWNLOAD_ENGINE="${DOWNLOAD_ENGINE:-aria}"
+DOWNLOAD_TOR="${DOWNLOAD_TOR:-0}"
+DOWNLOAD_ARIA_ARGS="${DOWNLOAD_ARIA_ARGS:---console-log-level=notice -x 4 -s 4 --auto-file-renaming=false}"
+DOWNLOAD_AXEL_ARGS="${DOWNLOAD_AXEL_ARGS:---insecure -n 4}"
+DOWNLOAD_WGET_ARGS="${DOWNLOAD_WGET_ARGS:---no-check-certificate}"
+DOWNLOAD_YTDLP_ARGS="${DOWNLOAD_YTDLP_ARGS:-}"
 SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
 IA_ATIVA="${IA_ATIVA:-0}"
 IA_NOME="${IA_NOME:-smithi}"
@@ -784,6 +796,30 @@ configurar_hotkeys() {
     done
 }
 
+configurar_downloads() {
+    local motor tor aria axel wget ytdlp
+    motor=$(whiptail --title "Downloader padrão" --radiolist "Links diretos (vídeos continuam no yt-dlp):" 14 72 4 "aria" "aria2c (padrão)" $( [ "${DOWNLOAD_ENGINE:-aria}" = aria ] && echo ON || echo OFF ) "axel" "Axel" $( [ "${DOWNLOAD_ENGINE:-aria}" = axel ] && echo ON || echo OFF ) "wget" "Wget" $( [ "${DOWNLOAD_ENGINE:-aria}" = wget ] && echo ON || echo OFF ) "ytdlp" "yt-dlp" $( [ "${DOWNLOAD_ENGINE:-aria}" = ytdlp ] && echo ON || echo OFF ) 3>&1 1>&2 2>&3) || return
+    [ -n "$motor" ] && DOWNLOAD_ENGINE="$motor"
+    tor=$(whiptail --title "Rede Tor" --radiolist "Tor deve estar ativo em 127.0.0.1:9050:" 10 70 2 "0" "Desligado (padrão)" $( [ "${DOWNLOAD_TOR:-0}" = 0 ] && echo ON || echo OFF ) "1" "Usar Tor SOCKS5" $( [ "${DOWNLOAD_TOR:-0}" = 1 ] && echo ON || echo OFF ) 3>&1 1>&2 2>&3) || return
+    DOWNLOAD_TOR="${tor:-0}"
+    aria=$(whiptail --title "Parâmetros aria2c" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_ARIA_ARGS:-}" 3>&1 1>&2 2>&3) || return
+    axel=$(whiptail --title "Parâmetros Axel" --inputbox "Default: --insecure -n 4" 9 75 "${DOWNLOAD_AXEL_ARGS:---insecure -n 4}" 3>&1 1>&2 2>&3) || return
+    wget=$(whiptail --title "Parâmetros Wget" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_WGET_ARGS:---no-check-certificate}" 3>&1 1>&2 2>&3) || return
+    ytdlp=$(whiptail --title "Parâmetros yt-dlp" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_YTDLP_ARGS:-}" 3>&1 1>&2 2>&3) || return
+    DOWNLOAD_ARIA_ARGS="$aria"; DOWNLOAD_AXEL_ARGS="$axel"; DOWNLOAD_WGET_ARGS="$wget"; DOWNLOAD_YTDLP_ARGS="$ytdlp"
+    cat >> "$CONFIG_FILE" <<EOF
+DOWNLOAD_ENGINE="$DOWNLOAD_ENGINE"
+DOWNLOAD_TOR="$DOWNLOAD_TOR"
+DOWNLOAD_ARIA_ARGS="$DOWNLOAD_ARIA_ARGS"
+DOWNLOAD_AXEL_ARGS="$DOWNLOAD_AXEL_ARGS"
+DOWNLOAD_WGET_ARGS="$DOWNLOAD_WGET_ARGS"
+DOWNLOAD_YTDLP_ARGS="$DOWNLOAD_YTDLP_ARGS"
+EOF
+    whiptail --title "Downloads" --msgbox "Salvo.
+Downloader: $DOWNLOAD_ENGINE
+Tor: $([ "$DOWNLOAD_TOR" = 1 ] && echo ATIVO || echo desligado)" 9 60
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -794,7 +830,7 @@ configurar_defaults() {
     ia_lab="$([ "${IA_ATIVA:-0}" = "1" ] && echo "ON (${IA_NOME:-smithi})" || echo "OFF")"
     f9_acao=$(whiptail --title "F9 — eazy ${EAZY_VERSION} · $agora" \
         --menu "Config · diagnóstico · seleção\nOP sel: $op_lab · IA: $ia_lab" 24 78 14 \
-        "config" "Configurar o eazy (inclui destino de downloads)" \
+        "config" "Configurar o eazy (inclui downloads/Tor)" \
         "hotkeys" "Hotkeys — config completa de atalhos" \
         "hot_ctrl" "Ver atalhos CTRL" \
         "hot_alt" "Ver atalhos ALT" \
@@ -804,7 +840,9 @@ configurar_defaults() {
         "overview" "Overview do sistema (completo)" \
         "sound" "Teste de som" \
         "shell" "Shell do sistema (neste diretório)" \
-        "exitdir" "Ao sair: dir do navegador ou o anterior" \
+        "exitdir" "Ao sair: dir do navegador ou o anterior"
+        "download" "Downloads — downloader/Tor/parâmetros"
+        "download" "Downloads — downloader/Tor/parâmetros" \
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
         "ia" "IA ativa: $ia_lab" \
@@ -816,6 +854,7 @@ configurar_defaults() {
         sound) testar_som; return ;;
         shell) abrir_shell_sistema; return ;;
         exitdir) configurar_dir_saida; return ;;
+        download) configurar_downloads; return ;;
         lixeira) abrir_lixeira; return ;;
         export_notas) exportar_notas_eazy; return ;;
         hotkeys) configurar_hotkeys; return ;;
@@ -3631,7 +3670,7 @@ eazy_editar_fila_downloads() {
         whiptail --title "Downloads" --msgbox "Fila de downloads vazia.\nUse Ctrl+B → Adicionar link." 9 55
         return 0
     fi
-    local tmp escolhido linha engine url rest novo
+    local tmp escolhido linha engine url rest novo novo_engine tor_item
     tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-dl-edit.XXXXXX") || return 1
     # mostra linhas numeradas
     nl -ba "$DOWNLOAD_QUEUE" > "$tmp"
@@ -3646,12 +3685,21 @@ eazy_editar_fila_downloads() {
     engine=$(printf "%s" "$linha" | cut -d"|" -f1)
     url=$(printf "%s" "$linha" | cut -d"|" -f2)
     rest=$(printf "%s" "$linha" | cut -d"|" -f3-)
-    novo=$(whiptail --title "Editar link download #$num" --inputbox "URL / link:\nMotor: $engine" 12 78 "$url" 3>&1 1>&2 2>&3) || return 0
+    tor_item=$(printf "%s" "$linha" | cut -d"|" -f4)
+    [ "$tor_item" != "1" ] && tor_item="0"
+    novo_engine=$(whiptail --title "Editar downloader #$num" --radiolist "Escolha o aplicativo para este item:" 13 65 4 \
+        "aria" "aria2c" $( [ "$engine" = aria ] && echo ON || echo OFF ) \
+        "axel" "Axel" $( [ "$engine" = axel ] && echo ON || echo OFF ) \
+        "wget" "Wget" $( [ "$engine" = wget ] && echo ON || echo OFF ) \
+        "ytdlp" "yt-dlp" $( [ "$engine" = ytdlp ] && echo ON || echo OFF ) \
+        3>&1 1>&2 2>&3) || return 0
+    [ -z "$novo_engine" ] && novo_engine="$engine"
+    novo=$(whiptail --title "Editar link download #$num" --inputbox "URL / link:\nMotor: $novo_engine" 12 78 "$url" 3>&1 1>&2 2>&3) || return 0
     [ -z "$novo" ] && return 0
     # reescreve linha
     local out="${DOWNLOAD_QUEUE}.tmp"
-    awk -v n="$num" -v eng="$engine" -v u="$novo" -v r="$rest" -F"|" "
-        NR==n { print eng \"|\" u \"|\" r; next }
+    awk -v n="$num" -v eng="$novo_engine" -v u="$novo" -v r="$rest" -v tor="$tor_item" -F"|" "
+        NR==n { print eng \"|\" u \"|\" r \"|\" tor; next }
         { print }
     " "$DOWNLOAD_QUEUE" > "$out" && mv -f "$out" "$DOWNLOAD_QUEUE"
     whiptail --title "Downloads" --msgbox "Link #$num atualizado.\n$novo" 10 70
@@ -4714,15 +4762,8 @@ Se der erro 400/403, atualize SEM pip:
             3>&1 1>&2 2>&3)
         [ -z "$extra" ] && return
     else
-        # Arquivo direto: aria / axel / wget / yt-dlp
-        gerenciador=$(whiptail --title "Escolher Ferramenta" --radiolist "Motor de download:" 15 62 4 \
-            "aria" "Aria2c (multi-conexão, recomendado)" "ON" \
-            "axel" "Axel" "OFF" \
-            "wget" "Wget (simples)" "OFF" \
-            "ytdlp" "yt-dlp (se for página de vídeo)" "OFF" \
-            3>&1 1>&2 2>&3)
-        [ -z "$gerenciador" ] && return
-
+        # Link direto: usa o downloader configurado, sem perguntar a cada vez.
+        gerenciador="${DOWNLOAD_ENGINE:-aria}"
         if [ "$gerenciador" = "ytdlp" ]; then
             if ! encontrar_ytdlp &>/dev/null; then
                 whiptail --title "yt-dlp ausente" --msgbox "yt-dlp não instalado.\n\nRode:  eazy --update-ytdlp" 9 50
@@ -4757,8 +4798,13 @@ Ou use eazy --install" 12 55
         fi
     fi
 
-    echo "$gerenciador|$link|$extra" >> "$DOWNLOAD_QUEUE"
-    whiptail --title "Sucesso" --msgbox "Adicionado à fila!\n\nMotor: $gerenciador" 9 45
+    local usar_tor="0"
+    if whiptail --title "Rede Tor" --checklist "Usar Tor neste download?\n(Tor deve estar ativo em 127.0.0.1:9050)" 10 72 1 \
+        "TOR" "SOCKS5 127.0.0.1:9050" OFF 3>&1 1>&2 2>&3 | grep -q TOR; then
+        usar_tor="1"
+    fi
+    echo "$gerenciador|$link|$extra|$usar_tor" >> "$DOWNLOAD_QUEUE"
+    whiptail --title "Sucesso" --msgbox "Adicionado à fila!\n\nMotor: $gerenciador\nTor: $([ "$usar_tor" = 1 ] && echo ATIVO || echo desligado)" 10 50
 }
 
 extrair_com_senha() {
@@ -9364,6 +9410,8 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         linha_fila=$(grep "|$link_alvo|" "$DOWNLOAD_QUEUE" | head -n 1)
         engine=$(echo "$linha_fila" | cut -d'|' -f1)
         pass=$(echo "$linha_fila" | cut -d'|' -f3)
+        tor_item=$(echo "$linha_fila" | cut -d'|' -f4)
+        [ "$tor_item" != "1" ] && tor_item="${DOWNLOAD_TOR:-0}"
 
         if [ -z "$pass" ] && [ -f "$DOWNLOAD_PASSWORDS" ]; then
             pass=$(grep -F "$link_alvo|" "$DOWNLOAD_PASSWORDS" | tail -n1 | cut -d'|' -f2-)
@@ -9372,6 +9420,14 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         nome_esperado=$(obter_nome_do_link "$link_alvo")
         dir_antes=$(pwd)
         download_dir="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+        tor_proxy="socks5://127.0.0.1:9050"
+        read -r -a ARIA_EXTRA <<< "${DOWNLOAD_ARIA_ARGS:-}"
+        read -r -a AXEL_EXTRA <<< "${DOWNLOAD_AXEL_ARGS:---insecure -n 4}"
+        read -r -a WGET_EXTRA <<< "${DOWNLOAD_WGET_ARGS:---no-check-certificate}"
+        read -r -a YTDLP_EXTRA <<< "${DOWNLOAD_YTDLP_ARGS:-}"
+        WGET_TOR_ARGS=()
+        [ "$tor_item" = 1 ] && WGET_TOR_ARGS=(-e use_proxy=on -e "all_proxy=$tor_proxy")
+        [ "$tor_item" = 1 ] && echo "   Rede: Tor ($tor_proxy)"
         mkdir -p -- "$download_dir" || { echo "Não foi possível criar o destino: $download_dir"; read -p "Pressione Enter para continuar..."; continue; }
 
         # Downloads: tamanho remoto costuma ser desconhecido — exige folga mínima no disco
@@ -9434,7 +9490,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                     ytdlp_ok=0
                     if [ "$fmt" = "audio" ]; then
                         if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
-                            $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 --audio-quality 0 \
+                            $YTDLP_BIN "${YTDLP_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -f "$fmt_arg" -x --audio-format mp3 --audio-quality 0 \
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 \
                                 "${ARIA_ARGS[@]}" \
@@ -9445,7 +9501,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                         fi
                     else
                         if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
-                            $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
+                            $YTDLP_BIN "${YTDLP_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -f "$fmt_arg" --merge-output-format mp4 \
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 --fragment-retries 5 \
                                 "${ARIA_ARGS[@]}" \
@@ -9489,20 +9545,19 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 elif [ "$engine" = "aria" ]; then
                     if ! command -v aria2c &>/dev/null; then
                         echo -e "\033[1;31maria2c não instalado.  sudo apt install aria2\033[0m"
-                    elif aria2c --console-log-level=notice -x 4 -s 4 --auto-file-renaming=false \
-                        --allow-overwrite=true "$link_alvo"; then
+                    elif aria2c "${ARIA_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--all-proxy=$tor_proxy")} --allow-overwrite=true "$link_alvo"; then
                         status_dl=0
                     fi
                 elif [ "$engine" = "axel" ]; then
                     if ! command -v axel &>/dev/null; then
                         echo -e "\033[1;31maxel não instalado.  sudo apt install axel\033[0m"
-                    elif axel --insecure -n 4 -o "$download_dir/$nome_esperado" "$link_alvo"; then
+                    elif axel "${AXEL_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -o "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 else
                     if ! command -v wget &>/dev/null; then
                         echo -e "\033[1;31mwget não instalado.  sudo apt install wget\033[0m"
-                    elif wget --no-check-certificate -O "$download_dir/$nome_esperado" "$link_alvo"; then
+                    elif wget "${WGET_EXTRA[@]}" "${WGET_TOR_ARGS[@]}" -O "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 fi

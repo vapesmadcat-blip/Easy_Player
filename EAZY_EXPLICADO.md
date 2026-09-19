@@ -1,4 +1,4 @@
-# eazy 3.6.1 — documentação completa de funcionamento e vantagens
+# eazy 3.7.0 — documentação completa de funcionamento e vantagens
 
 ## 1. O que é o eazy
 
@@ -507,3 +507,8 @@ A documentação operacional está disponível em três níveis: `eazy --help` p
 ## Destino configurável dos downloads
 
 O destino padrão dos downloads é `~/Downloads`, evitando que arquivos baixados sejam misturados com a pasta que está sendo navegada. A configuração é feita em F9, fica persistida em `~/.config/eazy/config` na variável `DOWNLOAD_DIR` e pode ser sobrescrita pela variável de ambiente de mesmo nome. O eazy cria o diretório quando necessário e usa o mesmo destino para yt-dlp, aria2c, axel e wget.
+
+
+## Downloaders, Tor e parâmetros
+
+Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel, wget ou yt-dlp, ative opcionalmente Tor (`socks5://127.0.0.1:9050`) e informe parâmetros extras. O default para links diretos continua sendo **aria2c**; o Axel usa **`--insecure -n 4`** por padrão. A configuração fica em `~/.config/eazy/config`.

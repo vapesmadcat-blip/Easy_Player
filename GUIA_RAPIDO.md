@@ -1,4 +1,4 @@
-# Guia rápido do eazy 3.6.1
+# Guia rápido do eazy 3.7.0
 
 ## Iniciar
 
@@ -79,3 +79,8 @@ Use `eazy --help` para a ajuda no terminal, `F10` para a ajuda interativa e `man
 ## Destino dos downloads
 
 Por padrão, downloads feitos pelo Ctrl-B são salvos em `~/Downloads`. Altere em **F9 → Configurar → Pasta Padrão de Downloads**. O eazy cria a pasta automaticamente e mostra o destino ao iniciar o download.
+
+
+## Downloaders, Tor e parâmetros
+
+Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel, wget ou yt-dlp, ative opcionalmente Tor (`socks5://127.0.0.1:9050`) e informe parâmetros extras. O default para links diretos continua sendo **aria2c**; o Axel usa **`--insecure -n 4`** por padrão. A configuração fica em `~/.config/eazy/config`.

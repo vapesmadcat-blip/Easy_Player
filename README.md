@@ -1,4 +1,4 @@
-# eazy 3.6.1 (release)
+# eazy 3.7.0 (release)
 
 Navegador e reprodutor multimídia no **terminal** — fzf + mpv/mplayer/cvlc/ffplay.
 
@@ -97,3 +97,8 @@ Uso livre. Sem garantias.
 ## Destino dos downloads
 
 O destino padrão é **`~/Downloads`**. Para alterar, use **F9 → Configurar → Pasta Padrão de Downloads**. A escolha fica salva em `~/.config/eazy/config`. Também é possível iniciar com `DOWNLOAD_DIR=/caminho eazy`.
+
+
+## Downloaders, Tor e parâmetros
+
+Em **F9 → Downloads — downloader, Tor e parâmetros**, escolha aria2c, Axel, wget ou yt-dlp, ative opcionalmente Tor (`socks5://127.0.0.1:9050`) e informe parâmetros extras. O default para links diretos continua sendo **aria2c**; o Axel usa **`--insecure -n 4`** por padrão. A configuração fica em `~/.config/eazy/config`.
