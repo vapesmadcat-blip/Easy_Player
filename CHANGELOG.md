@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.8.3 — checkbox Tor com prioridade
+- Tor só é usado quando o checkbox do item está ligado.
+- O estado global não sobrescreve um checkbox desligado.
+
 ## 3.8.2 — Tor nos três downloaders
 - O checkbox Tor usa `torsocks` com aria2c, Axel e wget.
 

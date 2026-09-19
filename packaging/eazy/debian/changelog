@@ -1,3 +1,9 @@
+eazy (3.8.3) unstable; urgency=medium
+
+  * Respect the per-download Tor checkbox over the global fallback.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 00:54:00 +0000
+
 eazy (3.8.2) unstable; urgency=medium
 
   * Use torsocks for aria2c, Axel and wget when Tor is selected.
