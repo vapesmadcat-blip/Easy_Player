@@ -1,3 +1,10 @@
+eazy (3.9.2) unstable; urgency=medium
+
+  * Split torrent downloading into the separate eazy-tor executable.
+  * Keep eazy focused on link and queue management.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 19 Sep 2026 01:45:00 +0000
+
 eazy (3.9.1) unstable; urgency=medium
 
   * Integrate torrent CLI with eazy --torrent and download queue detection.

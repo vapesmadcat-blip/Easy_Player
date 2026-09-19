@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.9.1"
+EAZY_VERSION="3.9.2"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -1009,7 +1009,7 @@ Opções:
   --install          Instala dependências, comando global e scripts auxiliares
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
-  --torrent [OPÇÕES] Executa o CLI torrent integrado (magnet/.torrent)
+  --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
   -m, --maintenance  Menu de manutenção (dados + sistema + completa)
   -a, --advanced-maintenance
                      Manutenção avançada (seleção fina de arquivos do eazy)
@@ -2793,9 +2793,9 @@ elif [ "$1" = "--ai" ]; then
     exit $?
 elif [ "$1" = "--torrent" ]; then
     shift
-    torrent_cmd="${EAZY_INSTALL_DIR}/torrent"
-    [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v torrent 2>/dev/null || true)"
-    [ -n "$torrent_cmd" ] || { echo "CLI torrent não encontrado. Reinstale eazy." >&2; exit 1; }
+    torrent_cmd="${EAZY_INSTALL_DIR}/eazy-tor"
+    [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v eazy-tor 2>/dev/null || true)"
+    [ -n "$torrent_cmd" ] || { echo "eazy-tor não encontrado. Instale o pacote eazy." >&2; exit 1; }
     exec "$torrent_cmd" "$@"
 elif [ "$1" = "--update-ytdlp" ]; then
     # Atualiza yt-dlp SEM pip (baixa binário oficial do GitHub)
@@ -9478,10 +9478,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         status_dl=1
         case "$engine" in
             torrent)
-                torrent_cmd="$EAZY_INSTALL_DIR/torrent"
-                [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v torrent 2>/dev/null || true)"
+                torrent_cmd="$EAZY_INSTALL_DIR/eazy-tor"
+                [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v eazy-tor 2>/dev/null || true)"
                 if [ -z "$torrent_cmd" ]; then
-                    echo -e "\033[1;31mCLI torrent não encontrado. Reinstale eazy.\033[0m"
+                    echo -e "\033[1;31meazy-tor não encontrado. Instale o pacote eazy.\033[0m"
                     status_dl=1
                 else
                     torrent_args=(--dir "$download_dir")
