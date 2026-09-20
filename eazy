@@ -9,7 +9,7 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.12"
+EAZY_VERSION="3.13"
 EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
@@ -67,6 +67,9 @@ VOL_PADRAO="100"
 DIR_PADRAO="$PWD"
 PLAYLIST_DIR_PADRAO="${HOME}/Playlists"
 DOWNLOAD_DIR="${HOME}/Downloads"  # padrão: ~/Downloads
+TORRENT_DIR="${HOME}/Downloads/Torrents"
+NOTES_EXPORT_DIR=""             # vazio = ~/Documentos/Easy-Notes ou ~/Documents/Easy-Notes
+HTML_EXPORT_DIR=""              # vazio = ~/Documentos/Easy-Pesquisas ou ~/Documents/Easy-Pesquisas
 DOWNLOAD_ENGINE="aria"          # downloader automático para links diretos
 DOWNLOAD_TOR="0"                # 0=desligado | 1=SOCKS5 127.0.0.1:9050
 DOWNLOAD_ARIA_ARGS="--console-log-level=notice -x 4 -s 4 --auto-file-renaming=false"
@@ -114,6 +117,9 @@ EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+TORRENT_DIR="${TORRENT_DIR:-${HOME}/Downloads/Torrents}"
+NOTES_EXPORT_DIR="${NOTES_EXPORT_DIR:-}"
+HTML_EXPORT_DIR="${HTML_EXPORT_DIR:-}"
 DOWNLOAD_ENGINE="${DOWNLOAD_ENGINE:-aria}"
 DOWNLOAD_TOR="${DOWNLOAD_TOR:-0}"
 DOWNLOAD_ARIA_ARGS="${DOWNLOAD_ARIA_ARGS:---console-log-level=notice -x 4 -s 4 --auto-file-renaming=false}"
@@ -821,6 +827,128 @@ Downloader: $DOWNLOAD_ENGINE
 Tor: $([ "$DOWNLOAD_TOR" = 1 ] && echo ATIVO || echo desligado)" 9 60
 }
 
+
+# Resolve pastas padrão de exportação (notas / HTML de pesquisas)
+eazy_dir_notas_export() {
+    if [ -n "${NOTES_EXPORT_DIR:-}" ]; then
+        printf '%s\n' "$NOTES_EXPORT_DIR"
+    elif [ -d "$HOME/Documentos" ]; then
+        printf '%s\n' "$HOME/Documentos/Easy-Notes"
+    else
+        printf '%s\n' "$HOME/Documents/Easy-Notes"
+    fi
+}
+eazy_dir_html_export() {
+    if [ -n "${HTML_EXPORT_DIR:-}" ]; then
+        printf '%s\n' "$HTML_EXPORT_DIR"
+    elif [ -d "$HOME/Documentos" ]; then
+        printf '%s\n' "$HOME/Documentos/Easy-Pesquisas"
+    else
+        printf '%s\n' "$HOME/Documents/Easy-Pesquisas"
+    fi
+}
+
+# Grava/atualiza uma chave no CONFIG_FILE sem apagar as demais
+eazy_config_set() {
+    local key="$1" val="$2"
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    touch "$CONFIG_FILE"
+    if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=\"${val}\"|" "$CONFIG_FILE"
+    else
+        printf '%s="%s"\n' "$key" "$val" >> "$CONFIG_FILE"
+    fi
+}
+
+eazy_salvar_diretorios_config() {
+    eazy_config_set DIR_PADRAO "${DIR_PADRAO:-$HOME}"
+    eazy_config_set DOWNLOAD_DIR "${DOWNLOAD_DIR:-$HOME/Downloads}"
+    eazy_config_set TORRENT_DIR "${TORRENT_DIR:-$HOME/Downloads/Torrents}"
+    eazy_config_set PLAYLIST_DIR_PADRAO "${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}"
+    eazy_config_set NOTES_EXPORT_DIR "${NOTES_EXPORT_DIR:-}"
+    eazy_config_set HTML_EXPORT_DIR "${HTML_EXPORT_DIR:-}"
+}
+
+configurar_diretorios_eazy() {
+    local acao novo
+    while true; do
+        local nexp hexp
+        nexp=$(eazy_dir_notas_export)
+        hexp=$(eazy_dir_html_export)
+        acao=$(whiptail --title "F9 — Diretórios do eazy" \
+            --menu "Pastas usadas por downloads, torrents, notas, pesquisas e playlists.\nEscolha qual configurar:" 22 78 12 \
+            "inicio"    "Início ao abrir: ${DIR_PADRAO:-$HOME}" \
+            "download"  "Downloads: ${DOWNLOAD_DIR:-$HOME/Downloads}" \
+            "torrent"   "Torrents: ${TORRENT_DIR:-$HOME/Downloads/Torrents}" \
+            "playlist"  "Playlists: ${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}" \
+            "notas"     "Export notas: $nexp" \
+            "html"      "Export pesquisas HTML: $hexp" \
+            "config"    "Config interna: $CONFIG_DIR" \
+            "abrir_dl"  "Abrir pasta de Downloads" \
+            "abrir_tor" "Abrir pasta de Torrents" \
+            "abrir_pl"  "Abrir pasta de Playlists" \
+            "salvar"    "Salvar e voltar" \
+            "cancel"    "Voltar sem salvar" \
+            3>&1 1>&2 2>&3) || return 0
+        case "$acao" in
+            inicio)
+                novo=$(whiptail --title "Diretório inicial" --inputbox \
+                    "Pasta que o eazy abre ao iniciar:" 10 72 "${DIR_PADRAO:-$HOME}" 3>&1 1>&2 2>&3) || continue
+                [ -n "$novo" ] && DIR_PADRAO="$novo"
+                ;;
+            download)
+                novo=$(whiptail --title "Pasta de Downloads" --inputbox \
+                    "Destino padrão dos downloads (Ctrl+B / yt-dlp / aria2c):" 10 72 "${DOWNLOAD_DIR:-$HOME/Downloads}" 3>&1 1>&2 2>&3) || continue
+                [ -n "$novo" ] && DOWNLOAD_DIR="$novo"
+                ;;
+            torrent)
+                novo=$(whiptail --title "Pasta de Torrents" --inputbox \
+                    "Destino padrão de .torrent e magnets (eazy-tor):" 10 72 "${TORRENT_DIR:-$HOME/Downloads/Torrents}" 3>&1 1>&2 2>&3) || continue
+                [ -n "$novo" ] && TORRENT_DIR="$novo"
+                ;;
+            playlist)
+                novo=$(whiptail --title "Pasta de Playlists" --inputbox \
+                    "Onde salvar playlists permanentes (.m3u):" 10 72 "${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}" 3>&1 1>&2 2>&3) || continue
+                [ -n "$novo" ] && PLAYLIST_DIR_PADRAO="$novo"
+                ;;
+            notas)
+                novo=$(whiptail --title "Exportação de notas" --inputbox \
+                    "Pasta para exportar notas (Ctrl+X / F9):\n(vazio = ~/Documentos/Easy-Notes ou ~/Documents/Easy-Notes)" 11 72 "${NOTES_EXPORT_DIR:-}" 3>&1 1>&2 2>&3) || continue
+                NOTES_EXPORT_DIR="$novo"
+                ;;
+            html)
+                novo=$(whiptail --title "Exportação HTML de pesquisas" --inputbox \
+                    "Pasta para HTML das pesquisas:\n(vazio = ~/Documentos/Easy-Pesquisas ou ~/Documents/Easy-Pesquisas)" 11 72 "${HTML_EXPORT_DIR:-}" 3>&1 1>&2 2>&3) || continue
+                HTML_EXPORT_DIR="$novo"
+                ;;
+            config)
+                whiptail --title "Config interna" --msgbox \
+"Pasta de configuração do eazy (não costuma mudar):\n\n$CONFIG_DIR\n\nNotas internas: $NOTES_DIR\nPesquisas salvas: $SAVED_SEARCHES_DIR\nArquivo config: $CONFIG_FILE" 14 72
+                ;;
+            abrir_dl)
+                mkdir -p "${DOWNLOAD_DIR:-$HOME/Downloads}" 2>/dev/null || true
+                xdg-open "${DOWNLOAD_DIR:-$HOME/Downloads}" 2>/dev/null || true
+                ;;
+            abrir_tor)
+                mkdir -p "${TORRENT_DIR:-$HOME/Downloads/Torrents}" 2>/dev/null || true
+                xdg-open "${TORRENT_DIR:-$HOME/Downloads/Torrents}" 2>/dev/null || true
+                ;;
+            abrir_pl)
+                mkdir -p "${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}" 2>/dev/null || true
+                xdg-open "${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}" 2>/dev/null || true
+                ;;
+            salvar)
+                eazy_salvar_diretorios_config
+                mkdir -p "${DOWNLOAD_DIR:-$HOME/Downloads}" "${TORRENT_DIR:-$HOME/Downloads/Torrents}" "${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}" "$(eazy_dir_notas_export)" "$(eazy_dir_html_export)" 2>/dev/null || true
+                whiptail --title "Diretórios" --msgbox \
+"Pastas salvas em:\n$CONFIG_FILE\n\nInício: ${DIR_PADRAO:-$HOME}\nDownloads: ${DOWNLOAD_DIR:-$HOME/Downloads}\nTorrents: ${TORRENT_DIR:-$HOME/Downloads/Torrents}\nPlaylists: ${PLAYLIST_DIR_PADRAO:-$HOME/Playlists}\nNotas export: $(eazy_dir_notas_export)\nHTML pesquisas: $(eazy_dir_html_export)" 16 72
+                return 0
+                ;;
+            cancel|*) return 0 ;;
+        esac
+    done
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -843,6 +971,7 @@ configurar_defaults() {
         "shell" "Shell do sistema (neste diretório)" \
         "exitdir" "Ao sair: dir do navegador ou o anterior" \
         "download" "Downloads — downloader/Tor/parâmetros" \
+        "dirs" "Diretórios — downloads, torrents, notas, HTML…" \
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
         "ia" "IA ativa: $ia_lab" \
@@ -855,6 +984,7 @@ configurar_defaults() {
         shell) abrir_shell_sistema; return ;;
         exitdir) configurar_dir_saida; return ;;
         download) configurar_downloads; return ;;
+        dirs) configurar_diretorios_eazy; return ;;
         lixeira) abrir_lixeira; return ;;
         export_notas) exportar_notas_eazy; return ;;
         hotkeys) configurar_hotkeys; return ;;
@@ -976,6 +1106,9 @@ VOL_PADRAO="$VOL_PADRAO"
 DIR_PADRAO="$DIR_PADRAO"
 PLAYLIST_DIR_PADRAO="$PLAYLIST_DIR_PADRAO"
 DOWNLOAD_DIR="$DOWNLOAD_DIR"
+TORRENT_DIR="${TORRENT_DIR:-$HOME/Downloads/Torrents}"
+NOTES_EXPORT_DIR="${NOTES_EXPORT_DIR:-}"
+HTML_EXPORT_DIR="${HTML_EXPORT_DIR:-}"
 PLAYER_PADRAO="$PLAYER_PADRAO"
 SEM_AUDIO="$SEM_AUDIO"
 PREVIEW_ATIVO="$preview_keep"
@@ -2645,7 +2778,7 @@ if [ "$1" = "--install" ]; then
     [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     # Estrutura completa de dados do usuário; o cache de busca continua temporário.
-    mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$HOME/Documentos/Easy-Notes"
+    mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$(eazy_dir_notas_export)" "$(eazy_dir_html_export)" "${TORRENT_DIR:-$HOME/Downloads/Torrents}"
     touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$TORRENT_QUEUE"
     eazy_instalar_script_manut_completa >/dev/null 2>&1 || true
 
@@ -2952,11 +3085,7 @@ exportar_pesquisa_html() {
     fi
 
     local dest_dir
-    if [[ -d "$HOME/Documentos" ]]; then
-        dest_dir="$HOME/Documentos/Easy-Pesquisas"
-    else
-        dest_dir="$HOME/Documents/Easy-Pesquisas"
-    fi
+    dest_dir=$(eazy_dir_html_export)
     mkdir -p "$dest_dir" 2>/dev/null || true
 
     local nome_limpo data_hora arquivo_html
@@ -3063,6 +3192,7 @@ EOF
     if whiptail --title "Exportar HTML" --yesno "HTML salvo em:\n\n$arquivo_html\n\nAbrir no navegador agora?" 12 72; then
         xdg-open "$arquivo_html" 2>/dev/null || sensible-browser "$arquivo_html" 2>/dev/null || true
     fi
+    return 0
 }
 
 
@@ -3960,8 +4090,8 @@ eazy_gerenciar_torrents() {
                 whiptail --title "Torrent" --msgbox "Informe um magnet válido ou um arquivo .torrent existente." 9 70
                 return 1
             fi
-            destino=$(whiptail --title "Destino do torrent" --inputbox "Diretório de destino:" 10 75 "${DOWNLOAD_DIR:-$HOME/Downloads/Torrents}" 3>&1 1>&2 2>&3) || return 0
-            [ -n "$destino" ] || destino="${DOWNLOAD_DIR:-$HOME/Downloads/Torrents}"
+            destino=$(whiptail --title "Destino do torrent" --inputbox "Diretório de destino:" 10 75 "${TORRENT_DIR:-${DOWNLOAD_DIR:-$HOME/Downloads}/Torrents}" 3>&1 1>&2 2>&3) || return 0
+            [ -n "$destino" ] || destino="${TORRENT_DIR:-${DOWNLOAD_DIR:-$HOME/Downloads}/Torrents}"
             tor_opt=0
             if whiptail --title "Rede" --yesno "Usar Tor neste torrent?\n\nO serviço Tor/torsocks precisa estar ativo." 10 65; then tor_opt=1; fi
             printf 'torrent|%s||%s\n' "$alvo" "$tor_opt" >> "$DOWNLOAD_QUEUE"
@@ -3992,7 +4122,8 @@ eazy_gerenciar_torrents() {
 }
 
 exportar_notas_eazy() {
-    local dest="$HOME/Documentos/Easy-Notes"
+    local dest
+    dest=$(eazy_dir_notas_export)
     mkdir -p "$dest" "$NOTES_DIR" 2>/dev/null || true
     local n
     n=$(find "$NOTES_DIR" -maxdepth 1 -type f ! -name '.*' 2>/dev/null | wc -l)
@@ -6756,7 +6887,7 @@ abrir_editor_notas() {
     fi
     (
         cd "$NOTES_DIR" || exit 1
-        EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE" EAZY_EXPORT_DIR="$HOME/Documentos/Easy-Notes" "$EAZY_NOTES_EDITOR" "$nota"
+        EAZY_NOTES_DIR="$NOTES_DIR" EAZY_LAST_NOTE="$LAST_NOTE_FILE" EAZY_EXPORT_DIR="$(eazy_dir_notas_export)" "$EAZY_NOTES_EDITOR" "$nota"
     )
     local ultima_salva
     ultima_salva=""
@@ -9417,18 +9548,43 @@ Depois use:
             continue
         fi
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+            iniciar_nova=0
             if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+                # Já em pesquisa: só avança se escolher Nova pesquisa (ou abrir salva)
+                menu_args=( "N" "Nova pesquisa" "C" "Continuar nesta pesquisa" )
+                if [ -d "$SAVED_SEARCHES_DIR" ] && find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print -quit 2>/dev/null | grep -q .; then
+                    menu_args=( "N" "Nova pesquisa" "S" "Abrir pesquisa salva" "C" "Continuar nesta pesquisa" )
+                fi
+                escolha_busca=$(whiptail --title "Pesquisa" --menu "Você já está em uma pesquisa.\nO que deseja fazer?" 14 62 4 "${menu_args[@]}" 3>&1 1>&2 2>&3) || continue
+                if [ "$escolha_busca" = "C" ] || [ -z "$escolha_busca" ]; then
+                    continue
+                fi
+                if [ "$escolha_busca" = "S" ]; then
+                    if carregar_pesquisa_salva; then
+                        TMP=2; registrar_status
+                    fi
+                    continue
+                fi
+                # N = Nova pesquisa → limpa e inicia configuração direto
                 MODO_BUSCA=0
                 BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""
                 BUSCA_CONTEUDO=""
+                BUSCA_SNAPSHOT_FILE=""
                 TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                iniciar_nova=1
             else
                 if [ -d "$SAVED_SEARCHES_DIR" ] && find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print -quit 2>/dev/null | grep -q .; then
                     escolha_busca=$(whiptail --title "Pesquisa" --menu "Escolha uma opção:" 12 60 2 "N" "Nova pesquisa" "S" "Abrir pesquisa salva" 3>&1 1>&2 2>&3) || continue
                     if [ "$escolha_busca" = "S" ] && carregar_pesquisa_salva; then
                         TMP=2; registrar_status; continue
                     fi
+                    if [ "$escolha_busca" != "N" ]; then
+                        continue
+                    fi
                 fi
+                iniciar_nova=1
+            fi
+            if [ "$iniciar_nova" -eq 1 ]; then
                 # Não usar EXT_BUSCA=$(selecionar_extensoes): a command substitution
                 # roda a função em subshell e perde BUSCA_CONTEUDO.
                 _ext_busca_tmp="/tmp/eazy_ext_busca_$$"
