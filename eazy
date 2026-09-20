@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 3.2.12 (release) — navegador e reprodutor multimídia no terminal
-#  Revisão 3.2.12 — cache listas/pesquisa/playlist; ext com categoria; sel global qtd/bytes; hotkeys Ctrl/Alt; notas; OP sel; data/hora; limpeza caches; links browser|download; lista global
+#  eazy 3.3 (IA) — navegador e reprodutor multimídia no terminal
+#  Revisão 3.3 — cache listas/pesquisa/playlist; ext com categoria; sel global qtd/bytes; hotkeys Ctrl/Alt; notas; OP sel; data/hora; limpeza caches; links browser|download; lista global
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
 #
@@ -9,8 +9,8 @@
 #
 set -o pipefail
 
-EAZY_VERSION="3.2.12"
-EAZY_CODENAME="release"
+EAZY_VERSION="3.12"
+EAZY_CODENAME="IA"
 EAZY_NAME="eazy"
 
 # --- Alertas sonoros ---
@@ -34,11 +34,14 @@ LAST_NOTE_FILE="$NOTES_DIR/.ultima_nota"
 EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
+EAZY_AI_CLIENT="${EAZY_AI_CLIENT:-$EAZY_INSTALL_DIR/eazy-ai.py}"
+[ -f "$EAZY_AI_CLIENT" ] || EAZY_AI_CLIENT="/usr/lib/eazy/eazy-ai.py"
 CONFIG_FILE="$CONFIG_DIR/config"
 KEYS_FILE="$CONFIG_DIR/keys"
 LAST_COPY_DEST_FILE="$CONFIG_DIR/last_copy_destination"
 LAST_MOVE_DEST_FILE="$CONFIG_DIR/last_move_destination"
 DOWNLOAD_QUEUE="$CONFIG_DIR/download_queue"
+TORRENT_QUEUE="$CONFIG_DIR/torrent_queue"
 DOWNLOAD_PASSWORDS="$CONFIG_DIR/download_passwords"
 HISTORY_FILE="$CONFIG_DIR/history"
 PLAYLIST_PERSISTENTE="$CONFIG_DIR/temp_playlist"   # legado → migrado para _1
@@ -63,12 +66,31 @@ OSD_PADRAO="1"
 VOL_PADRAO="100"
 DIR_PADRAO="$PWD"
 PLAYLIST_DIR_PADRAO="${HOME}/Playlists"
+DOWNLOAD_DIR="${HOME}/Downloads"  # padrão: ~/Downloads
+DOWNLOAD_ENGINE="aria"          # downloader automático para links diretos
+DOWNLOAD_TOR="0"                # 0=desligado | 1=SOCKS5 127.0.0.1:9050
+DOWNLOAD_ARIA_ARGS="--console-log-level=notice -x 4 -s 4 --auto-file-renaming=false"
+DOWNLOAD_AXEL_ARGS="--insecure -n 4"
+DOWNLOAD_WGET_ARGS="--no-check-certificate"
+DOWNLOAD_YTDLP_ARGS=""
 PLAYER_PADRAO="mpv"
 SEM_AUDIO="0"       # 1 = vídeo sem áudio (mute)
 PREVIEW_ATIVO="0"   # 0=desligado (padrão) | 1=ligado — persiste entre sessões
 EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"  # navegador | anterior — diretório do terminal ao sair
 PYTHON_CMD="${PYTHON_CMD:-python3}"          # interpretador para .py (python3, python, py, …)
 SHELL_CMD="${SHELL_CMD:-bash}"               # shell para .sh (bash, sh, …)
+
+eazy_ia_chat() {
+    if [ ! -f "$EAZY_AI_CLIENT" ]; then
+        printf '%s\n' "Cliente de IA não encontrado: $EAZY_AI_CLIENT" >&2
+        return 1
+    fi
+    if ! command -v "$PYTHON_CMD" >/dev/null 2>&1; then
+        printf '%s\n' "Python não encontrado: $PYTHON_CMD" >&2
+        return 1
+    fi
+    "$PYTHON_CMD" "$EAZY_AI_CLIENT"
+}
 
 # --- CORES (terminal) ---
 RED='\033[0;31m'
@@ -91,6 +113,13 @@ fi
 EXIT_DIR_MODE="${EXIT_DIR_MODE:-navegador}"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
+DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+DOWNLOAD_ENGINE="${DOWNLOAD_ENGINE:-aria}"
+DOWNLOAD_TOR="${DOWNLOAD_TOR:-0}"
+DOWNLOAD_ARIA_ARGS="${DOWNLOAD_ARIA_ARGS:---console-log-level=notice -x 4 -s 4 --auto-file-renaming=false}"
+DOWNLOAD_AXEL_ARGS="${DOWNLOAD_AXEL_ARGS:---insecure -n 4}"
+DOWNLOAD_WGET_ARGS="${DOWNLOAD_WGET_ARGS:---no-check-certificate}"
+DOWNLOAD_YTDLP_ARGS="${DOWNLOAD_YTDLP_ARGS:-}"
 SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
 IA_ATIVA="${IA_ATIVA:-0}"
 IA_NOME="${IA_NOME:-smithi}"
@@ -768,6 +797,30 @@ configurar_hotkeys() {
     done
 }
 
+configurar_downloads() {
+    local motor tor aria axel wget ytdlp
+    motor=$(whiptail --title "Downloader padrão" --radiolist "Links diretos (vídeos continuam no yt-dlp):" 14 72 4 "aria" "aria2c (padrão)" $( [ "${DOWNLOAD_ENGINE:-aria}" = aria ] && echo ON || echo OFF ) "axel" "Axel" $( [ "${DOWNLOAD_ENGINE:-aria}" = axel ] && echo ON || echo OFF ) "wget" "Wget" $( [ "${DOWNLOAD_ENGINE:-aria}" = wget ] && echo ON || echo OFF ) "ytdlp" "yt-dlp" $( [ "${DOWNLOAD_ENGINE:-aria}" = ytdlp ] && echo ON || echo OFF ) 3>&1 1>&2 2>&3) || return
+    [ -n "$motor" ] && DOWNLOAD_ENGINE="$motor"
+    tor=$(whiptail --title "Rede Tor" --radiolist "Tor deve estar ativo em 127.0.0.1:9050:" 10 70 2 "0" "Desligado (padrão)" $( [ "${DOWNLOAD_TOR:-0}" = 0 ] && echo ON || echo OFF ) "1" "Usar Tor SOCKS5" $( [ "${DOWNLOAD_TOR:-0}" = 1 ] && echo ON || echo OFF ) 3>&1 1>&2 2>&3) || return
+    DOWNLOAD_TOR="${tor:-0}"
+    aria=$(whiptail --title "Parâmetros aria2c" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_ARIA_ARGS:-}" 3>&1 1>&2 2>&3) || return
+    axel=$(whiptail --title "Parâmetros Axel" --inputbox "Default: --insecure -n 4" 9 75 "${DOWNLOAD_AXEL_ARGS:---insecure -n 4}" 3>&1 1>&2 2>&3) || return
+    wget=$(whiptail --title "Parâmetros Wget" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_WGET_ARGS:---no-check-certificate}" 3>&1 1>&2 2>&3) || return
+    ytdlp=$(whiptail --title "Parâmetros yt-dlp" --inputbox "Parâmetros extras:" 9 75 "${DOWNLOAD_YTDLP_ARGS:-}" 3>&1 1>&2 2>&3) || return
+    DOWNLOAD_ARIA_ARGS="$aria"; DOWNLOAD_AXEL_ARGS="$axel"; DOWNLOAD_WGET_ARGS="$wget"; DOWNLOAD_YTDLP_ARGS="$ytdlp"
+    cat >> "$CONFIG_FILE" <<EOF
+DOWNLOAD_ENGINE="$DOWNLOAD_ENGINE"
+DOWNLOAD_TOR="$DOWNLOAD_TOR"
+DOWNLOAD_ARIA_ARGS="$DOWNLOAD_ARIA_ARGS"
+DOWNLOAD_AXEL_ARGS="$DOWNLOAD_AXEL_ARGS"
+DOWNLOAD_WGET_ARGS="$DOWNLOAD_WGET_ARGS"
+DOWNLOAD_YTDLP_ARGS="$DOWNLOAD_YTDLP_ARGS"
+EOF
+    whiptail --title "Downloads" --msgbox "Salvo.
+Downloader: $DOWNLOAD_ENGINE
+Tor: $([ "$DOWNLOAD_TOR" = 1 ] && echo ATIVO || echo desligado)" 9 60
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -778,7 +831,7 @@ configurar_defaults() {
     ia_lab="$([ "${IA_ATIVA:-0}" = "1" ] && echo "ON (${IA_NOME:-smithi})" || echo "OFF")"
     f9_acao=$(whiptail --title "F9 — eazy ${EAZY_VERSION} · $agora" \
         --menu "Config · diagnóstico · seleção\nOP sel: $op_lab · IA: $ia_lab" 24 78 14 \
-        "config" "Configurar o eazy" \
+        "config" "Configurar o eazy (inclui downloads/Tor)" \
         "hotkeys" "Hotkeys — config completa de atalhos" \
         "hot_ctrl" "Ver atalhos CTRL" \
         "hot_alt" "Ver atalhos ALT" \
@@ -789,9 +842,11 @@ configurar_defaults() {
         "sound" "Teste de som" \
         "shell" "Shell do sistema (neste diretório)" \
         "exitdir" "Ao sair: dir do navegador ou o anterior" \
+        "download" "Downloads — downloader/Tor/parâmetros" \
         "lixeira" "Abrir lixeira do sistema" \
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
         "ia" "IA ativa: $ia_lab" \
+        "ia_chat" "Abrir chat com IA" \
         "cancel" "Voltar" \
         3>&1 1>&2 2>&3)
     case "$f9_acao" in
@@ -799,6 +854,7 @@ configurar_defaults() {
         sound) testar_som; return ;;
         shell) abrir_shell_sistema; return ;;
         exitdir) configurar_dir_saida; return ;;
+        download) configurar_downloads; return ;;
         lixeira) abrir_lixeira; return ;;
         export_notas) exportar_notas_eazy; return ;;
         hotkeys) configurar_hotkeys; return ;;
@@ -816,7 +872,11 @@ configurar_defaults() {
                     echo "IA_ATIVA=\"$IA_ATIVA\"" >> "$CONFIG_FILE"
                 fi
             fi
-            whiptail --title "IA" --msgbox "IA ${IA_NOME:-smithi}: $([ "$IA_ATIVA" = "1" ] && echo ATIVA || echo desligada)\n\n(Integração placeholder — use para marcar preferência.)" 11 60
+            whiptail --title "IA" --msgbox "IA ${IA_NOME:-smithi}: $([ "$IA_ATIVA" = "1" ] && echo ATIVA || echo desligada)\n\nUse 'Abrir chat com IA' depois de configurar EAZY_AI_API_KEY ou OPENROUTER_API_KEY." 11 70
+            return
+            ;;
+        ia_chat)
+            eazy_ia_chat
             return
             ;;
         config) : ;;
@@ -852,6 +912,13 @@ configurar_defaults() {
         --inputbox "Caminho da pasta que o eazy deve abrir ao iniciar:" 10 65 "$DIR_PADRAO" \
         3>&1 1>&2 2>&3)
     [ -n "$novo_dir" ] && DIR_PADRAO="$novo_dir"
+
+    local novo_download_dir
+    novo_download_dir=$(whiptail --title "Configuração: Pasta Padrão de Downloads" \
+        --inputbox "Pasta onde os downloads serão salvos por padrão:\n(default: $HOME/Downloads)" 11 72 "$DOWNLOAD_DIR" \
+        3>&1 1>&2 2>&3)
+    [ -n "$novo_download_dir" ] && DOWNLOAD_DIR="$novo_download_dir"
+    DOWNLOAD_DIR="${DOWNLOAD_DIR:-${HOME}/Downloads}"
 
     local novo_pl_dir
     novo_pl_dir=$(whiptail --title "Configuração: Pasta Padrão de Playlists" \
@@ -908,6 +975,7 @@ OSD_PADRAO="$OSD_PADRAO"
 VOL_PADRAO="$VOL_PADRAO"
 DIR_PADRAO="$DIR_PADRAO"
 PLAYLIST_DIR_PADRAO="$PLAYLIST_DIR_PADRAO"
+DOWNLOAD_DIR="$DOWNLOAD_DIR"
 PLAYER_PADRAO="$PLAYER_PADRAO"
 SEM_AUDIO="$SEM_AUDIO"
 PREVIEW_ATIVO="$preview_keep"
@@ -915,7 +983,7 @@ EXIT_DIR_MODE="$exit_keep"
 PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
 EOF
-    whiptail --title "Sucesso" --msgbox "Configurações salvas em:\n$CONFIG_FILE\n\nPlayer: $PLAYER_PADRAO\nPython: ${PYTHON_CMD:-python3}\nShell: ${SHELL_CMD:-bash}\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 14 55
+    whiptail --title "Sucesso" --msgbox "Configurações salvas em:\n$CONFIG_FILE\n\nDownloads: $DOWNLOAD_DIR\nPlayer: $PLAYER_PADRAO\nPython: ${PYTHON_CMD:-python3}\nShell: ${SHELL_CMD:-bash}\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 14 55
 }
 
 # --- FUNÇÃO DE AJUDA VISUAL (WHIPTAIL) ---
@@ -934,18 +1002,21 @@ Argumentos:
 Opções:
   -h, --help         Mostra esta ajuda
   -V, --version      Mostra a versão
-  --config           Assistente de configuração (player, volume, pastas…)
+  --config           Assistente de configuração (inclui pasta de downloads)
+  --ai               Abre o chat de IA configurado via OpenRouter
   --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
   --shell-init       Imprime função bash: eazy muda de pasta ao sair
   --install          Instala dependências, comando global e scripts auxiliares
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+  --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
+  --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
   -m, --maintenance  Menu de manutenção (dados + sistema + completa)
   -a, --advanced-maintenance
                      Manutenção avançada (seleção fina de arquivos do eazy)
 
 Atalhos principais (dentro do eazy):
-  Enter              Tocar só o item sob o cursor / entrar na pasta
+  Enter              Abrir/tocar; em .deb mostra dados e instala com confirmação
   Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
   Tab · Espaço       Marcar itens (seleção persistente entre pastas)
   Ctrl-A             Selecionar todos os visíveis
@@ -955,7 +1026,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-P             Alternar Filas 1 → 2 → 3 → listas → duplicados → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
-  Ctrl-B             Downloads (yt-dlp, aria2c, axel, wget)
+  Ctrl-B             Downloads (inclui magnets/.torrent e destino padrão: $HOME/Downloads)
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
@@ -968,7 +1039,7 @@ Atalhos principais (dentro do eazy):
   Shift+Del         Apagar seleção (pergunta: local ou global)
   Alt-D             Apagar do disco
   F9                 Configuração, overview e teste de som
-  F10                Ajuda expandida
+  F10                Ajuda expandida (atalhos, .deb, downloads, Tor e configuração)
   F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
   Q · X · Ctrl-Q     Sair (salva sessão)
 
@@ -987,6 +1058,9 @@ Arquivos de configuração:
   ~/.config/eazy/selected_paths
   ~/.config/eazy/temp_playlist_{1,2,3}
   ~/.config/eazy/scripts/manut-completa.sh
+
+Em um arquivo .deb: pressione Enter para conferir o pacote e instalar com APT.
+A lista usa TAM · DATA · TIPO e mantém o ciclo visual idx3 de três cores.
 
 Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk
 Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools
@@ -2495,27 +2569,62 @@ if [ "$1" = "--install" ]; then
         esac
     }
 
+    # Detecta desktop (GNOME / KDE / outro) para deps e integração de menu
+    DESKTOP_ENV="outro"
+    case "${XDG_CURRENT_DESKTOP:-}${DESKTOP_SESSION:-}${XDG_SESSION_DESKTOP:-}" in
+        *[Kk][Dd][Ee]*|*[Pp]lasma*) DESKTOP_ENV="kde" ;;
+        *[Gg][Nn][Oo][Mm][Ee]*|*[Cc]innamon*|*Unity*) DESKTOP_ENV="gnome" ;;
+    esac
+    [ -n "${KDE_FULL_SESSION:-}" ] && DESKTOP_ENV="kde"
+    [ -n "${GNOME_DESKTOP_SESSION_ID:-}" ] && DESKTOP_ENV="gnome"
+    echo -e "Desktop detectado: \033[1;37m${DESKTOP_ENV}\033[0m"
+
     if command -v apt-get &>/dev/null || command -v apt &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapt\033[0m"
-        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
+        # Core + player + utilitários de mídia
+        instalar_pkgs apt fzf mpv mplayer gawk sed findutils whiptail wget curl file axel aria2 tor torsocks unzip p7zip-full yt-dlp ffmpeg imagemagick poppler-utils img2pdf chafa xdg-utils vlc
+        # Diagnóstico / sistema
         instalar_pkgs apt inxi lm-sensors smartmontools pciutils usbutils lshw dmidecode iw network-manager upower x11-xserver-utils mesa-utils vulkan-tools alsa-utils pulseaudio-utils
-        echo -e "\033[0;90mRAR oficial é opcional e depende do repositório non-free; a leitura de listas .rar continua disponível.\033[0m"
+        # PipeWire (comum em GNOME e KDE modernos)
+        instalar_pkgs apt pipewire pipewire-pulse wireplumber 2>/dev/null || true
+        case "$DESKTOP_ENV" in
+            kde)
+                echo -e "\033[0;90mIntegrando KDE (opcional)…\033[0m"
+                instalar_pkgs apt konsole dolphin kate kio-extras breeze-icon-theme 2>/dev/null || true
+                ;;
+            gnome)
+                echo -e "\033[0;90mIntegrando GNOME (opcional)…\033[0m"
+                instalar_pkgs apt gnome-terminal nautilus gedit evince 2>/dev/null || true
+                ;;
+        esac
+        echo -e "\033[0;90mRAR oficial é opcional (repo non-free); leitura de .rar continua via p7zip.\033[0m"
     elif command -v pacman &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mpacman\033[0m"
-        # Arch: rar costuma estar no AUR; 7z como fallback na extração
-        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs pacman fzf mpv mplayer gawk sed findutils libnewt wget axel aria2 tor torsocks unzip p7zip yt-dlp ffmpeg imagemagick poppler chafa xdg-utils
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs pacman konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs pacman gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v dnf &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mdnf\033[0m"
-        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip p7zip-plugins yt-dlp
+        instalar_pkgs dnf fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip p7zip-plugins yt-dlp ffmpeg ImageMagick poppler-utils chafa xdg-utils
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs dnf konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs dnf gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v zypper &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mzypper\033[0m"
-        instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs zypper fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip yt-dlp
+        case "$DESKTOP_ENV" in
+            kde) instalar_pkgs zypper konsole dolphin kate 2>/dev/null || true ;;
+            gnome) instalar_pkgs zypper gnome-terminal nautilus gedit 2>/dev/null || true ;;
+        esac
     elif command -v apk &>/dev/null; then
         echo -e "Gerenciador: \033[1;37mapk\033[0m (Alpine)"
-        instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 unzip p7zip yt-dlp
+        instalar_pkgs apk fzf mpv mplayer gawk sed findutils newt wget axel aria2 tor torsocks unzip p7zip yt-dlp
     else
         echo -e "\033[1;31mNenhum gerenciador conhecido (apt/pacman/dnf/zypper/apk).\033[0m" >&2
-        echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget" >&2
+        echo -e "Instale manualmente: fzf mpv whiptail gawk findutils wget xdg-utils" >&2
         exit 1
     fi
 
@@ -2532,10 +2641,12 @@ if [ "$1" = "--install" ]; then
     [ -f "$DESKTOP_SRC" ] || DESKTOP_SRC="$(dirname -- "$SCRIPT_ATUAL")/../share/applications/eazy.desktop"
     EDITOR_SRC="$SCRIPT_DIR/eazy-notes-editor"
     [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
+    AI_SRC="$SCRIPT_DIR/eazy-ai.py"
+    [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     # Estrutura completa de dados do usuário; o cache de busca continua temporário.
     mkdir -p "$CONFIG_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$HOME/Documentos/Easy-Notes"
-    touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE"
+    touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$TORRENT_QUEUE"
     eazy_instalar_script_manut_completa >/dev/null 2>&1 || true
 
     echo -e "\033[1;34mInstalando eazy ${EAZY_VERSION} nos destinos compatíveis...\033[0m"
@@ -2553,11 +2664,29 @@ if [ "$1" = "--install" ]; then
             exit 1
         fi
     fi
+    if [ -f "$AI_SRC" ]; then
+        if sudo install -Dm755 "$AI_SRC" /usr/lib/eazy/eazy-ai.py; then
+            echo -e "\033[1;32m✓\033[0m Cliente de IA: /usr/lib/eazy/eazy-ai.py"
+        else
+            echo -e "\033[1;31m✗\033[0m Falha ao instalar o cliente de IA" >&2
+            exit 1
+        fi
+    fi
     if [ -f "$DESKTOP_SRC" ]; then
         mkdir -p "$DESKTOP_DIR"
         cp "$DESKTOP_SRC" "$DESKTOP_DIR/eazy.desktop"
+        # Cópia no sistema (menu GNOME/KDE de todos os usuários)
+        if sudo install -Dm644 "$DESKTOP_SRC" /usr/share/applications/eazy.desktop 2>/dev/null; then
+            echo -e "\033[1;32m✓\033[0m Launcher sistema: /usr/share/applications/eazy.desktop"
+        fi
         echo -e "\033[1;32m✓\033[0m Launcher: $DESKTOP_DIR/eazy.desktop"
         command -v update-desktop-database &>/dev/null && update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+        command -v update-desktop-database &>/dev/null && sudo update-desktop-database /usr/share/applications 2>/dev/null || true
+        # KDE: regenera cache do menu
+        command -v kbuildsycoca6 &>/dev/null && kbuildsycoca6 --noincremental 2>/dev/null || true
+        command -v kbuildsycoca5 &>/dev/null && kbuildsycoca5 --noincremental 2>/dev/null || true
+        # GNOME: atualiza cache de apps se disponível
+        command -v glib-compile-schemas &>/dev/null && true
     fi
 
     MAN_SRC="$SCRIPT_DIR/eazy.1"
@@ -2591,6 +2720,9 @@ elif [ "$1" = "--uninstall" ]; then
     if [ -f /usr/lib/eazy/eazy ]; then
         sudo rm -f /usr/lib/eazy/eazy && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy" && REMOVIDO=1
     fi
+    if [ -f /usr/lib/eazy/eazy-ai.py ]; then
+        sudo rm -f /usr/lib/eazy/eazy-ai.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-ai.py" && REMOVIDO=1
+    fi
     INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
     INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
     [ -n "$INSTALL_HOME" ] || INSTALL_HOME="$HOME"
@@ -2622,7 +2754,7 @@ elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exibir_help_cli
     exit 0
 elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
-    echo "${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME})"
+    printf "\033[1;32m%s %s (%s)\033[0m\n" "$EAZY_NAME" "$EAZY_VERSION" "$EAZY_CODENAME"
     exit 0
 elif [ "$1" = "--shell-init" ]; then
     cat <<'SHELLEOF'
@@ -2657,6 +2789,27 @@ elif [ "$1" = "--restore-keys" ]; then
 elif [ "$1" = "--config" ]; then
     configurar_defaults
     exit 0
+elif [ "$1" = "--ai" ]; then
+    eazy_ia_chat
+    exit $?
+elif [ "$1" = "--torrent-list" ]; then
+    list_file="${2:-$CONFIG_DIR/torrents.list}"
+    mkdir -p "$(dirname -- "$list_file")"
+    : > "$list_file"
+    if [ -f "$DOWNLOAD_QUEUE" ]; then
+        awk -F'|' '$1 == "torrent" && $2 != "" {print $2}' "$DOWNLOAD_QUEUE" | awk '!seen[$0]++' > "$list_file"
+    fi
+    [ -s "$list_file" ] || printf '# Um magnet ou arquivo .torrent por linha
+' > "$list_file"
+    echo "Lista criada: $list_file"
+    echo "Edite e execute: eazy-tor --list "$list_file""
+    exit 0
+elif [ "$1" = "--torrent" ]; then
+    shift
+    torrent_cmd="${EAZY_INSTALL_DIR}/eazy-tor"
+    [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v eazy-tor 2>/dev/null || true)"
+    [ -n "$torrent_cmd" ] || { echo "eazy-tor não encontrado. Instale o pacote eazy." >&2; exit 1; }
+    exec "$torrent_cmd" "$@"
 elif [ "$1" = "--update-ytdlp" ]; then
     # Atualiza yt-dlp SEM pip (baixa binário oficial do GitHub)
     DEST_YT="$HOME/.local/bin"
@@ -2762,6 +2915,7 @@ salvar_pesquisa_atual() {
         printf 'BUSCA_TAM_LABEL=%q\n' "${BUSCA_TAM_LABEL:-}"
         printf 'BUSCA_CONTEUDO=%q\n' "${BUSCA_CONTEUDO:-}"
         printf 'FZF_QUERY=%q\n' "${FZF_QUERY:-}"
+        printf 'BUSCA_ORIGEM=%q\n' "$(pwd -P)"
         printf 'BUSCA_RESULTADO_FILE=%q\n' "${arquivo%.search}.results.tsv"
     } > "$arquivo"
     # Congela o resultado que já foi calculado nesta sessão; abrir depois não refaz a busca.
@@ -2773,7 +2927,171 @@ salvar_pesquisa_atual() {
     else
         : > "${arquivo%.search}.results.tsv"
     fi
+    # O cache legado contém caminhos relativos (por exemplo, vids/y.mpg).
+    # O snapshot precisa continuar abrindo mesmo depois de mudar de pasta.
+    normalizar_snapshot_busca "${arquivo%.search}.results.tsv" "$(pwd -P)"
     whiptail --title "Pesquisa salva" --msgbox "Pesquisa salva como:\n$nome\n\nResultado congelado para reabrir sem refazer a busca." 9 65
+}
+
+# --- Exportar pesquisa para HTML ---
+exportar_pesquisa_html() {
+    local origem_tsv="$1"
+    local titulo="${2:-pesquisa}"
+    local criterios="${3:-}"
+
+    if [[ -z "$origem_tsv" || ! -f "$origem_tsv" ]]; then
+        local chave_cache cache_resultado
+        chave_cache=$(chave_cache_busca 2>/dev/null || true)
+        cache_resultado="${BUSCA_CACHE_DIR}/${chave_cache}.tsv"
+        if [[ -f "$cache_resultado" ]]; then
+            origem_tsv="$cache_resultado"
+        else
+            whiptail --title "Exportar HTML" --msgbox "Nenhum resultado de pesquisa disponível para exportar." 8 60
+            return 1
+        fi
+    fi
+
+    local dest_dir
+    if [[ -d "$HOME/Documentos" ]]; then
+        dest_dir="$HOME/Documentos/Easy-Pesquisas"
+    else
+        dest_dir="$HOME/Documents/Easy-Pesquisas"
+    fi
+    mkdir -p "$dest_dir" 2>/dev/null || true
+
+    local nome_limpo data_hora arquivo_html
+    nome_limpo=$(printf '%s' "$titulo" | tr '/\\:*?"<>|' '_' | tr -s ' ' '_' | cut -c1-60)
+    data_hora=$(date "+%Y-%m-%d_%H%M%S")
+    arquivo_html="$dest_dir/${nome_limpo}-${data_hora}.html"
+
+    local total
+    total=$(wc -l < "$origem_tsv" 2>/dev/null | tr -cd '0-9')
+    total=${total:-0}
+
+    {
+        cat <<EOF
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eazy — $titulo</title>
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --text:#e6e6e6; --muted:#9aa0a6; --accent:#6cb6ff; --border:#2a2f3a; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--text); line-height:1.45; }
+  .wrap { max-width:1100px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:1.6rem; margin:0 0 6px; }
+  .meta { color:var(--muted); font-size:0.92rem; margin-bottom:18px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px 18px; margin-bottom:22px; }
+  .crit { white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:0.9rem; color:#cfd5dd; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; font-size:0.85rem; text-transform:uppercase; letter-spacing:.03em; }
+  tr:hover td { background:rgba(108,182,255,.06); }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .path { font-size:0.86rem; color:var(--muted); word-break:break-all; }
+  .foot { margin-top:28px; color:var(--muted); font-size:0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔎 $titulo</h1>
+  <div class="meta">Exportado em $(date "+%Y-%m-%d %H:%M:%S") · $total itens · gerado pelo eazy</div>
+EOF
+
+        if [[ -n "$criterios" ]]; then
+            printf '<div class="card"><div class="crit">%s</div></div>\n' "$(printf '%s' "$criterios" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')"
+        fi
+
+        cat <<EOF
+  <div class="card" style="padding:0; overflow:auto;">
+  <table>
+    <thead>
+      <tr>
+        <th style="width:42%">Nome</th>
+        <th style="width:12%">Tamanho</th>
+        <th>Caminho</th>
+      </tr>
+    </thead>
+    <tbody>
+EOF
+
+        while IFS=$'\t' read -r col1 col2 col3 col4 col5 resto || [[ -n "$col1" ]]; do
+            caminho="$resto"
+            [[ -z "$caminho" ]] && caminho="$col5"
+            [[ -z "$caminho" ]] && caminho="$col4"
+            [[ -z "$caminho" ]] && caminho="$col3"
+            [[ -z "$caminho" ]] && caminho="$col2"
+            [[ -z "$caminho" ]] && caminho="$col1"
+            caminho=$(printf '%s' "$caminho" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            [[ -z "$caminho" ]] && continue
+
+            nome=$(basename -- "$caminho" 2>/dev/null || printf '%s' "$caminho")
+            tamanho=""
+            for c in "$col1" "$col2" "$col3" "$col4"; do
+                if printf '%s' "$c" | grep -Eq '^[0-9]+([.,][0-9]+)?[[:space:]]*[KMGTP]?i?B?$'; then
+                    tamanho="$c"
+                    break
+                fi
+            done
+            [[ -z "$tamanho" ]] && tamanho="—"
+
+            nome_esc=$(printf '%s' "$nome" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+            path_esc=$(printf '%s' "$caminho" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')
+            file_url=$(printf '%s' "$caminho" | python3 -c 'import sys,urllib.parse; print("file://"+urllib.parse.quote(sys.stdin.read().strip()))' 2>/dev/null || printf 'file://%s' "$caminho")
+
+            printf '      <tr>\n'
+            printf '        <td><a href="%s">%s</a></td>\n' "$file_url" "$nome_esc"
+            printf '        <td>%s</td>\n' "$(printf '%s' "$tamanho" | sed 's/&/\&amp;/g;s/</\&lt;/g;s/>/\&gt;/g')"
+            printf '        <td class="path">%s</td>\n' "$path_esc"
+            printf '      </tr>\n'
+        done < "$origem_tsv"
+
+        cat <<EOF
+    </tbody>
+  </table>
+  </div>
+  <div class="foot">Arquivo gerado pelo eazy · https://github.com/vapesmadcat-blip/Easy_Player</div>
+</div>
+</body>
+</html>
+EOF
+    } > "$arquivo_html"
+
+    if whiptail --title "Exportar HTML" --yesno "HTML salvo em:\n\n$arquivo_html\n\nAbrir no navegador agora?" 12 72; then
+        xdg-open "$arquivo_html" 2>/dev/null || sensible-browser "$arquivo_html" 2>/dev/null || true
+    fi
+}
+
+
+normalizar_snapshot_busca() {
+    local arquivo="$1" base="${2:-$(pwd -P)}" tmp abs
+    [ -f "$arquivo" ] || return 0
+    tmp="${arquivo}.tmp.$$"
+    : > "$tmp" || return 1
+    while IFS=$'\t' read -r bytes mtime tipo nome caminho; do
+        [ -z "$caminho" ] && continue
+        if [[ "$caminho" == /* ]]; then
+            abs="$caminho"
+        else
+            abs=$(cd -- "$base" 2>/dev/null && caminho_absoluto "$caminho") || abs="$caminho"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\n' "$bytes" "$mtime" "$tipo" "$nome" "$abs" >> "$tmp"
+    done < "$arquivo"
+    mv -f "$tmp" "$arquivo"
+}
+caminho_absoluto_busca() {
+    local p="$1" base="${BUSCA_ORIGEM:-$(pwd -P)}"
+    [ -n "$p" ] || return 1
+    if [[ "$p" == /* ]]; then
+        printf '%s\n' "$p"
+    elif [ -d "$base" ]; then
+        (cd -- "$base" && caminho_absoluto "$p")
+    else
+        caminho_absoluto "$p"
+    fi
 }
 carregar_pesquisa_salva() {
     [ -d "$SAVED_SEARCHES_DIR" ] || return 1
@@ -2786,11 +3104,48 @@ carregar_pesquisa_salva() {
     [ "${#opcoes[@]}" -gt 0 ] || return 1
     escolha=$(whiptail --title "Pesquisas salvas" --menu "Escolha uma pesquisa:" 18 70 8 "${opcoes[@]}" 3>&1 1>&2 2>&3) || return 1
     [ -n "$escolha" ] || return 1
+    acao_ps=$(whiptail --title "Pesquisa: $escolha" --menu "O que deseja fazer?" 13 60 3 \
+        "A" "Abrir pesquisa" \
+        "H" "Exportar esta pesquisa para HTML" \
+        "C" "Cancelar" 3>&1 1>&2 2>&3) || return 1
+    if [ "$acao_ps" = "H" ]; then
+        local snap="$SAVED_SEARCHES_DIR/$escolha.results.tsv"
+        local crit=""
+        if [ -f "$SAVED_SEARCHES_DIR/$escolha.search" ]; then
+            # shellcheck disable=SC1090
+            source "$SAVED_SEARCHES_DIR/$escolha.search" 2>/dev/null || true
+            crit="Extensão: ${EXT_BUSCA:-qualquer}\nTamanho: ${BUSCA_TAM_LABEL:-qualquer}\nConteúdo: ${BUSCA_CONTEUDO:-—}\nOrigem: ${BUSCA_ORIGEM:-—}"
+        fi
+        exportar_pesquisa_html "$snap" "$escolha" "$crit"
+        return 1
+    fi
+    [ "$acao_ps" = "A" ] || return 1
     arq="$SAVED_SEARCHES_DIR/$escolha.search"
     # Arquivos são gerados pelo próprio eazy; carregam as variáveis e o snapshot.
     # shellcheck disable=SC1090
     source "$arq" 2>/dev/null || return 1
-    BUSCA_SNAPSHOT_FILE="${BUSCA_RESULTADO_FILE:-${arq%.search}.results.tsv}"
+    # Older .search files stored the snapshot as a relative filename. Resolve
+    # that reference against the directory containing the saved search, not
+    # against the directory from which eazy was launched.
+    local pesquisa_dir snapshot_ref origem_ref
+    pesquisa_dir=$(cd -- "$(dirname -- "$arq")" 2>/dev/null && pwd -P) || pesquisa_dir="$SAVED_SEARCHES_DIR"
+    origem_ref="${BUSCA_ORIGEM:-$(pwd -P)}"
+    if [[ "$origem_ref" != /* ]]; then
+        origem_ref="$pesquisa_dir/$origem_ref"
+    fi
+    if [ -d "$origem_ref" ]; then
+        BUSCA_ORIGEM=$(cd -- "$origem_ref" 2>/dev/null && pwd -P) || BUSCA_ORIGEM="$origem_ref"
+    else
+        BUSCA_ORIGEM="$origem_ref"
+    fi
+    snapshot_ref="${BUSCA_RESULTADO_FILE:-${arq%.search}.results.tsv}"
+    if [[ "$snapshot_ref" == /* ]]; then
+        BUSCA_SNAPSHOT_FILE="$snapshot_ref"
+    else
+        BUSCA_SNAPSHOT_FILE="$pesquisa_dir/$snapshot_ref"
+    fi
+    # Migra snapshots antigos que ainda guardam o caminho relativo.
+    normalizar_snapshot_busca "$BUSCA_SNAPSHOT_FILE" "${BUSCA_ORIGEM:-$(pwd -P)}"
     BUSCA_REMAKE=0
     if whiptail --title "Pesquisa salva" --yesno "Abrir o resultado salvo sem refazer a pesquisa?\n\nSim = usar o resultado congelado\nNão = refazer agora (remake)" 12 70; then
         :
@@ -3537,7 +3892,7 @@ eazy_editar_fila_downloads() {
         whiptail --title "Downloads" --msgbox "Fila de downloads vazia.\nUse Ctrl+B → Adicionar link." 9 55
         return 0
     fi
-    local tmp escolhido linha engine url rest novo
+    local tmp escolhido linha engine url rest novo novo_engine tor_item
     tmp=$(mktemp "${TMPDIR:-/tmp}/eazy-dl-edit.XXXXXX") || return 1
     # mostra linhas numeradas
     nl -ba "$DOWNLOAD_QUEUE" > "$tmp"
@@ -3552,17 +3907,89 @@ eazy_editar_fila_downloads() {
     engine=$(printf "%s" "$linha" | cut -d"|" -f1)
     url=$(printf "%s" "$linha" | cut -d"|" -f2)
     rest=$(printf "%s" "$linha" | cut -d"|" -f3-)
-    novo=$(whiptail --title "Editar link download #$num" --inputbox "URL / link:\nMotor: $engine" 12 78 "$url" 3>&1 1>&2 2>&3) || return 0
+    tor_item=$(printf "%s" "$linha" | cut -d"|" -f4)
+    [ "$tor_item" != "1" ] && tor_item="0"
+    novo_engine=$(whiptail --title "Editar downloader #$num" --radiolist "Escolha o aplicativo para este item:" 13 65 4 \
+        "aria" "aria2c" $( [ "$engine" = aria ] && echo ON || echo OFF ) \
+        "axel" "Axel" $( [ "$engine" = axel ] && echo ON || echo OFF ) \
+        "wget" "Wget" $( [ "$engine" = wget ] && echo ON || echo OFF ) \
+        "ytdlp" "yt-dlp" $( [ "$engine" = ytdlp ] && echo ON || echo OFF ) \
+        3>&1 1>&2 2>&3) || return 0
+    [ -z "$novo_engine" ] && novo_engine="$engine"
+    novo=$(whiptail --title "Editar link download #$num" --inputbox "URL / link:\nMotor: $novo_engine" 12 78 "$url" 3>&1 1>&2 2>&3) || return 0
     [ -z "$novo" ] && return 0
     # reescreve linha
     local out="${DOWNLOAD_QUEUE}.tmp"
-    awk -v n="$num" -v eng="$engine" -v u="$novo" -v r="$rest" -F"|" "
-        NR==n { print eng \"|\" u \"|\" r; next }
+    awk -v n="$num" -v eng="$novo_engine" -v u="$novo" -v r="$rest" -v tor="$tor_item" -F"|" "
+        NR==n { print eng \"|\" u \"|\" r \"|\" tor; next }
         { print }
     " "$DOWNLOAD_QUEUE" > "$out" && mv -f "$out" "$DOWNLOAD_QUEUE"
     whiptail --title "Downloads" --msgbox "Link #$num atualizado.\n$novo" 10 70
 }
 
+eazy_gerenciar_torrents() {
+    mkdir -p "$CONFIG_DIR" 2>/dev/null || true
+    touch "$TORRENT_QUEUE" "$DOWNLOAD_QUEUE"
+    local acao
+    acao=$(whiptail --title "Torrents · Ctrl+B" --menu "Escolha a ação:" 16 72 5 \
+        "1" "Ver torrents cadastrados" \
+        "2" "Incluir torrent (magnet/.torrent)" \
+        "3" "Deletar torrent cadastrado" \
+        "4" "Voltar" \
+        3>&1 1>&2 2>&3) || return 0
+    case "$acao" in
+        1)
+            local texto="" n=0 linha engine link pass tor
+            while IFS='|' read -r engine link pass tor; do
+                [ "$engine" = "torrent" ] || continue
+                [ -n "$link" ] || continue
+                n=$((n + 1))
+                texto+=$(printf '%d. %s%s\n' "$n" "$link" "$( [ "$tor" = 1 ] && printf '  [TOR]' )")
+            done < "$DOWNLOAD_QUEUE"
+            if [ "$n" -eq 0 ]; then
+                whiptail --title "Torrents" --msgbox "Nenhum torrent cadastrado.\n\nUse Ctrl+B → Torrents → Incluir." 9 62
+            else
+                whiptail --title "Torrents cadastrados ($n)" --scrolltext --textbox <(printf '%s' "$texto") 20 90
+            fi
+            ;;
+        2)
+            local alvo tor_opt destino
+            alvo=$(whiptail --title "Incluir torrent" --inputbox "Cole um magnet ou informe o caminho de um arquivo .torrent:" 10 82 "magnet:?xt=urn:btih:" 3>&1 1>&2 2>&3) || return 0
+            [ -n "$alvo" ] || return 0
+            if [[ "$alvo" != magnet:* && ! -f "$alvo" && "$alvo" != *.torrent ]]; then
+                whiptail --title "Torrent" --msgbox "Informe um magnet válido ou um arquivo .torrent existente." 9 70
+                return 1
+            fi
+            destino=$(whiptail --title "Destino do torrent" --inputbox "Diretório de destino:" 10 75 "${DOWNLOAD_DIR:-$HOME/Downloads/Torrents}" 3>&1 1>&2 2>&3) || return 0
+            [ -n "$destino" ] || destino="${DOWNLOAD_DIR:-$HOME/Downloads/Torrents}"
+            tor_opt=0
+            if whiptail --title "Rede" --yesno "Usar Tor neste torrent?\n\nO serviço Tor/torsocks precisa estar ativo." 10 65; then tor_opt=1; fi
+            printf 'torrent|%s||%s\n' "$alvo" "$tor_opt" >> "$DOWNLOAD_QUEUE"
+            printf 'torrent|%s||%s|%s\n' "$alvo" "$tor_opt" "$destino" >> "$TORRENT_QUEUE"
+            whiptail --title "Torrent" --msgbox "Torrent incluído na fila.\n\nSerá baixado pela opção Ver fila de downloads." 10 65
+            ;;
+        3)
+            local opcoes=() idx=0 escolha remove_line
+            while IFS= read -r linha; do
+                [[ "$linha" == torrent\|* ]] || continue
+                idx=$((idx + 1))
+                link=$(printf '%s' "$linha" | cut -d'|' -f2)
+                opcoes+=("$idx" "$link")
+            done < "$DOWNLOAD_QUEUE"
+            [ "$idx" -gt 0 ] || { whiptail --title "Torrents" --msgbox "Nenhum torrent cadastrado." 8 50; return 0; }
+            escolha=$(whiptail --title "Deletar torrent" --menu "Selecione o torrent a remover:" 18 90 8 "${opcoes[@]}" 3>&1 1>&2 2>&3) || return 0
+            [ -n "$escolha" ] || return 0
+            remove_line=$(awk -F'|' -v wanted="$escolha" '$1 == "torrent" { n++; if (n == wanted) print; }' "$DOWNLOAD_QUEUE")
+            [ -n "$remove_line" ] || return 1
+            if whiptail --title "Confirmar exclusão" --yesno "Deletar este torrent da fila?\n\n$(printf '%s' "$remove_line" | cut -d'|' -f2)\n\nO arquivo .torrent no disco não será apagado." 12 78; then
+                awk -F'|' -v wanted="$escolha" 'BEGIN { OFS="|" } $1 == "torrent" { n++; if (n == wanted) next } { print }' "$DOWNLOAD_QUEUE" > "$DOWNLOAD_QUEUE.tmp" && mv -f "$DOWNLOAD_QUEUE.tmp" "$DOWNLOAD_QUEUE"
+                grep -Fv -- "|$(printf '%s' "$remove_line" | cut -d'|' -f2)|" "$TORRENT_QUEUE" > "$TORRENT_QUEUE.tmp" 2>/dev/null || :
+                mv -f "$TORRENT_QUEUE.tmp" "$TORRENT_QUEUE"
+                whiptail --title "Torrents" --msgbox "Torrent removido da fila." 8 50
+            fi
+            ;;
+    esac
+}
 
 exportar_notas_eazy() {
     local dest="$HOME/Documentos/Easy-Notes"
@@ -4453,6 +4880,16 @@ eazy_status_header() {
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
     fi
+    # Legenda de cores (linha inferior da janela / header)
+    # Separadores ASCII 195 (0xC3) e 180 (0xB4) — abrem espaço visual (├ … ┤ em CP437)
+    # Em UTF-8 usamos os box-drawing equivalentes para legibilidade.
+    local leg_l=$'\u251c' leg_r=$'\u2524'
+    # Fallback se o shell não expandir \u: bytes ASCII 195/180
+    if [ "${#leg_l}" -ne 1 ] && [ "${#leg_l}" -ne 3 ]; then
+        leg_l=$(printf '\303')  # 195
+        leg_r=$(printf '\264')  # 180
+    fi
+    printf "\n%s \033[1;34m📁 DIR\033[0m \033[1;36m🎬 VID\033[0m \033[1;33m🎵 AUD\033[0m \033[1;35m🖼️ IMG\033[0m \033[1;31m📦 ZIP\033[0m \033[0;32m📄 DOC\033[0m \033[0;90m· idx=ordem\033[0m %s" "$leg_l" "$leg_r"
 }
 
 # Pergunta filtro de tamanho para a busca recursiva
@@ -4574,9 +5011,16 @@ adicionar_download() {
 
     local gerenciador extra=""
     local is_video=0
+    local is_torrent=0
+    if [[ "$link" == magnet:* ]] || [[ "$link" =~ \.torrent$ ]] || [ -f "$link" ] && [[ "$link" == *.torrent ]]; then
+        is_torrent=1
+    fi
     eh_url_video_online "$link" && is_video=1
 
-    if [ "$is_video" -eq 1 ]; then
+    if [ "$is_torrent" -eq 1 ]; then
+        gerenciador="torrent"
+        extra=""
+    elif [ "$is_video" -eq 1 ]; then
         # YouTube etc. SÓ funcionam com yt-dlp (aria/wget/axel baixam HTML e falham)
         if ! encontrar_ytdlp &>/dev/null; then
             whiptail --title "yt-dlp necessário" --msgbox \
@@ -4610,15 +5054,8 @@ Se der erro 400/403, atualize SEM pip:
             3>&1 1>&2 2>&3)
         [ -z "$extra" ] && return
     else
-        # Arquivo direto: aria / axel / wget / yt-dlp
-        gerenciador=$(whiptail --title "Escolher Ferramenta" --radiolist "Motor de download:" 15 62 4 \
-            "aria" "Aria2c (multi-conexão, recomendado)" "ON" \
-            "axel" "Axel" "OFF" \
-            "wget" "Wget (simples)" "OFF" \
-            "ytdlp" "yt-dlp (se for página de vídeo)" "OFF" \
-            3>&1 1>&2 2>&3)
-        [ -z "$gerenciador" ] && return
-
+        # Link direto: usa o downloader configurado, sem perguntar a cada vez.
+        gerenciador="${DOWNLOAD_ENGINE:-aria}"
         if [ "$gerenciador" = "ytdlp" ]; then
             if ! encontrar_ytdlp &>/dev/null; then
                 whiptail --title "yt-dlp ausente" --msgbox "yt-dlp não instalado.\n\nRode:  eazy --update-ytdlp" 9 50
@@ -4653,8 +5090,13 @@ Ou use eazy --install" 12 55
         fi
     fi
 
-    echo "$gerenciador|$link|$extra" >> "$DOWNLOAD_QUEUE"
-    whiptail --title "Sucesso" --msgbox "Adicionado à fila!\n\nMotor: $gerenciador" 9 45
+    local usar_tor="0"
+    if whiptail --title "Rede Tor" --checklist "Usar Tor neste download?\n(Tor deve estar ativo em 127.0.0.1:9050)" 10 72 1 \
+        "TOR" "SOCKS5 127.0.0.1:9050" OFF 3>&1 1>&2 2>&3 | grep -q TOR; then
+        usar_tor="1"
+    fi
+    echo "$gerenciador|$link|$extra|$usar_tor" >> "$DOWNLOAD_QUEUE"
+    whiptail --title "Sucesso" --msgbox "Adicionado à fila!\n\nMotor: $gerenciador\nTor: $([ "$usar_tor" = 1 ] && echo ATIVO || echo desligado)" 10 50
 }
 
 extrair_com_senha() {
@@ -5340,12 +5782,16 @@ verificar_disco_smart() {
 
 processos_pesados() {
     {
-        echo "10 Processos que mais usam CPU:"
-        ps aux --sort=-%cpu 2>/dev/null | head -11 || true
+        printf '%-10s %7s %6s %6s %8s %6s %8s %s\n' \
+            USER PID '%CPU' '%MEM' RSS STAT TEMPO COMANDO
+        ps -eo user=,pid=,%cpu=,%mem=,rss=,stat=,etime=,comm= --sort=-%cpu 2>/dev/null | \
+            head -n 10 || true
         echo ""
-        echo "10 Processos que mais usam memória:"
-        ps aux --sort=-%mem 2>/dev/null | head -11 || true
-    } | eazy_mostrar_texto "Processos Pesados" 26 90
+        printf '%-10s %7s %6s %6s %8s %6s %8s %s\n' \
+            USER PID '%CPU' '%MEM' RSS STAT TEMPO COMANDO
+        ps -eo user=,pid=,%cpu=,%mem=,rss=,stat=,etime=,comm= --sort=-%mem 2>/dev/null | \
+            head -n 10 || true
+    } | eazy_mostrar_texto "Processos Pesados" 26 88
 }
 
 estatisticas_rede() {
@@ -6035,7 +6481,7 @@ obter_lista_rapida() {
                 pct=$((idx * 100 / total_seg))
                 eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
                 seg_tmp="/tmp/eazy_busca_seg_$$"
-                find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+                find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                     -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
                 n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
                 n_seg=${n_seg:-0}
@@ -6050,7 +6496,7 @@ obter_lista_rapida() {
             pct=$((idx * 100 / total_seg))
             eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..."
             seg_tmp="/tmp/eazy_busca_seg_$$"
-            find . -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
+            find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
                 ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
                 -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
             n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
@@ -6139,24 +6585,19 @@ obter_lista_rapida() {
             info = sprintf("%s · %sMB · .%s", dt, mb, ext)
 
             if (ext ~ /^(m3u|pls)$/) {
-                printf "%015d	%s📜 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📜 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(mp3|m4a|wav|flac|ogg)$/) {
-                printf "%015d	%s🎵 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🎵 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
-                printf "%015d	%s🖼️ %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🖼️ %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
-                printf "%015d	%s📦 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s📦 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else {
-                printf "%015d	%s🎬 %-42s%s	%s[%s]%s	%s
-",
+                printf "%015d\t%s🎬 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
@@ -6228,7 +6669,7 @@ obter_lista_rapida() {
         dt = strftime("%d/%m/%y %H:%M", int(mtime))
 
         chave = (modo == "data") ? int(mtime) : bytes
-        # Cor da coluna de índice/ordenação (cicla para identificar ordem)
+        # Ciclo visual idx3: mantém as três cores de ordenação por posição.
         idx++
         c_ord = (idx % 3 == 1) ? c_ord1 : (idx % 3 == 2) ? c_ord2 : c_ord3
 
@@ -6255,11 +6696,11 @@ obter_lista_rapida() {
             tipo_lab = (ext == "—" ? "?" : ext); icon = "📎"; cor = c_size
         }
 
-        # info: data · tamanho · tipo/ext
+        # info: TAM · data · tipo/ext (tamanho primeiro para leitura rápida)
         if (tipo == "d") {
-            info = sprintf("%s · %s", dt, tipo_lab)
+            info = sprintf("-- MB · %s · %s", dt, tipo_lab)
         } else {
-            info = sprintf("%s · %sMB · .%s", dt, mb, tipo_lab)
+            info = sprintf("%sMB · %s · .%s", mb, dt, tipo_lab)
         }
 
         printf "%015d\t%s%s %-36s%s\t%s[%s]%s\t%s\n",
@@ -6271,6 +6712,12 @@ obter_lista_rapida() {
 caminho_absoluto() {
     local p="$1"
     [ -z "$p" ] && return
+    # Resultados de uma pesquisa salva podem ser relativos ao diretório
+    # original da pesquisa, não ao diretório atual do navegador.
+    if [[ "$p" != /* ]] && [ "${MODO_BUSCA:-0}" -eq 1 ] && [ -n "${BUSCA_ORIGEM:-}" ] && [ -d "$BUSCA_ORIGEM" ]; then
+        (cd -- "$BUSCA_ORIGEM" && MODO_BUSCA=0 caminho_absoluto "$p")
+        return
+    fi
     # Já é absoluto?
     if [[ "$p" == /* ]]; then
         printf '%s\n' "$p"
@@ -7769,11 +8216,52 @@ menu_conversoes() {
 }
 
 
+eazy_instalar_deb() {
+    local pacote="$1" nome
+    [ -f "$pacote" ] || return 1
+    clear 2>/dev/null || printf '\033[2J\033[H'
+    printf '\n=== Instalação de pacote Debian ===\n\n'
+    nome=$(basename -- "$pacote")
+    if ! command -v dpkg-deb >/dev/null 2>&1; then
+        whiptail --title "Instalar pacote" --msgbox "dpkg-deb não está instalado." 8 60
+        read -r -p "Pressione Enter para voltar ao eazy..."
+        return 1
+    fi
+    local info
+    info=$(dpkg-deb -f "$pacote" Package Version Description 2>/dev/null | sed -n '1,6p') || {
+        whiptail --title "Pacote inválido" --msgbox "Não foi possível ler:\n$nome" 8 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
+        return 1
+    }
+    if ! whiptail --title "Instalar pacote Debian" --yesno "$info\n\nInstalar este pacote agora?" 16 78; then
+        read -r -p "Pressione Enter para voltar ao eazy..."
+        return 0
+    fi
+    if ! command -v apt-get >/dev/null 2>&1; then
+        whiptail --title "Instalação" --msgbox "apt-get não encontrado.\nUse: sudo dpkg -i '$pacote'" 9 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
+        return 1
+    fi
+    if sudo apt-get install -y -- "$pacote"; then
+        whiptail --title "Instalação concluída" --msgbox "Pacote instalado:\n$nome" 8 65
+        hash -r 2>/dev/null || true
+        read -r -p "Instalação concluída. Pressione Enter para voltar ao eazy..."
+    else
+        whiptail --title "Falha na instalação" --msgbox "A instalação falhou.\nTente:\n sudo apt-get -f install" 10 70
+        read -r -p "Pressione Enter para voltar ao eazy..."
+        return 1
+    fi
+}
+
 eazy_abrir_arquivo_enter() {
     local tocado="$1"
     [ -z "$tocado" ] && return 1
     if [[ "$tocado" =~ ^https?:// ]]; then
         abrir_html_ou_link "$tocado"
+        return $?
+    fi
+    if [[ "$tocado" =~ \.deb$|\.DEB$ ]]; then
+        eazy_instalar_deb "$tocado"
         return $?
     fi
     if eh_playlist_m3u "$tocado" 2>/dev/null; then
@@ -8828,12 +9316,13 @@ Depois use:
         if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
             MODO_DOWNLOAD=0; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; TMP=1; registrar_status
         else
-            escolha_dl=$(whiptail --title "Gerenciador de Downloads · Ctrl+B" --menu "Escolha a ação:" 16 62 5 \
+            escolha_dl=$(whiptail --title "Gerenciador de Downloads · Ctrl+B" --menu "Escolha a ação:" 20 72 8 \
                 "1" "Ver fila de downloads" \
                 "2" "Adicionar link (yt-dlp/aria/…)" \
                 "3" "Editar links da fila" \
                 "4" "Abrir link no browser (sem baixar)" \
                 "5" "Adicionar seleção global às listas/filas" \
+                "6" "Torrents: ver / incluir / deletar" \
                 3>&1 1>&2 2>&3)
             case "$escolha_dl" in
                 1) MODO_DOWNLOAD=1; TMP=2; registrar_status ;;
@@ -8872,6 +9361,7 @@ Depois use:
                         whiptail --title "Listas" --msgbox "Adicionados $addc de $n_sel item(ns) à Fila 1." 9 55
                     fi
                     ;;
+                6) eazy_gerenciar_torrents ;;
             esac
         fi
         continue
@@ -9010,7 +9500,17 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         continue
     elif [ "$tecla" = "ctrl-s" ]; then
         if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
-            salvar_pesquisa_atual
+            acao_busca=$(whiptail --title "Pesquisa atual" --menu "O que deseja fazer?" 12 55 3 \
+                "S" "Salvar pesquisa (snapshot)" \
+                "H" "Exportar resultado para HTML" \
+                "C" "Cancelar" 3>&1 1>&2 2>&3) || continue
+            case "$acao_busca" in
+                S) salvar_pesquisa_atual ;;
+                H)
+                    crit="Extensão: ${EXT_BUSCA:-qualquer}\nTamanho: ${BUSCA_TAM_LABEL:-qualquer}\nConteúdo: ${BUSCA_CONTEUDO:-—}\nOrigem: ${BUSCA_ORIGEM:-$(pwd)}"
+                    exportar_pesquisa_html "" "pesquisa-atual" "$crit"
+                    ;;
+            esac
         else
             salvar_playlist
         fi
@@ -9220,6 +9720,14 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         linha_fila=$(grep "|$link_alvo|" "$DOWNLOAD_QUEUE" | head -n 1)
         engine=$(echo "$linha_fila" | cut -d'|' -f1)
         pass=$(echo "$linha_fila" | cut -d'|' -f3)
+        tor_item=$(echo "$linha_fila" | cut -d'|' -f4)
+        download_dir_item=$(echo "$linha_fila" | cut -d'|' -f5)
+        # O checkbox do item tem prioridade: 0 desligado não herda Tor global.
+        # Apenas filas antigas, sem quarto campo, usam o fallback global.
+        if [ -z "$tor_item" ]; then
+            tor_item="${DOWNLOAD_TOR:-0}"
+        fi
+        [ "$tor_item" = "1" ] || tor_item="0"
 
         if [ -z "$pass" ] && [ -f "$DOWNLOAD_PASSWORDS" ]; then
             pass=$(grep -F "$link_alvo|" "$DOWNLOAD_PASSWORDS" | tail -n1 | cut -d'|' -f2-)
@@ -9227,13 +9735,30 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
         nome_esperado=$(obter_nome_do_link "$link_alvo")
         dir_antes=$(pwd)
+        download_dir="${DOWNLOAD_DIR:-${HOME}/Downloads}"
+        [ -n "$download_dir_item" ] && download_dir="$download_dir_item"
+        tor_proxy="socks5://127.0.0.1:9050"
+        read -r -a ARIA_EXTRA <<< "${DOWNLOAD_ARIA_ARGS:-}"
+        read -r -a AXEL_EXTRA <<< "${DOWNLOAD_AXEL_ARGS:---insecure -n 4}"
+        read -r -a WGET_EXTRA <<< "${DOWNLOAD_WGET_ARGS:---no-check-certificate}"
+        read -r -a YTDLP_EXTRA <<< "${DOWNLOAD_YTDLP_ARGS:-}"
+        TOR_PREFIX=()
+        if [ "$tor_item" = 1 ]; then
+            if command -v torsocks >/dev/null 2>&1; then
+                TOR_PREFIX=(torsocks)
+                echo "   Rede: Tor via torsocks (aria2c/Axel/wget · 127.0.0.1:9050)"
+            else
+                echo "   Tor marcado, mas torsocks não está instalado."
+            fi
+        fi
+        mkdir -p -- "$download_dir" || { echo "Não foi possível criar o destino: $download_dir"; read -p "Pressione Enter para continuar..."; continue; }
 
         # Downloads: tamanho remoto costuma ser desconhecido — exige folga mínima no disco
         {
             read -r _livre_dl _tot_dl < <(info_disco ".")
             _livre_dl=$(echo "${_livre_dl:-0}" | tr -cd '0-9'); _livre_dl=${_livre_dl:-0}
             # Reserva “virtual” de 1 GB para avisar; bloqueio se < mínimo seguro
-            if ! verificar_espaco_disco "$((1024*1024*1024))" "." "Download" \
+            if ! verificar_espaco_disco "$((1024*1024*1024))" "$download_dir" "Download" \
                 "$((1024*1024*1024))|${link_alvo} (estimativa mínima de reserva)"; then
                 continue
             fi
@@ -9250,6 +9775,18 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
 
         status_dl=1
         case "$engine" in
+            torrent)
+                torrent_cmd="$EAZY_INSTALL_DIR/eazy-tor"
+                [ -x "$torrent_cmd" ] || torrent_cmd="$(command -v eazy-tor 2>/dev/null || true)"
+                if [ -z "$torrent_cmd" ]; then
+                    echo -e "\033[1;31meazy-tor não encontrado. Instale o pacote eazy.\033[0m"
+                    status_dl=1
+                else
+                    torrent_args=(--dir "$download_dir")
+                    [ "$tor_item" = 1 ] && torrent_args+=(--tor)
+                    "$torrent_cmd" "${torrent_args[@]}" "$link_alvo" && status_dl=0
+                fi
+                ;;
             ytdlp)
                 YTDLP_BIN=$(encontrar_ytdlp 2>/dev/null || true)
                 if [ -z "$YTDLP_BIN" ]; then
@@ -9288,25 +9825,25 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                     ytdlp_ok=0
                     if [ "$fmt" = "audio" ]; then
                         if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
-                            $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 --audio-quality 0 \
+                            $YTDLP_BIN "${YTDLP_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -f "$fmt_arg" -x --audio-format mp3 --audio-quality 0 \
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 \
                                 "${ARIA_ARGS[@]}" \
-                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         else
                             $YTDLP_BIN -f "$fmt_arg" -x --audio-format mp3 \
-                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                --no-playlist -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         fi
                     else
                         if [[ "$(basename "$YTDLP_BIN")" == yt-dlp* ]]; then
-                            $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
+                            $YTDLP_BIN "${YTDLP_EXTRA[@]}" ${tor_item:+$([ "$tor_item" = 1 ] && echo "--proxy=$tor_proxy")} -f "$fmt_arg" --merge-output-format mp4 \
                                 --extractor-args "youtube:player_client=android,web" \
                                 --no-playlist --newline --retries 5 --fragment-retries 5 \
                                 "${ARIA_ARGS[@]}" \
-                                -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         else
                             $YTDLP_BIN -f "$fmt_arg" --merge-output-format mp4 \
-                                --no-playlist -o "$out_tpl" "$link_limpo" && ytdlp_ok=1
+                                --no-playlist -o "$download_dir/$out_tpl" "$link_limpo" && ytdlp_ok=1
                         fi
                     fi
 
@@ -9317,7 +9854,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                             --extractor-args "youtube:player_client=web" \
                             --no-playlist --newline --retries 5 \
                             "${ARIA_ARGS[@]}" \
-                            -o "$out_tpl" "$link_limpo"; then
+                            -o "$download_dir/$out_tpl" "$link_limpo"; then
                             ytdlp_ok=1
                         fi
                     fi
@@ -9343,20 +9880,19 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 elif [ "$engine" = "aria" ]; then
                     if ! command -v aria2c &>/dev/null; then
                         echo -e "\033[1;31maria2c não instalado.  sudo apt install aria2\033[0m"
-                    elif aria2c --console-log-level=notice -x 4 -s 4 --auto-file-renaming=false \
-                        --allow-overwrite=true "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" aria2c "${ARIA_EXTRA[@]}" --allow-overwrite=true "$link_alvo"; then
                         status_dl=0
                     fi
                 elif [ "$engine" = "axel" ]; then
                     if ! command -v axel &>/dev/null; then
                         echo -e "\033[1;31maxel não instalado.  sudo apt install axel\033[0m"
-                    elif axel --insecure -n 4 -o "$nome_esperado" "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" axel "${AXEL_EXTRA[@]}" -o "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 else
                     if ! command -v wget &>/dev/null; then
                         echo -e "\033[1;31mwget não instalado.  sudo apt install wget\033[0m"
-                    elif wget --no-check-certificate -O "$nome_esperado" "$link_alvo"; then
+                    elif "${TOR_PREFIX[@]}" wget "${WGET_EXTRA[@]}" "${WGET_TOR_ARGS[@]}" -O "$download_dir/$nome_esperado" "$link_alvo"; then
                         status_dl=0
                     fi
                 fi
@@ -9374,13 +9910,15 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         arquivo_baixado=""
         if [ "$engine" = "ytdlp" ]; then
             # Pega o arquivo mais recente da pasta (yt-dlp define o nome)
-            arquivo_baixado=$(find . -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.opus" \) -printf '%T@ %p\n' 2>/dev/null \
-                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
-        elif [ -f "$nome_esperado" ]; then
-            arquivo_baixado="$nome_esperado"
+            arquivo_baixado=$(find "$download_dir" -maxdepth 1 -type f \( -iname "*.mp4" -o -iname "*.mkv" -o -iname "*.webm" -o -iname "*.mp3" -o -iname "*.m4a" -o -iname "*.opus" \) -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2-
+            )
+        elif [ -f "$download_dir/$nome_esperado" ]; then
+            arquivo_baixado="$download_dir/$nome_esperado"
         else
-            arquivo_baixado=$(find . -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null \
-                | sort -nr | head -n1 | cut -d' ' -f2- | sed 's|^\./||')
+            arquivo_baixado=$(find "$download_dir" -maxdepth 1 -type f -printf '%T@ %p\n' 2>/dev/null \
+                | sort -nr | head -n1 | cut -d' ' -f2-
+            )
         fi
 
         if [ -n "$arquivo_baixado" ] && [ -f "$arquivo_baixado" ]; then
