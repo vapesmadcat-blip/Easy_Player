@@ -90,6 +90,46 @@ manutenção COMPLETA — RAM, disco, CPU, órfãos, TRIM, kernel, rede (sudo)
 .TP
 .BR \-a ", " \-\-advanced\-maintenance
 Manutenção avançada com seleção fina de arquivos de dados do eazy.
+.SH TORRENTS (EAZY-TOR)
+O recurso de torrents é executado pelo auxiliar separado
+.BR eazy\-tor .
+Quando chamado com
+.B \-\-torrent ,
+o eazy encaminha as opções diretamente ao auxiliar. O eazy procura primeiro
+um executável ao lado do próprio programa e depois em
+.BR PATH .
+Se o auxiliar não estiver instalado, o eazy informa o erro e encerra.
+.PP
+Uso direto:
+.IP
+.B eazy \-\-torrent
+.RI [ OPÇÕES ]
+.PP
+Consulte as opções disponíveis no auxiliar com:
+.IP
+.B eazy\-tor \-\-help
+.PP
+O Eazy também pode criar uma lista de torrents a partir da fila de
+downloads:
+.IP
+.B eazy \-\-torrent\-list
+.RI [ ARQUIVO ]
+.PP
+Sem um arquivo indicado, a lista é criada em
+.IR ~/.config/eazy/torrents.list .
+Cada linha deve conter um link magnet ou o caminho de um arquivo
+.IR .torrent .
+Depois de editar a lista, execute:
+.IP
+.B eazy\-tor \-\-list
+.IR ARQUIVO
+.PP
+No fluxo de downloads, o eazy pode encaminhar o item com um diretório de
+destino e, quando configurado, a opção
+.B \-\-tor
+ao auxiliar. O destino padrão de torrents é
+.IR ~/Downloads/Torrents ;
+ele pode ser alterado na configuração do eazy.
 .SH SELECTION MODEL
 O eazy combina duas camadas de seleção:
 .TP
@@ -257,6 +297,12 @@ Filas temporárias (Insert / Ctrl-P).
 .I ~/.config/eazy/history
 Histórico de reprodução.
 .TP
+.I ~/.config/eazy/torrents.list
+Lista de magnets e arquivos
+.IR .torrent
+criada por
+.B eazy \-\-torrent\-list .
+.TP
 .I ~/.config/eazy/scripts/manut\-completa.sh
 Script de manutenção completa do sistema.
 .TP
@@ -293,6 +339,7 @@ etc.
 .BR ffplay (1)
 .SS Opcionais
 .BR yt\-dlp (1),
+.BR eazy\-tor ,
 .BR aria2c (1),
 .BR axel (1),
 .BR ffmpeg (1),
@@ -323,6 +370,15 @@ Manutenção:
 .TP
 Instalar / atualizar comando e deps:
 .B eazy \-\-install
+.TP
+Criar uma lista de torrents:
+.B eazy \-\-torrent\-list
+.TP
+Encaminhar opções ao auxiliar de torrents:
+.B eazy \-\-torrent \-\-help
+.TP
+Executar uma lista de torrents:
+.B eazy\-tor \-\-list ~/.config/eazy/torrents.list
 .TP
 Instalar a partir de .deb (sem clonar):
 .nf
