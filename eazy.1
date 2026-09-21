@@ -1,4 +1,4 @@
-.TH EAZY 1 "2026-09-21" "eazy 3.13" "User Commands"
+.TH EAZY 1 "2026-09-21" "eazy 3.2.12" "User Commands"
 .SH NAME
 eazy \- navegador e reprodutor multimídia no terminal (fzf + mpv)
 .SH SYNOPSIS
@@ -30,6 +30,9 @@ do sistema.
 A interface principal é o
 .BR fzf :
 lista filtrável, multi-seleção visual e atalhos de teclado personalizados.
+.P
+O pacote Debian da release instala o comando, o editor de notas, a man page
+e um lançador de desktop compatível com KDE Plasma e outros ambientes.
 .SH ARGUMENTS
 .TP
 .I PATH
@@ -47,7 +50,7 @@ Mostra a ajuda resumida no terminal e sai.
 .TP
 .BR \-V ", " \-\-version
 Mostra a versão (ex.:
-.BR "eazy 3.13 (IA)" )
+.BR "eazy 3.2.12 (IA)" )
 e sai.
 .TP
 .B \-\-config
@@ -382,9 +385,9 @@ Executar uma lista de torrents:
 .TP
 Instalar a partir de .deb (sem clonar):
 .nf
-curl -fsSL -o eazy_3.13_all.deb \\
-  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.13/eazy_3.13_all.deb
-sudo apt install ./eazy_3.13_all.deb
+curl -fsSL -o eazy_3.2.12_all.deb \\
+  https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v3.2.12/eazy_3.2.12_all.deb
+sudo apt install ./eazy_3.2.12_all.deb
 .fi
 .SH BUGS
 Reporte problemas em
