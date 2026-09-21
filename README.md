@@ -31,3 +31,7 @@ O script de compilação gera um wrapper executável para scripts Bash grandes e
 
 ## Instalação
 Consulte [INSTALL.md](INSTALL.md) para instalação pela fonte, uso do binário e recompilação.
+
+## Autoria
+
+**Made by John B Kersting.**
