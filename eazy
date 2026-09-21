@@ -1209,6 +1209,7 @@ exibir_help() {
         whiptail --title "eazy ${EAZY_VERSION} — Ajuda" --msgbox "\
 eazy ${EAZY_VERSION} (${EAZY_CODENAME})
 
+Made by ${EAZY_AUTHOR}
 Uso: eazy [pasta|arquivo] · eazy -m
 
 NAVEGAÇÃO E SELEÇÃO
@@ -1254,6 +1255,7 @@ mpv: [d] marcar exclusão · [D] marcar+próximo" 30 72
 # F10 — HELP EXPANDIDO. Ctrl-N abre a última nota; no editor, Ctrl-N cria nota, Ctrl-S salva e abre outra, e Esc salva/sai.
 exibir_help_expandido() {
     whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" --msgbox "eazy — Navegador e Reprodutor Multimídia
+Made by ${EAZY_AUTHOR}
 
 ════════════════════════════════════════════════════════════════════
 NAVEGAÇÃO, FILTROS E BUSCA
@@ -5010,6 +5012,7 @@ eazy_status_header() {
     else
         printf "[%s] DRY:%s | HD %s/%s | Global %s (%s) [%s] | Dir %s (%s) %s" "$agora" "$([ "${DRY_RUN:-0}" = "1" ] && echo ON || echo off)" "$livre_h" "$total_h" "$sel_h" "$sel_count" "$op_s" "$atual_h" "$atual_count" "$ia_s"
     fi
+    printf "\nMade by %s" "$EAZY_AUTHOR"
     if [ -n "${EAZY_HEADER_HINT:-}" ]; then
         printf "\n%s" "$EAZY_HEADER_HINT"
     fi
