@@ -35,3 +35,19 @@ Consulte [INSTALL.md](INSTALL.md) para instalação pela fonte, uso do binário 
 ## Autoria
 
 **Made by John B Kersting.**
+
+Para reinstalar completamente a versão 3.13 diretamente deste repositório, sem desinstalar e preservando `~/.config/eazy`:
+
+```bash
+chmod +x reinstalar-eazy-3.13.sh
+./reinstalar-eazy-3.13.sh
+```
+
+Também é possível reinstalar diretamente pelo pacote Debian publicado no repositório:
+
+```bash
+cd /tmp
+curl -fL -o eazy_3.13_all.deb \
+  https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy_3.13_all.deb
+sudo apt install ./eazy_3.13_all.deb
+```

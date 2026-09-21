@@ -1,4 +1,4 @@
-# eazy 3.2.10 — instalar e atualizar o repo
+# eazy 3.13 — instalar e atualizar o repo
 
 Zip em `~/prj`, repo em `~/prj/Easy_Player`.
 
@@ -9,6 +9,24 @@ Em Ubuntu ou Debian:
 ```bash
 sudo apt update
 sudo apt install -y bash fzf whiptail mpv ffmpeg curl wget python3 build-essential zlib1g-dev
+```
+
+## Reinstalar via `.deb` diretamente do repositório
+
+Este procedimento reinstala o Eazy 3.13 completo, sem executar `uninstall` e sem apagar `~/.config/eazy`:
+
+```bash
+cd /tmp
+curl -fL -o eazy_3.13_all.deb \
+  https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy_3.13_all.deb
+sudo apt install ./eazy_3.13_all.deb
+eazy --version
+```
+
+O pacote instala o binário protegido, o editor de notas, a man page e o lançador compatível com KDE Plasma. Para atualizar o cache do KDE manualmente, use:
+
+```bash
+kbuildsycoca6 --noincremental 2>/dev/null || kbuildsycoca5 --noincremental 2>/dev/null || true
 ```
 
 ## Usar a versão-fonte
