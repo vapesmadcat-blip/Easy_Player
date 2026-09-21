@@ -2,6 +2,26 @@
 
 https://github.com/vapesmadcat-blip/Easy_Player
 
+## Executável Linux
+
+O binário protegido para Linux 64 bits fica em [`bin/eazy-linux-x86_64`](bin/eazy-linux-x86_64). Para usar:
+
+```bash
+cd bin
+chmod +x eazy-linux-x86_64
+./eazy-linux-x86_64
+```
+
+O binário foi compilado para arquiteturas **x86_64/amd64** e ainda requer as dependências usadas pelo Eazy, como `bash`, `fzf`, `whiptail`, `mpv`, `ffmpeg`, `curl` e `wget`.
+
+Para recompilar o binário a partir do código-fonte atual:
+
+```bash
+./tools/compilar-eazy.sh eazy bin/eazy-linux-x86_64
+```
+
+O script de compilação gera um wrapper executável para scripts Bash grandes e não modifica o arquivo-fonte original.
+
 ## Destaques
 - Enter em `.py` / `.sh` / `.html`: menu estilo PDF (Executar | Ver | Editar | Voltar)
 - PYTHON_CMD / SHELL_CMD no F9
@@ -10,4 +30,4 @@ https://github.com/vapesmadcat-blip/Easy_Player
 - HTML no browser, Del/Shift+Del, lixeira
 
 ## Instalação
-Ver INSTALL.md
+Consulte [INSTALL.md](INSTALL.md) para instalação pela fonte, uso do binário e recompilação.

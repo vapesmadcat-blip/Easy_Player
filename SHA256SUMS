@@ -1,2 +1,5 @@
 e0b5da33076f8d36c41110b3b770d09b5f6e9d8e048d8eeb5cb0dce3c5706a80  eazy-3.2.tar.gz
 38c44adfaac2d8d85b9cac1d0a7986f45cd2a944652d58dfdd0daaeb4a6e3fe2  eazy_3.2-2_all.deb
+
+# Executável Linux x86_64
+065ffe009656d3a60e6e03e3920508f01b816ce1bbe3ddf8cc8c513e98978e3f  bin/eazy-linux-x86_64
