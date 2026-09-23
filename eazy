@@ -9325,14 +9325,14 @@ while true; do
         TOTAL_DL=$(echo "$TOTAL_DL" | LC_ALL=C tr -cd '0-9')
         TOTAL_DL=${TOTAL_DL:-0}
         TEXTO_PROMPT=" 📥 FILA DE DOWNLOADS ($TOTAL_DL itens) ❯ "
-        EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Tirar da fila | [F10]: Ajuda "
+        EAZY_HEADER_HINT=" [F10]: Ajuda | [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Tirar da fila "
     elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
         if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_custom_* ]]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9'); TOTAL_FILA=${TOTAL_FILA:-0}
             NOME_LISTA_CTRL_P="${ARQUIVO_PLAYLIST_ABERTO##*temp_playlist_custom_}"
             TEXTO_PROMPT=" 📋 $NOME_LISTA_CTRL_P ($TOTAL_FILA itens)  [CTRL-P]: Próx. lista ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Tirar da lista | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. lista | [F10]: Ajuda "
+            EAZY_HEADER_HINT=" [F10]: Ajuda | [ENTER]: Tocar | [DEL]: Tirar da lista | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. lista "
         elif [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9')
@@ -9344,16 +9344,16 @@ while true; do
                 *) FILA_ATUAL=1 ;;
             esac
             TEXTO_PROMPT=" 📋 FILA $FILA_ATUAL ($TOTAL_FILA)  [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Tirar da fila | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. fila | [F10]: Ajuda "
+            EAZY_HEADER_HINT=" [F10]: Ajuda | [ENTER]: Tocar | [DEL]: Tirar da fila | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. fila "
         elif [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
             TOTAL_HIST=$(grep -c '^' "$HISTORY_FILE" 2>/dev/null || echo 0)
             TOTAL_HIST=$(echo "$TOTAL_HIST" | tr -cd '0-9')
             TOTAL_HIST=${TOTAL_HIST:-0}
             TEXTO_PROMPT=" 🕐 HISTÓRICO ($TOTAL_HIST) ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [TAB]: Marcar | [CTRL-E]: Shuffle | [DEL]: Tirar do histórico | [CTRL-G]: Fechar | [F10]: Ajuda "
+            EAZY_HEADER_HINT=" [F10]: Ajuda | [ENTER]: Tocar | [TAB]: Marcar | [CTRL-E]: Shuffle | [DEL]: Tirar do histórico | [CTRL-G]: Fechar "
         else
             TEXTO_PROMPT=" 📜 PLAYLIST: $(basename "$ARQUIVO_PLAYLIST_ABERTO") ❯ "
-            EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [CTRL-E]: Shuffle | [DEL]: Tirar da lista | [INSERT]: Fila | [CTRL-O]: Fechar | [F10]: Ajuda "
+            EAZY_HEADER_HINT=" [F10]: Ajuda | [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [CTRL-E]: Shuffle | [DEL]: Tirar da lista | [INSERT]: Fila | [CTRL-O]: Fechar "
         fi
     elif [ "${MODO_DUP:-0}" -eq 1 ]; then
         TOTAL_DUP=$(grep -c '^' "$DUP_FILE" 2>/dev/null || echo 0)
@@ -9368,16 +9368,16 @@ while true; do
         DUP_SEL_BYTES=${DUP_SEL_BYTES:-0}
         DUP_SEL_LABEL=$(formatar_bytes_label "$DUP_SEL_BYTES")
         DUP_SEL_INFO=" | [SEL: ${DUP_SEL_COUNT} item(ns) / ${DUP_SEL_LABEL}]"
-        EAZY_HEADER_HINT=" [F12]: ●verm amostra | [CTRL-T]: ●→✓ amar | [CTRL-A]: ✓ todos | [CTRL-R]: invert ✓ | [CTRL-X]: limpa ✓ | [TAB]: ✓ | [ENTER/DEL]: usa ✓$DUP_SEL_INFO "
+        EAZY_HEADER_HINT=" [F10]: Ajuda | [F12]: ●verm amostra | [CTRL-T]: ●→✓ amar | [CTRL-A]: ✓ todos | [CTRL-R]: invert ✓ | [CTRL-X]: limpa ✓ | [TAB]: ✓ | [ENTER/DEL]: usa ✓$DUP_SEL_INFO "
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         extra_lbl=""
         [ -n "${BUSCA_TAM_LABEL:-}" ] && extra_lbl=" tam:$BUSCA_TAM_LABEL"
         [ -n "${BUSCA_CONTEUDO:-}" ] && extra_lbl="$extra_lbl txt:«${BUSCA_CONTEUDO:0:20}»"
         TEXTO_PROMPT=" 🔎 BUSCA [${EXT_BUSCA:-todas}]$extra_lbl ❯ "
-        EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [ALT+ENTER]: Executar selecionados | [CTRL-K]: Acoes | [CTRL-L]: Pasta do arquivo | [INSERT]: Fila | [DEL]: HD | [CTRL-F]: Sair "
+        EAZY_HEADER_HINT=" [F10]: Ajuda | [TAB]: Marcar | [ENTER]: Tocar | [ALT+ENTER]: Executar selecionados | [CTRL-K]: Acoes | [CTRL-L]: Pasta do arquivo | [INSERT]: Fila | [DEL]: HD | [CTRL-F]: Sair "
     else
         TEXTO_PROMPT=" 📂 [$(eazy_filtro_label "$FILTRO_ATUAL")] $PASTA_ATUAL ❯ "
-        EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD | [F10]: Ajuda "
+        EAZY_HEADER_HINT=" [F10]: Ajuda | [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD "
     fi
     export EAZY_HEADER_HINT
     TEXTO_HEADER=$(eazy_status_header)
