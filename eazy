@@ -1288,7 +1288,10 @@ mpv: [d] marcar exclusão · [D] marcar+próximo" 30 72
 # --- HELP EXPANDIDO ---
 # F10 — HELP EXPANDIDO. Ctrl-N abre a última nota; no editor, Ctrl-N cria nota, Ctrl-S salva e abre outra, e Esc salva/sai.
 exibir_help_expandido() {
-    whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" --msgbox "eazy — Navegador e Reprodutor Multimídia
+    local help_file help_lines help_cols
+    help_file=$(mktemp "${EAZY_TMP_DIR}/eazy-help.XXXXXX") || return 1
+    cat > "$help_file" <<EOF
+eazy — Navegador e Reprodutor Multimídia
 Made by ${EAZY_AUTHOR}
 
 ════════════════════════════════════════════════════════════════════
@@ -1385,7 +1388,22 @@ Notas rápidas: Ctrl-N abre a última nota; o mini editor usa Ctrl-N para nova n
 Operações com sudo pedem a senha antes de executar e restauram o terminal
 em caso de cancelamento ou erro.
 
-Use ESC para fechar esta ajuda e retornar ao navegador." 55 100
+Use ESC para fechar esta ajuda e retornar ao navegador.
+EOF
+    # A ajuda antiga usava --msgbox 55x100: em terminais menores o fim ficava
+    # cortado. O textbox ocupa a tela disponível e permite rolar todo o conteúdo.
+    help_lines=$(tput lines 2>/dev/null || printf '24')
+    help_cols=$(tput cols 2>/dev/null || printf '80')
+    help_lines=$((help_lines - 4))
+    help_cols=$((help_cols - 4))
+    [ "$help_lines" -lt 12 ] && help_lines=12
+    [ "$help_cols" -lt 60 ] && help_cols=60
+    [ "$help_cols" -gt 120 ] && help_cols=120
+    whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" \
+        --textbox "$help_file" "$help_lines" "$help_cols" --scrolltext
+    local rc=$?
+    rm -f -- "$help_file"
+    return "$rc"
 }
 
 # 1. VALIDAÇÃO E LIMPEZA DE ARQUIVOS .M3U (Ctrl+K)
