@@ -1,3 +1,10 @@
+eazy (4.1.2) unstable; urgency=medium
+
+  * Expand the HTML help with shortcuts, list behavior, media, downloads, CLI commands, and maintenance.
+  * Improve responsive spacing and navigation across wide and narrow screens.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 23 Sep 2026 23:55:00 +0000
+
 eazy (4.1.1) unstable; urgency=medium
 
   * Add the complete expanded help as TXT and responsive HTML documentation.

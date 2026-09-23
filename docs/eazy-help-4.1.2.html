@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eazy 4.1.2 — Help expandido</title>
+<style>
+:root{color-scheme:dark;--bg:#120f19;--panel:#211a2b;--panel2:#2c2039;--line:#81539d;--text:#f8f0fb;--muted:#cdbbd7;--accent:#e4a7ff;--key:#ffe5a1;--good:#9de7c4}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:radial-gradient(circle at top,#3a2050 0,#18121f 45%,#0f0c14 100%);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}.shell{width:min(1760px,calc(100% - 28px));margin:auto;padding:24px 0 60px}header{padding:32px clamp(22px,4vw,64px);border:1px solid var(--line);border-radius:20px;background:linear-gradient(115deg,#2d1d3d,#211829);box-shadow:0 20px 70px #0007}h1{margin:0;color:var(--accent);font-size:clamp(30px,5vw,62px);letter-spacing:-.04em}h2{margin:0 0 18px;color:var(--accent);font-size:clamp(20px,2vw,28px);line-height:1.2;border-bottom:1px solid var(--line);padding-bottom:12px}.subtitle{font-size:clamp(16px,2vw,21px);color:var(--muted);margin-top:2px}.tip{margin-top:24px;padding:17px 20px;border-left:5px solid var(--good);background:#203a37;color:#e7fff3;border-radius:8px}.nav{display:flex;flex-wrap:wrap;gap:9px;margin:18px 0}.nav a{color:var(--key);text-decoration:none;border:1px solid #9564b0;background:#2b1e38;border-radius:999px;padding:7px 13px}.nav a:hover{background:#4a2e5b}.grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:18px;margin-top:18px}.card{grid-column:span 4;background:rgba(33,26,43,.94);border:1px solid var(--line);border-radius:16px;padding:24px;box-shadow:0 10px 35px #0003}.card.wide{grid-column:span 8}.card.full{grid-column:1/-1}.card p{color:var(--muted);margin:0 0 16px}.keys{display:grid;grid-template-columns:minmax(120px,190px) 1fr;gap:10px 18px;margin:0}.keys dt{color:var(--key);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700;overflow-wrap:anywhere}.keys dd{margin:0;color:var(--text)}pre{margin:0;overflow:auto;padding:18px;border-radius:10px;background:#100d16;border:1px solid #4d3560;color:#ecdcf5;font:14px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace}code{color:var(--key)}.tag{display:inline-block;color:var(--good);font-size:13px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}footer{margin-top:24px;color:var(--muted);text-align:center;font-size:14px}@media(max-width:1100px){.card,.card.wide{grid-column:span 6}}@media(max-width:700px){.shell{width:calc(100% - 16px);padding-top:8px}.grid{display:block}.card{margin:12px 0;padding:19px}.keys{grid-template-columns:1fr;gap:2px}.keys dd{margin-bottom:8px}.nav{gap:6px}.nav a{font-size:14px;padding:6px 10px}}
+</style>
+</head>
+<body>
+<main class="shell">
+<header>
+  <span class="tag">Help expandido · revisão 4.1.2</span>
+  <h1>eazy</h1>
+  <div class="subtitle">Navegador, player multimídia, filas, playlists, downloads e manutenção no terminal.</div>
+  <div class="tip"><strong>F10</strong> abre esta ajuda dentro do eazy. Na versão de tela cheia, use <strong>q</strong> para fechar, setas ou <strong>Page Up/Page Down</strong> para navegar.</div>
+  <nav class="nav" aria-label="Seções do help"><a href="#essenciais">Essenciais</a><a href="#navegacao">Navegação</a><a href="#listas">Listas e seleção</a><a href="#player">Player</a><a href="#downloads">Downloads</a><a href="#comandos">Comandos</a><a href="#manutencao">Manutenção</a></nav>
+</header>
+<section class="grid">
+<article class="card" id="essenciais"><h2>Atalhos essenciais</h2><dl class="keys">
+<dt>Enter</dt><dd>Abrir, tocar, entrar em pasta ou abrir playlist.</dd><dt>F10</dt><dd>Ajuda completa em tela cheia.</dd><dt>Tab / Espaço</dt><dd>Marcar ou alternar o item focado.</dd><dt>Ctrl+Espaço / F6</dt><dd>Selecionar a tela inteira.</dd><dt>Ctrl-Q / Q / X</dt><dd>Salvar sessão e sair.</dd><dt>Esc</dt><dd>Voltar da busca ou cancelar a tela atual.</dd>
+</dl></article>
+<article class="card wide" id="navegacao"><h2>Navegação, filtros e busca</h2><dl class="keys">
+<dt>Ctrl-A</dt><dd>Selecionar todos os itens visíveis.</dd><dt>Ctrl-R</dt><dd>Inverter a seleção visível.</dd><dt>Ctrl-X</dt><dd>Limpar a seleção.</dd><dt>Ctrl-Backspace</dt><dd>Voltar ao último diretório visitado.</dd><dt>Ctrl-H</dt><dd>Exportar HTML da seleção ou da lista atual.</dd><dt>Ctrl-L</dt><dd>Ir à pasta do arquivo sob o cursor.</dd><dt>Ctrl-/</dt><dd>Ligar ou desligar preview.</dd><dt>Ctrl-F</dt><dd>Busca recursiva por extensão, tamanho e texto.</dd><dt>F1/F2/F3</dt><dd>Ordenar por tamanho/nome e alternar visualização.</dd><dt>F4–F7</dt><dd>Filtrar áudio, vídeo, imagens e compactados.</dd><dt>F8</dt><dd>Alternar entre filtro atual e TODOS.</dd>
+</dl></article>
+<article class="card" id="listas"><h2>Filas e playlists</h2><dl class="keys">
+<dt>Insert</dt><dd>Enviar seleção para fila 1, 2 ou 3.</dd><dt>Ctrl-P</dt><dd>Alternar filas 1 → 2 → 3 → diretório.</dd><dt>Ctrl-O</dt><dd>Abrir playlist .m3u/.pls.</dd><dt>Ctrl-G</dt><dd>Abrir histórico.</dd><dt>Del</dt><dd>Remover da lista ou fila, sem apagar do disco.</dd><dt>Alt-D</dt><dd>Apagar do disco e remover da lista.</dd><dt>Ctrl-S</dt><dd>Salvar playlist aberta.</dd>
+</dl></article>
+<article class="card" id="player"><h2>Player e mídia</h2><dl class="keys">
+<dt>Ctrl-E</dt><dd>Tocar a seleção em ordem aleatória.</dd><dt>Ctrl-Y</dt><dd>Copiar seleção para uma pasta.</dd><dt>Ctrl-U</dt><dd>Mover seleção para uma pasta.</dd><dt>PDF no Enter</dt><dd>Ler ou converter PDF em texto, HTML ou PNG.</dd><dt>F9</dt><dd>Escolher player, volume, tela e preview.</dd><dt>Ctrl-K → C</dt><dd>Conversões de vídeo, imagem e PDF.</dd>
+</dl></article>
+<article class="card" id="downloads"><h2>Downloads, torrents e IA</h2><dl class="keys">
+<dt>Ctrl-B</dt><dd>Abrir o gerenciador de downloads.</dd><dt>Del</dt><dd>Remover item da fila sem apagar arquivos do disco.</dd><dt>Ctrl-K → downloads</dt><dd>Configurar aria2, axel, wget e yt-dlp.</dd><dt>Ctrl-D</dt><dd>Buscar duplicados ou reabrir a lista temporária.</dd><dt>Ctrl-N</dt><dd>Abrir ou criar nota rápida.</dd><dt>Ctrl-K → IA</dt><dd>Abrir o chat configurado, quando disponível.</dd>
+</dl></article>
+<article class="card" id="manutencao"><h2>Duplicados e manutenção</h2><dl class="keys">
+<dt>F12</dt><dd>Amostrar um arquivo por grupo de duplicados.</dd><dt>Ctrl-T</dt><dd>Passar amostras vermelhas para seleção amarela.</dd><dt>Ctrl-A</dt><dd>Marcar todos os duplicados.</dd><dt>Ctrl-R</dt><dd>Inverter a seleção ativa.</dd><dt>Ctrl-X</dt><dd>Limpar seleção ativa.</dd><dt>Alt-X</dt><dd>Limpar lista temporária de duplicados.</dd><dt>Ctrl-K</dt><dd>Abrir ações, sistema, HD, som, vídeo, SWAP e conversões.</dd>
+</dl></article>
+<article class="card full" id="comandos"><h2>Comandos de terminal</h2><p>Use estes comandos fora do navegador para consultar, configurar ou reparar o eazy:</p><pre><code>eazy --help                 # ajuda de linha de comando
+eazy --version              # versão instalada
+eazy --config               # assistente de configuração
+eazy --restore-keys         # restaura atalhos padrão
+eazy --update-ytdlp         # atualiza yt-dlp sem pip
+eazy --ai                   # abre o chat de IA configurado
+eazy --shell-init           # imprime integração bash
+eazy --torrent [OPÇÕES]    # encaminha para eazy-tor
+eazy --torrent-list FILE    # cria lote a partir da fila
+eazy --maintenance          # manutenção do sistema
+eazy --advanced-maintenance # manutenção avançada</code></pre></article>
+<article class="card full"><h2>Notas e operação segura</h2><dl class="keys">
+<dt>Notas</dt><dd>No editor: Ctrl-N cria, Ctrl-S salva, Enter insere linha, Backspace apaga e Esc salva e sai.</dd><dt>DRY-RUN</dt><dd>Deixa ações destrutivas em modo simulado para conferência.</dd><dt>Seleção global</dt><dd>As marcações persistem entre pastas até serem limpas.</dd><dt>DEL × Alt-D</dt><dd>DEL tira da lista; Alt-D também apaga do disco, sempre com confirmação.</dd>
+</dl></article>
+</section>
+<footer>eazy 4.1.2 · Made by John B Kersting · Help disponível em tela cheia, TXT e HTML responsivo.</footer>
+</main>
+</body>
+</html>
