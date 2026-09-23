@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>eazy 4.1.1 — Help expandido</title>
+<style>
+:root{color-scheme:dark;--bg:#17131f;--panel:#241d30;--line:#76508e;--text:#f5eef8;--muted:#c9b8d1;--accent:#dca8ff;--key:#ffe8a3}
+*{box-sizing:border-box} body{margin:0;background:linear-gradient(135deg,#17131f,#2b1736);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{width:min(1500px,calc(100% - 32px));margin:0 auto;padding:28px 0 56px}header{padding:28px 32px;margin-bottom:20px;border:1px solid var(--line);border-radius:16px;background:rgba(36,29,48,.9);box-shadow:0 16px 50px #0005}h1{margin:0;color:var(--accent);font-size:clamp(28px,4vw,48px)}h2{margin:0 0 18px;color:var(--accent);font-size:22px;border-bottom:1px solid var(--line);padding-bottom:10px}.subtitle{color:var(--muted);font-size:18px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card{background:rgba(36,29,48,.92);border:1px solid var(--line);border-radius:14px;padding:22px}dl{display:grid;grid-template-columns:minmax(130px,190px) 1fr;gap:8px 18px;margin:0}dt{color:var(--key);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:700}dd{margin:0;color:var(--text)}.wide{grid-column:1/-1}.tip{margin-top:20px;padding:16px 20px;border-left:4px solid var(--accent);background:#342344;color:var(--muted)}footer{margin-top:22px;color:var(--muted);font-size:14px}@media(max-width:800px){main{width:calc(100% - 20px);padding-top:10px}.grid{grid-template-columns:1fr}.wide{grid-column:auto}dl{grid-template-columns:1fr;gap:2px 0;margin-bottom:14px}dd{margin-bottom:8px}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>eazy 4.1.1</h1><div class="subtitle">Help expandido — navegador e reprodutor multimídia</div><div class="tip"><strong>F10</strong> abre esta ajuda. No help interativo, use <strong>q</strong> para fechar e as setas ou Page Up/Page Down para rolar.</div></header>
+<section class="grid">
+<article class="card"><h2>Navegação, filtros e busca</h2><dl>
+<dt>Enter</dt><dd>Tocar o item sob o cursor, entrar em pasta ou abrir playlist.</dd>
+<dt>Ctrl+Espaço / F6</dt><dd>Seleção inteira.</dd><dt>Tab / Espaço</dt><dd>Marcar ou alternar o item focado.</dd>
+<dt>Ctrl-A</dt><dd>Selecionar todos os itens visíveis.</dd><dt>Ctrl-R</dt><dd>Inverter a seleção.</dd><dt>Ctrl-X</dt><dd>Limpar a seleção.</dd>
+<dt>Ctrl-Backspace</dt><dd>Voltar ao último diretório.</dd><dt>Ctrl-H</dt><dd>Exportar HTML da seleção ou da tela.</dd>
+<dt>Ctrl-L</dt><dd>Ir à pasta do arquivo sob o cursor.</dd><dt>Ctrl-/</dt><dd>Ligar ou desligar preview.</dd>
+<dt>Ctrl-F</dt><dd>Abrir busca recursiva por extensão, tamanho e texto.</dd><dt>Esc</dt><dd>Sair da busca.</dd>
+<dt>F1/F2/F3</dt><dd>Ordenar e alternar visualização.</dd><dt>F4–F7</dt><dd>Filtrar áudio, vídeo, imagens e compactados.</dd><dt>F8</dt><dd>Alternar filtro atual e TODOS.</dd>
+</dl></article>
+<article class="card"><h2>Duplicados e progresso</h2><dl>
+<dt>Ctrl-D</dt><dd>Buscar duplicados ou reabrir a lista temporária.</dd><dt>F12</dt><dd>Amostra um arquivo por grupo.</dd>
+<dt>Ctrl-A</dt><dd>Marcar todos os duplicados.</dd><dt>Ctrl-T</dt><dd>Passar amostras para a seleção ativa.</dd>
+<dt>Ctrl-R</dt><dd>Inverter a seleção ativa.</dd><dt>Ctrl-X</dt><dd>Limpar a seleção ativa.</dd><dt>Tab / Espaço</dt><dd>Alternar o item focado.</dd>
+<dt>Alt-X</dt><dd>Limpar a lista temporária.</dd><dt>● vermelho</dt><dd>Amostra fixa criada pelo F12.</dd><dt>✓ amarelo</dt><dd>Seleção ativa para Enter, Del, copiar e mover.</dd>
+</dl></article>
+<article class="card wide"><h2>Filas, playlists e ações</h2><dl>
+<dt>Insert</dt><dd>Enviar seleção para fila 1, 2 ou 3.</dd><dt>Ctrl-P</dt><dd>Alternar filas e diretório.</dd><dt>Ctrl-O</dt><dd>Abrir playlist .m3u/.pls.</dd>
+<dt>Ctrl-G</dt><dd>Abrir histórico.</dd><dt>Ctrl-E</dt><dd>Tocar seleção em ordem aleatória.</dd><dt>Ctrl-Y / Ctrl-U</dt><dd>Copiar / mover seleção.</dd>
+<dt>Ctrl-K</dt><dd>Ações sobre seleção e manutenção.</dd><dt>Ctrl-N</dt><dd>Abrir ou criar nota.</dd><dt>Del</dt><dd>Remover conforme o contexto.</dd><dt>Alt-D</dt><dd>Apagar do disco sem usar a lixeira.</dd>
+<dt>PDF no Enter</dt><dd>Ler ou converter PDF em texto, HTML ou PNG.</dd>
+</dl></article>
+<article class="card"><h2>Menu Ctrl-K — manutenção</h2><dl>
+<dt>S</dt><dd>Sistema: CPU, RAM, cache, processos, rede e logs.</dd><dt>H</dt><dd>HD, partições e SMART.</dd><dt>A</dt><dd>Diagnóstico de som.</dd>
+<dt>V</dt><dd>Vídeo, codecs e reprodução.</dd><dt>W</dt><dd>SWAP.</dd><dt>Z</dt><dd>Diretórios vazios.</dd><dt>M</dt><dd>Menu completo.</dd>
+<dt>P</dt><dd>Proteger pasta ou arquivo.</dd><dt>C</dt><dd>Conversões de vídeo, imagem e PDF.</dd><dt>DRY-RUN</dt><dd>Simula ações destrutivas.</dd>
+</dl></article>
+<article class="card"><h2>Sistema, configuração e saída</h2><dl>
+<dt>F9</dt><dd>Configuração, hardware e teste de som.</dd><dt>F10</dt><dd>Abrir este help expandido.</dd><dt>Ctrl-B</dt><dd>Gerenciador de downloads.</dd><dt>Ctrl-Q / Q / X</dt><dd>Salvar sessão e sair.</dd>
+</dl></article>
+</section>
+<footer>eazy 4.1.1 · Made by John B Kersting · Ajuda distribuída em TXT, HTML e tela cheia.</footer>
+</main>
+</body>
+</html>

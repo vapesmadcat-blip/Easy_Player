@@ -20,7 +20,7 @@ for required in dpkg-deb install gzip; do
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$SRC_DIR/docs/eazy-help-4.1.1.txt" "$SRC_DIR/docs/eazy-help-4.1.1.html" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -49,6 +49,8 @@ install -m 0644 "$SRC_DIR/README.md" "$PKGROOT/usr/share/doc/$PACKAGE/README.md"
 install -m 0644 "$SRC_DIR/CHANGELOG.md" "$PKGROOT/usr/share/doc/$PACKAGE/CHANGELOG.md"
 install -m 0644 "$SRC_DIR/EAZY_EXPLICADO.md" "$PKGROOT/usr/share/doc/$PACKAGE/EAZY_EXPLICADO.md"
 install -m 0644 "$SRC_DIR/GUIA_RAPIDO.md" "$PKGROOT/usr/share/doc/$PACKAGE/GUIA_RAPIDO.md"
+install -m 0644 "$SRC_DIR/docs/eazy-help-4.1.1.txt" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.txt"
+install -m 0644 "$SRC_DIR/docs/eazy-help-4.1.1.html" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.html"
 install -m 0644 "$DEBIAN_DIR/control" "$PKGROOT/DEBIAN/control"
 install -m 0644 "$DEBIAN_DIR/changelog" "$PKGROOT/usr/share/doc/$PACKAGE/changelog.Debian"
 install -m 0644 "$DEBIAN_DIR/copyright" "$PKGROOT/usr/share/doc/$PACKAGE/copyright"

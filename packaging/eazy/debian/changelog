@@ -1,3 +1,10 @@
+eazy (4.1.1) unstable; urgency=medium
+
+  * Add the complete expanded help as TXT and responsive HTML documentation.
+  * Keep the interactive F10 help and release documentation synchronized.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 23 Sep 2026 23:45:00 +0000
+
 eazy (4.1) unstable; urgency=medium
 
   * Fix DEL removal from download queues, including the last item and URLs with regex characters.
