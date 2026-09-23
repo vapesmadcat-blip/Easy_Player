@@ -1390,19 +1390,24 @@ em caso de cancelamento ou erro.
 
 Use ESC para fechar esta ajuda e retornar ao navegador.
 EOF
-    # A ajuda antiga usava --msgbox 55x100: em terminais menores o fim ficava
-    # cortado. O textbox ocupa a tela disponível e permite rolar todo o conteúdo.
-    help_lines=$(tput lines 2>/dev/null || printf '24')
-    help_cols=$(tput cols 2>/dev/null || printf '80')
-    # Use quase toda a área útil: o limite antigo de 120 colunas deixava
-    # grandes faixas vazias nas laterais em terminais largos.
-    help_lines=$((help_lines - 2))
-    help_cols=$((help_cols - 2))
-    [ "$help_lines" -lt 12 ] && help_lines=12
-    [ "$help_cols" -lt 60 ] && help_cols=60
-    whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" \
-        --textbox "$help_file" "$help_lines" "$help_cols" --scrolltext
-    local rc=$?
+    local rc=0
+    # less usa a tela inteira, inclusive as laterais, e rola o conteúdo sem
+    # cortar a parte inferior. Q fecha; Page Up/Down e setas navegam.
+    if command -v less >/dev/null 2>&1; then
+        clear
+        printf '%s\n\n' "eazy — HELP EXPANDIDO ${EAZY_VERSION} (q fecha | setas/PgUp/PgDown rolam)"
+        less -R "$help_file" || rc=$?
+        clear
+    else
+        # Fallback para instalações mínimas sem less.
+        help_lines=$(tput lines 2>/dev/null || printf '24')
+        help_cols=$(tput cols 2>/dev/null || printf '80')
+        help_lines=$((help_lines - 2)); help_cols=$((help_cols - 2))
+        [ "$help_lines" -lt 12 ] && help_lines=12
+        [ "$help_cols" -lt 60 ] && help_cols=60
+        whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" \
+            --textbox "$help_file" "$help_lines" "$help_cols" --scrolltext || rc=$?
+    fi
     rm -f -- "$help_file"
     return "$rc"
 }
