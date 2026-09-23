@@ -1,3 +1,11 @@
+eazy (4.1) unstable; urgency=medium
+
+  * Fix DEL removal from download queues, including the last item and URLs with regex characters.
+  * Keep playlist and queue deletion wording explicit and contextual in the fzf header.
+  * Surface F10 help consistently across download, playlist, history, and queue views.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Wed, 23 Sep 2026 23:30:00 +0000
+
 eazy (3.2.3) unstable; urgency=medium
 
   * Promote the tested eazy-3.2.3 base.

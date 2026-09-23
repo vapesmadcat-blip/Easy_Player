@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="3.15"
+EAZY_VERSION="4.1"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -8107,9 +8107,14 @@ confirmar_e_excluir() {
         read -p "Digite (s/N) para confirmar: " resp
 
         if [[ "$resp" =~ ^[Ss]$ ]]; then
-            echo "$selecao" | awk -F '\t' '{print $NF}' | while read -r item_link; do
+            echo "$selecao" | awk -F '\t' 'NF {print $NF}' | while IFS= read -r item_link; do
                 [ -z "$item_link" ] && continue
-                grep -v "|$item_link|" "$DOWNLOAD_QUEUE" > "${DOWNLOAD_QUEUE}.tmp" && mv "${DOWNLOAD_QUEUE}.tmp" "$DOWNLOAD_QUEUE"
+                # URLs podem conter caracteres de regex. Além disso, grep
+                # retorna 1 quando o último item é removido e impedia o mv.
+                # Compare literalmente o segundo campo e publique o arquivo
+                # novo mesmo quando a fila ficar vazia.
+                awk -F '|' -v alvo="$item_link" '$2 != alvo' "$DOWNLOAD_QUEUE" > "${DOWNLOAD_QUEUE}.tmp" &&
+                    mv -f -- "${DOWNLOAD_QUEUE}.tmp" "$DOWNLOAD_QUEUE"
             done
             echo -e "\033[1;32mRemovido(s) da fila de downloads com sucesso!\033[0m"
             sleep 1
@@ -9320,14 +9325,14 @@ while true; do
         TOTAL_DL=$(echo "$TOTAL_DL" | LC_ALL=C tr -cd '0-9')
         TOTAL_DL=${TOTAL_DL:-0}
         TEXTO_PROMPT=" 📥 FILA DE DOWNLOADS ($TOTAL_DL itens) ❯ "
-        EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Remover | [F10]: Ajuda "
+        EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Tirar da fila | [F10]: Ajuda "
     elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
         if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_custom_* ]]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9'); TOTAL_FILA=${TOTAL_FILA:-0}
             NOME_LISTA_CTRL_P="${ARQUIVO_PLAYLIST_ABERTO##*temp_playlist_custom_}"
             TEXTO_PROMPT=" 📋 $NOME_LISTA_CTRL_P ($TOTAL_FILA itens)  [CTRL-P]: Próx. lista ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da lista | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. lista | [Q]: Sair "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Tirar da lista | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. lista | [F10]: Ajuda "
         elif [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9')
@@ -9339,16 +9344,16 @@ while true; do
                 *) FILA_ATUAL=1 ;;
             esac
             TEXTO_PROMPT=" 📋 FILA $FILA_ATUAL ($TOTAL_FILA)  [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Tirar da fila | [ALT+D]: Apagar do disco | [CTRL-P]: Próx. fila | [F10]: Ajuda "
         elif [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
             TOTAL_HIST=$(grep -c '^' "$HISTORY_FILE" 2>/dev/null || echo 0)
             TOTAL_HIST=$(echo "$TOTAL_HIST" | tr -cd '0-9')
             TOTAL_HIST=${TOTAL_HIST:-0}
             TEXTO_PROMPT=" 🕐 HISTÓRICO ($TOTAL_HIST) ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [TAB]: Marcar | [CTRL-E]: Shuffle | [DEL]: Remover hist | [CTRL-G]: Fechar "
+            EAZY_HEADER_HINT=" [ENTER]: Tocar | [TAB]: Marcar | [CTRL-E]: Shuffle | [DEL]: Tirar do histórico | [CTRL-G]: Fechar | [F10]: Ajuda "
         else
             TEXTO_PROMPT=" 📜 PLAYLIST: $(basename "$ARQUIVO_PLAYLIST_ABERTO") ❯ "
-            EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [CTRL-E]: Shuffle | [DEL]: Remover | [INSERT]: Fila | [CTRL-O]: Fechar "
+            EAZY_HEADER_HINT=" [TAB/ESPACO]: Marcar | [ENTER]: Tocar | [CTRL-E]: Shuffle | [DEL]: Tirar da lista | [INSERT]: Fila | [CTRL-O]: Fechar | [F10]: Ajuda "
         fi
     elif [ "${MODO_DUP:-0}" -eq 1 ]; then
         TOTAL_DUP=$(grep -c '^' "$DUP_FILE" 2>/dev/null || echo 0)
