@@ -1394,11 +1394,12 @@ EOF
     # cortado. O textbox ocupa a tela disponível e permite rolar todo o conteúdo.
     help_lines=$(tput lines 2>/dev/null || printf '24')
     help_cols=$(tput cols 2>/dev/null || printf '80')
-    help_lines=$((help_lines - 4))
-    help_cols=$((help_cols - 4))
+    # Use quase toda a área útil: o limite antigo de 120 colunas deixava
+    # grandes faixas vazias nas laterais em terminais largos.
+    help_lines=$((help_lines - 2))
+    help_cols=$((help_cols - 2))
     [ "$help_lines" -lt 12 ] && help_lines=12
     [ "$help_cols" -lt 60 ] && help_cols=60
-    [ "$help_cols" -gt 120 ] && help_cols=120
     whiptail --title "eazy — HELP EXPANDIDO ${EAZY_VERSION}" \
         --textbox "$help_file" "$help_lines" "$help_cols" --scrolltext
     local rc=$?
