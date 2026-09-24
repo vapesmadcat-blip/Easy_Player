@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="4.1.4"
+EAZY_VERSION="4.1.5"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -244,7 +244,7 @@ eazy_normalize_tecla() {
         "$KEY_QUIT") echo "q" ;;
         "$KEY_QUIT2") echo "ctrl-q" ;;
         "$KEY_INSERT") echo "insert" ;;
-        "$KEY_DELETE") echo "del" ;;
+        "$KEY_DELETE"|del|delete) echo "del" ;;
         "$KEY_DELETE_DISK") echo "alt-d" ;;
         *) echo "$t" ;;
     esac
@@ -9522,6 +9522,8 @@ while true; do
     if [ "${MODO_DUP:-0}" -ne 1 ]; then
         FZF_EXPECT="${FZF_EXPECT},ctrl-t"
     fi
+    # Alguns terminais/fzf reportam Delete como del e outros como delete.
+    FZF_EXPECT="${FZF_EXPECT},del,delete"
     FZF_EXPECT=$(echo "$FZF_EXPECT" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
     for _dk in shift-delete; do
         case ",$FZF_EXPECT," in *",${_dk},"*) ;; *) FZF_EXPECT="${FZF_EXPECT},${_dk}" ;; esac
@@ -9876,7 +9878,15 @@ Depois use:
         if [ -n "${cursor_raw:-}" ]; then
             _del_item=$(printf '%s\n' "$cursor_raw" | head -n1)
         else
-            _del_item=$(printf '%s\n' "${escolha_raw:-$escolha}" | eazy_sem_navegacao | head -n1)
+            # O fzf pode não emitir o evento focus quando Delete é pressionado
+            # em versões antigas. Nesse caso eazy_sync_cursor já deixou o
+            # caminho focado no TMP_FILE; ele é a fonte correta do cursor.
+            _del_item="${ULTIMO_ARQUIVO:-}"
+            if [ -z "$_del_item" ] && [ -f "${TMP_FILE:-}" ]; then
+                IFS='|' read -r _tmp_pos _tmp_alvo _tmp_item _tmp_dir _tmp_mode < "$TMP_FILE" || true
+                _del_item="${_tmp_item:-}"
+            fi
+            [ -n "$_del_item" ] || _del_item=$(printf '%s\n' "${escolha_raw:-$escolha}" | eazy_sem_navegacao | head -n1)
         fi
         confirmar_e_excluir "$_del_item"
         unset _del_item

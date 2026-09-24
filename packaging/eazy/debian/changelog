@@ -1,3 +1,10 @@
+eazy (4.1.5) unstable; urgency=medium
+
+  * Normalize del/delete reports from fzf and use the persisted focused path as fallback.
+  * Keep DEL cursor-only while preserving SHIFT+DEL selection scope behavior.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 24 Sep 2026 00:25:00 +0000
+
 eazy (4.1.4) unstable; urgency=medium
 
   * Make DEL remove only the focused item from the active list or queue.
