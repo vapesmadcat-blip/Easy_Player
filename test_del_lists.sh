@@ -37,6 +37,6 @@ grep -Fxq '/media/dois.mp4' "$PLAYLIST_REAL"
 ! grep -Fq '/media/um.mp4' "$PLAYLIST_REAL"
 # O fzf deve persistir a linha sob o cursor antes de devolver DEL.
 grep -Fq -- '--bind="focus:execute-silent' "$ROOT/eazy"
-grep -Fq 'FZF_EXPECT="${FZF_EXPECT},del,delete"' "$ROOT/eazy"
+grep -Fq 'FZF_EXPECT="${FZF_EXPECT},del"' "$ROOT/eazy"
 grep -Fq 'del|delete) echo "del"' "$ROOT/eazy"
 printf 'del-lists: OK\n'

@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="4.1.5"
+EAZY_VERSION="4.1.6"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -1385,7 +1385,7 @@ MENU Ctrl-K — MANUTENÇÃO
 ════════════════════════════════════════════════════════════════════
 SISTEMA, CONFIGURAÇÃO E SAÍDA
 ════════════════════════════════════════════════════════════════════
-  F9                 Configuração, overview de hardware e teste de som
+  F9                 Configuração, IA, overview de hardware e teste de som
   F10                Abrir este HELP EXPANDIDO
   Ctrl-B             Gerenciador de downloads: axel, aria2 e wget
   Ctrl-Q / Q / X     Salvar sessão e sair
@@ -9522,8 +9522,9 @@ while true; do
     if [ "${MODO_DUP:-0}" -ne 1 ]; then
         FZF_EXPECT="${FZF_EXPECT},ctrl-t"
     fi
-    # Alguns terminais/fzf reportam Delete como del e outros como delete.
-    FZF_EXPECT="${FZF_EXPECT},del,delete"
+    # O fzf aceita a tecla esperada como del; "delete" é inválida nesta
+    # versão e gera o aviso "unsupported key: delete".
+    FZF_EXPECT="${FZF_EXPECT},del"
     FZF_EXPECT=$(echo "$FZF_EXPECT" | tr ',' '\n' | awk 'NF && !seen[$0]++' | paste -sd, -)
     for _dk in shift-delete; do
         case ",$FZF_EXPECT," in *",${_dk},"*) ;; *) FZF_EXPECT="${FZF_EXPECT},${_dk}" ;; esac
