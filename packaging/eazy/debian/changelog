@@ -1,3 +1,11 @@
+eazy (4.1.4) unstable; urgency=medium
+
+  * Make DEL remove only the focused item from the active list or queue.
+  * Keep SHIFT+DEL as the selection action with an explicit local/global prompt.
+  * Preserve playlist and queue files while writing their updated contents.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Thu, 24 Sep 2026 00:15:00 +0000
+
 eazy (4.1.3) unstable; urgency=medium
 
   * Ship eazy-tor and eazy-ai.py in the Debian package and global PATH.

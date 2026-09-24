@@ -24,15 +24,17 @@ printf 's\n' | confirmar_e_excluir $'\t📥 item\t[Senha]\thttps://example.test/
 [ ! -s "$DOWNLOAD_QUEUE" ]
 
 # Playlist: DEL altera o arquivo real, não apenas a lista exibida.
+PLAYLIST_REAL="$TMP/temp_playlist_1.real"
 PLAYLIST="$TMP/temp_playlist_1"
-printf '%s\n' '/media/um.mp4' '/media/dois.mp4' > "$PLAYLIST"
+printf '%s\n' '/media/um.mp4' '/media/dois.mp4' > "$PLAYLIST_REAL"
+ln -s "$PLAYLIST_REAL" "$PLAYLIST"
 ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST"
 MODO_DOWNLOAD=0
 MODO_PLAYLIST=1
 export ARQUIVO_PLAYLIST_ABERTO MODO_DOWNLOAD MODO_PLAYLIST
 printf 's\n' | confirmar_e_excluir $'\t🎬 um.mp4\t[1 MB]\t/media/um.mp4'
-grep -Fxq '/media/dois.mp4' "$PLAYLIST"
-! grep -Fq '/media/um.mp4' "$PLAYLIST"
+grep -Fxq '/media/dois.mp4' "$PLAYLIST_REAL"
+! grep -Fq '/media/um.mp4' "$PLAYLIST_REAL"
 # O fzf deve persistir a linha sob o cursor antes de devolver DEL.
 grep -Fq -- '--bind="focus:execute-silent' "$ROOT/eazy"
 printf 'del-lists: OK\n'

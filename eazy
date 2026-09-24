@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="4.1.3"
+EAZY_VERSION="4.1.4"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -8140,15 +8140,20 @@ confirmar_e_excluir() {
         read -p "Digite (s/N) para confirmar: " resp
 
         if [[ "$resp" =~ ^[Ss]$ ]]; then
-            echo "$selecao" | awk -F '\t' 'NF {print $NF}' | while IFS= read -r item_link; do
+            local queue_tmp="${DOWNLOAD_QUEUE}.tmp.$$"
+            : > "$queue_tmp"
+            while IFS='|' read -r engine link pass; do
+                [ -z "$link" ] && continue
+                printf '%s|%s|%s\n' "$engine" "$link" "$pass" >> "$queue_tmp"
+            done < "$DOWNLOAD_QUEUE"
+            while IFS= read -r item_link; do
                 [ -z "$item_link" ] && continue
-                # URLs podem conter caracteres de regex. Além disso, grep
-                # retorna 1 quando o último item é removido e impedia o mv.
-                # Compare literalmente o segundo campo e publique o arquivo
-                # novo mesmo quando a fila ficar vazia.
-                awk -F '|' -v alvo="$item_link" '$2 != alvo' "$DOWNLOAD_QUEUE" > "${DOWNLOAD_QUEUE}.tmp" &&
-                    mv -f -- "${DOWNLOAD_QUEUE}.tmp" "$DOWNLOAD_QUEUE"
-            done
+                awk -F '|' -v alvo="$item_link" '$2 != alvo' "$queue_tmp" > "${queue_tmp}.next"
+                mv -f -- "${queue_tmp}.next" "$queue_tmp"
+            done < <(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}')
+            # cat preserva o arquivo original caso a fila seja um link simbólico.
+            cat "$queue_tmp" > "$DOWNLOAD_QUEUE"
+            rm -f -- "$queue_tmp" "$queue_tmp.next"
             echo -e "\033[1;32mRemovido(s) da fila de downloads com sucesso!\033[0m"
             sleep 1
         fi
@@ -8173,7 +8178,7 @@ confirmar_e_excluir() {
             pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
             tmp_pl="${ARQUIVO_PLAYLIST_ABERTO}.tmp"
             sel_tmp="$EAZY_TMP_DIR/eazy_pl_del_$$"
-            echo "$selecao" | awk -F '\t' 'NF {print $NF}' > "$sel_tmp"
+            printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | sed '/^[[:space:]]*$/d' > "$sel_tmp"
 
             : > "$tmp_pl"
             while IFS= read -r linha || [ -n "$linha" ]; do
@@ -8194,7 +8199,10 @@ confirmar_e_excluir() {
                 printf '%s\n' "$linha" >> "$tmp_pl"
             done < "$ARQUIVO_PLAYLIST_ABERTO"
 
-            mv "$tmp_pl" "$ARQUIVO_PLAYLIST_ABERTO"
+            # Escreve no arquivo aberto, sem trocar o inode; isso também
+            # funciona quando a playlist/fila foi aberta através de symlink.
+            cat "$tmp_pl" > "$ARQUIVO_PLAYLIST_ABERTO"
+            rm -f -- "$tmp_pl"
             rm -f "$sel_tmp"
             echo -e "\033[1;32mRemovido(s) da playlist/fila com sucesso!\033[0m"
             sleep 1
@@ -9864,11 +9872,11 @@ Depois use:
     elif [ "$tecla" = "f10" ]; then
         exibir_help_expandido; continue
     elif [ "$tecla" = "del" ]; then
-        # DEL: somente o arquivo sob o cursor
+        # DEL: somente o item sob o cursor; nunca usa a seleção múltipla.
         if [ -n "${cursor_raw:-}" ]; then
-            _del_item="$cursor_raw"
+            _del_item=$(printf '%s\n' "$cursor_raw" | head -n1)
         else
-            _del_item=$(printf '%s\n' "$escolha" | head -n1)
+            _del_item=$(printf '%s\n' "${escolha_raw:-$escolha}" | eazy_sem_navegacao | head -n1)
         fi
         confirmar_e_excluir "$_del_item"
         unset _del_item
@@ -9889,7 +9897,7 @@ Depois use:
             _del_sel=$(cat -- "$SELECTED_FILE")
         else
             # local: multi do fzf nesta saída (sem expandir persistência global)
-            _del_sel=$(printf '%s\n' "$escolha" | eazy_sem_navegacao 2>/dev/null || printf '%s\n' "$escolha")
+            _del_sel=$(printf '%s\n' "${escolha_raw:-$escolha}" | eazy_sem_navegacao 2>/dev/null || printf '%s\n' "${escolha_raw:-$escolha}")
             if [ -z "$(printf '%s' "$_del_sel" | tr -d '[:space:]')" ]; then
                 whiptail --title "Del local" --msgbox "Nada selecionado nesta tela.\nUse Tab/Espaço para marcar." 9 50 2>/dev/null || true
                 unset _del_ambito _del_sel
