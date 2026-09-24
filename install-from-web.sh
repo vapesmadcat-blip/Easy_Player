@@ -1,30 +1,42 @@
 #!/usr/bin/env bash
-# Instala a última release PUBLICADA no GitHub
+# eazy 4.2.1 — branch main (fora de Releases)
 set -euo pipefail
-REPO="vapesmadcat-blip/Easy_Player"
-# 4.2.1 ainda não tem release/asset → default = última publicada
-VER="${EAZY_VERSION:-4.1.6}"
-TAG="eazy-v${VER}"
-BASE="https://github.com/${REPO}/releases/download/${TAG}"
-DEB="eazy_${VER}_all.deb"
-TMP="${TMPDIR:-/tmp}/eazy-install-$$"
-mkdir -p "$TMP"
+RAW="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main"
+TMP="${TMPDIR:-/tmp}/eazy-421-$$"
+mkdir -p "$TMP" && cd "$TMP"
 cleanup() { rm -rf "$TMP"; }
 trap cleanup EXIT
 
-echo "==> Baixando ${DEB} (${TAG})..."
-if ! curl -fsSL -o "$TMP/$DEB" "${BASE}/${DEB}"; then
-  echo "ERRO 404: release ${TAG} não existe ou não tem o .deb." >&2
-  echo "Última publicada: eazy-v4.1.6" >&2
-  echo "Liste: https://github.com/${REPO}/releases" >&2
-  exit 1
+echo "==> eazy 4.2.1 do main..."
+# 1) deb em dist/
+if curl -fsSL -o eazy_4.2.1_all.deb "$RAW/dist/eazy_4.2.1_all.deb" 2>/dev/null; then
+  echo "OK dist/eazy_4.2.1_all.deb"
+# 2) zip em dist/
+elif curl -fsSL -o full.zip "$RAW/dist/eazy_4.2.1_full.zip" 2>/dev/null; then
+  echo "OK zip; extraindo deb..."
+  command -v unzip >/dev/null && unzip -qo full.zip
+  DEB=$(find . -name 'eazy_4.2.1_all.deb' | head -1)
+  [ -n "$DEB" ] && cp "$DEB" eazy_4.2.1_all.deb
+# 3) partes base64
+elif curl -fsSL -o p0 "$RAW/dist/deb.b64.000" 2>/dev/null; then
+  echo "OK partes b64..."
+  cat p0 > all.b64
+  for i in $(seq -f '%03g' 1 30); do
+    curl -fsSL -o "p$i" "$RAW/dist/deb.b64.$i" 2>/dev/null || break
+    cat "p$i" >> all.b64
+  done
+  base64 -d < all.b64 > eazy_4.2.1_all.deb
+else
+  echo "Deb 4.2.1 ainda não está no main/dist/." >&2
+  echo "Fallback: última release 4.1.6" >&2
+  curl -fsSL -o eazy_4.1.6_all.deb \
+    "https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v4.1.6/eazy_4.1.6_all.deb"
+  sudo dpkg -i eazy_4.1.6_all.deb || sudo apt-get install -f -y
+  exit 0
 fi
-curl -fsSL -o "$TMP/${DEB}.sha256" "${BASE}/${DEB}.sha256" 2>/dev/null || true
-if [ -f "$TMP/${DEB}.sha256" ]; then
-  echo "==> Verificando SHA256..."
-  (cd "$TMP" && sha256sum -c "${DEB}.sha256") || true
-fi
-echo "==> Instalando..."
-sudo dpkg -i "$TMP/$DEB" || sudo apt-get install -f -y
-echo "==> OK"
-command -v eazy >/dev/null && eazy --version || true
+
+curl -fsSL -o eazy_4.2.1_all.deb.sha256 "$RAW/eazy_4.2.1_all.deb.sha256" 2>/dev/null || true
+[ -f eazy_4.2.1_all.deb.sha256 ] && sha256sum -c eazy_4.2.1_all.deb.sha256 || true
+echo "==> dpkg..."
+sudo dpkg -i eazy_4.2.1_all.deb || sudo apt-get install -f -y
+eazy --version 2>/dev/null || true
