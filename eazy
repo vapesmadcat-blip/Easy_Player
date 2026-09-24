@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="4.1.2"
+EAZY_VERSION="4.1.3"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -1354,6 +1354,15 @@ FILAS, PLAYLISTS E AÇÕES
   PDF no Enter       Ler/converter PDF: texto, HTML, PNG ou leitor gráfico
   Del                Remover conforme o contexto
   Alt-D              Apagar do disco sem usar a lixeira
+
+════════════════════════════════════════════════════════════════════
+EAZY-TOR E INTELIGÊNCIA ARTIFICIAL
+════════════════════════════════════════════════════════════════════
+  eazy-tor --help    Downloader de magnets e arquivos .torrent
+  eazy-tor -L FILE   Baixar lista de magnets/torrents
+  eazy-tor --tor     Baixar usando Tor via torsocks
+  eazy --ai          Abrir o chat de IA via OpenRouter
+  IA                 Configure EAZY_AI_API_KEY ou OPENROUTER_API_KEY
 
 ════════════════════════════════════════════════════════════════════
 MENU Ctrl-K — MANUTENÇÃO
@@ -9585,7 +9594,7 @@ while true; do
         --bind="home:first" \
         --bind="end:last" \
         --bind="${EAZY_LOAD_BIND:-load:pos($TMP)}" \
-        --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
+        --bind="focus:execute-silent(bash -c 'printf \"%s\\n\" \"\$1\" > \"\$2\"' -- {} \"$EAZY_CURSOR_ITEM_FILE\")+execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
         --bind="down:down+execute-silent(bash -c '
             IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
             TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")

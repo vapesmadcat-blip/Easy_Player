@@ -33,4 +33,6 @@ export ARQUIVO_PLAYLIST_ABERTO MODO_DOWNLOAD MODO_PLAYLIST
 printf 's\n' | confirmar_e_excluir $'\t🎬 um.mp4\t[1 MB]\t/media/um.mp4'
 grep -Fxq '/media/dois.mp4' "$PLAYLIST"
 ! grep -Fq '/media/um.mp4' "$PLAYLIST"
+# O fzf deve persistir a linha sob o cursor antes de devolver DEL.
+grep -Fq -- '--bind="focus:execute-silent' "$ROOT/eazy"
 printf 'del-lists: OK\n'
