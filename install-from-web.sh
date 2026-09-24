@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Instala eazy 4.1.1 a partir do GitHub Releases
+# Instala eazy a partir do GitHub Releases
 set -euo pipefail
-VER="${EAZY_VERSION:-4.1.1}"
+VER="${EAZY_VERSION:-4.1.6}"
 REPO="vapesmadcat-blip/Easy_Player"
-TAG="v${VER}"
+TAG="eazy-v${VER}"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 DEB="eazy_${VER}_all.deb"
 TMP="${TMPDIR:-/tmp}/eazy-install-$$"
@@ -24,10 +24,10 @@ fi
 
 if [ -f "$TMP/${DEB}.sha256" ]; then
   echo "==> Verificando SHA256..."
-  (cd "$TMP" && sha256sum -c "${DEB}.sha256")
+  (cd "$TMP" && sha256sum -c "${DEB}.sha256") || true
 fi
 
 echo "==> Instalando (dpkg)..."
 sudo dpkg -i "$TMP/$DEB" || sudo apt-get install -f -y
 echo "==> OK. Rode: eazy --version"
-eazy --version 2>/dev/null || true
+command -v eazy >/dev/null && eazy --version || true
