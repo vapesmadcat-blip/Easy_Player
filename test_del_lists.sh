@@ -39,4 +39,6 @@ grep -Fxq '/media/dois.mp4' "$PLAYLIST_REAL"
 grep -Fq -- '--bind="focus:execute-silent' "$ROOT/eazy"
 grep -Fq 'FZF_EXPECT="${FZF_EXPECT},del"' "$ROOT/eazy"
 grep -Fq 'del|delete) echo "del"' "$ROOT/eazy"
+# Consultas como "?" devem ser literais no grep da busca de playlists.
+grep -Fq 'grep -F -i -- "$q_lista"' "$ROOT/eazy"
 printf 'del-lists: OK\n'

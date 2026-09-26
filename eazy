@@ -24,7 +24,7 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 1
 fi
 
-EAZY_VERSION="4.1.6"
+EAZY_VERSION="4.1.7"
 EAZY_CODENAME="IA IA OOOOOOOOH"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -10058,7 +10058,9 @@ Depois use:
             local q_lista item_hit
             q_lista=$(whiptail --title "Pesquisar na lista" --inputbox "Filtrar itens da lista aberta:\n$(basename "$ARQUIVO_PLAYLIST_ABERTO")" 11 60 "" 3>&1 1>&2 2>&3) || true
             if [ -n "$q_lista" ]; then
-                item_hit=$(grep -i -- "$q_lista" "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null | fzf --prompt="Na lista ❯ " --multi) || true
+                # A consulta é texto do usuário: ? e outros metacaracteres
+                # devem ser literais, sem avisos de regex do grep.
+                item_hit=$(grep -F -i -- "$q_lista" "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null | fzf --prompt="Na lista ❯ " --multi) || true
                 if [ -n "$item_hit" ]; then
                     while IFS= read -r _hit; do
                         [ -z "$_hit" ] && continue

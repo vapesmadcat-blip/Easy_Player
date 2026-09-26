@@ -1,3 +1,10 @@
+eazy (4.1.7) unstable; urgency=medium
+
+  * Treat Ctrl-H playlist queries as literal text with grep -F.
+  * Prevent warnings when the query begins with ?, *, or other regex characters.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 26 Sep 2026 15:10:00 +0000
+
 eazy (4.1.6) unstable; urgency=medium
 
   * Remove the unsupported fzf delete key alias that produced repeated warnings.
