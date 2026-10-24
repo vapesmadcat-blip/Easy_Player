@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 VERSION="4.5.0"
-TAG="eazy-v${VERSION}"
+TAG="v${VERSION}"
 BASE="https://github.com/vapesmadcat-blip/Easy_Player/releases/download/${TAG}"
 TMP="${TMPDIR:-/tmp}/eazy-${VERSION}-$$"
 mkdir -p "$TMP"
