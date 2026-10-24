@@ -1,3 +1,10 @@
+eazy (4.5.0) stable; urgency=medium
+
+  * Promote the reviewed Easy 4.5.0 build as the default executable.
+  * Include the maintained eazy-notes-editor in the release package.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Sat, 24 Oct 2026 01:55:00 -0300
+
 eazy (4.1.7) unstable; urgency=medium
 
   * Treat Ctrl-H playlist queries as literal text with grep -F.
