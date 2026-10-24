@@ -11,7 +11,7 @@ O pacote inclui:
 ## Instalação rápida
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/eazy-v4.5.0/eazy_4.5.0_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v4.5.0/eazy_4.5.0_all.deb
 sha256sum -c eazy_4.5.0_all.deb.sha256
 sudo apt install ./eazy_4.5.0_all.deb
 ```
