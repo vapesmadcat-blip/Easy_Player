@@ -1,4 +1,5 @@
 ## 5.0.0 — Central de streaming integrada
+- Restaura o seletor de navegador do easiea ao abrir o Help HTML e arquivos HTML.
 - Usa o `easiea` enviado como base, preservando melhorias de seleção, exportação, manutenção e diagnóstico.
 - Integra o `eazy-yt-stream` com pesquisa persistente, histórico de filmes assistidos, pergunta de favorito ao terminar, favoritos, duração dos vídeos e paginação de 30 resultados.
 - Inclui o stream, IA, editor de notas, eazy-tor, man page e help no instalador e no pacote Debian.

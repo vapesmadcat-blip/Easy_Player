@@ -34,3 +34,5 @@ Ou:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/install-from-web.sh | bash
 ```
+
+- O Help HTML e os arquivos HTML voltam a perguntar qual navegador usar, com suporte a Brave, Chrome, Edge, Firefox e padrão do sistema.

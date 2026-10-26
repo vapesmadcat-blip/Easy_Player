@@ -1472,7 +1472,9 @@ exibir_help_expandido() {
 
     case "$escolha" in
         1)
-            if command -v xdg-open >/dev/null 2>&1; then
+            if type eazy_abrir_html_browser >/dev/null 2>&1; then
+                eazy_abrir_html_browser "$html"
+            elif command -v xdg-open >/dev/null 2>&1; then
                 xdg-open "$html" 2>/dev/null &
             elif command -v sensible-browser >/dev/null 2>&1; then
                 sensible-browser "$html" 2>/dev/null &
@@ -10157,19 +10159,26 @@ menu_arquivo_shell() {
 }
 
 menu_arquivo_html() {
-    local arq="$1" opcao
+    local arq="$1" opcao abs
     [ ! -f "$arq" ] && return 1
+    abs=$(readlink -f -- "$arq" 2>/dev/null || printf '%s' "$arq")
     opcao=$(whiptail --title "HTML — $(basename -- "$arq")" --menu \
         "Escolha uma operação:" 15 78 5 \
-        "1" "🌐 Abrir no browser" \
+        "1" "Abrir no browser (escolher Brave/Chrome/Edge...)" \
         "2" "📄 Ver código-fonte" \
         "3" "✏️  Editar" \
         "0" "Voltar" \
         3>&1 1>&2 2>&3) || return 0
     case "$opcao" in
-        1) abrir_html_ou_link "$arq" ;;
-        2) mostrar_texto "$arq" ;;
-        3) editar_selecao "$arq" 2>/dev/null || ${EDITOR:-nano} -- "$arq" ;;
+        1)
+            if type eazy_abrir_html_browser >/dev/null 2>&1; then
+                eazy_abrir_html_browser "$abs"
+            else
+                abrir_html_ou_link "$abs"
+            fi
+            ;;
+        2) mostrar_texto "$abs" ;;
+        3) editar_selecao "$abs" 2>/dev/null || ${EDITOR:-nano} -- "$abs" ;;
         *) return 0 ;;
     esac
 }
