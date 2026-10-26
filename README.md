@@ -1,53 +1,43 @@
-# eazy 3.2.10 (release)
+# Easy Player 5.0.0
 
-https://github.com/vapesmadcat-blip/Easy_Player
-
-## Executável Linux
-
-O binário protegido para Linux 64 bits fica em [`bin/eazy-linux-x86_64`](bin/eazy-linux-x86_64). Para usar:
-
-```bash
-cd bin
-chmod +x eazy-linux-x86_64
-./eazy-linux-x86_64
-```
-
-O binário foi compilado para arquiteturas **x86_64/amd64** e ainda requer as dependências usadas pelo Eazy, como `bash`, `fzf`, `whiptail`, `mpv`, `ffmpeg`, `curl` e `wget`.
-
-Para recompilar o binário a partir do código-fonte atual:
-
-```bash
-./tools/compilar-eazy.sh eazy bin/eazy-linux-x86_64
-```
-
-O script de compilação gera um wrapper executável para scripts Bash grandes e não modifica o arquivo-fonte original.
-
-## Destaques
-- Enter em `.py` / `.sh` / `.html`: menu estilo PDF (Executar | Ver | Editar | Voltar)
-- PYTHON_CMD / SHELL_CMD no F9
-- Alt-X com quantidade e bytes
-- F9 shell + EXIT_DIR_MODE + --shell-init
-- HTML no browser, Del/Shift+Del, lixeira
+Navegador e reprodutor multimídia no terminal, com seleção persistente, playlists, downloads, manutenção, IA, editor de notas, torrents e uma Central completa de streaming.
 
 ## Instalação
-Consulte [INSTALL.md](INSTALL.md) para instalação pela fonte, uso do binário e recompilação.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/install-from-web.sh | bash
+```
+
+Para instalar o pacote manualmente:
+
+```bash
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.0.0/eazy_5.0.0_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.0.0/eazy_5.0.0_all.deb.sha256
+sha256sum -c eazy_5.0.0_all.deb.sha256
+sudo apt install ./eazy_5.0.0_all.deb
+```
+
+## Streaming
+
+A Central é aberta com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Ela usa `yt-dlp`, mostra a duração dos vídeos, mantém pesquisas salvas, favoritos e permite carregar mais 30 resultados sem repetir a consulta. Também inclui canais públicos de filmes, TV aberta, download, áudio e abertura no navegador.
+
+Os dados da Central ficam em `~/.config/eazy/yt-stream/`. O pacote instala o componente em `/usr/bin/eazy-yt-stream` e `/usr/lib/eazy/eazy-yt-stream`.
+
+## Componentes
+
+A release inclui `eazy`, `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e help HTML/TXT. O instalador não usa caminhos de usuário fixos e não instala arquivos na raiz do projeto.
+
+## Desenvolvimento
+
+```bash
+bash -n eazy eazy-yt-stream
+./packaging/build-deb.sh
+./eazy --version
+./eazy --help
+```
+
+Para recompilar o binário Linux, use `./tools/compilar-eazy.sh eazy bin/eazy-linux-x86_64`. O executável compilado continua dependendo das ferramentas do sistema usadas pelo Easy.
 
 ## Autoria
 
 **Made by John B Kersting.**
-
-Para reinstalar completamente a versão 3.13 diretamente deste repositório, sem desinstalar e preservando `~/.config/eazy`:
-
-```bash
-chmod +x reinstalar-eazy-3.13.sh
-./reinstalar-eazy-3.13.sh
-```
-
-Também é possível reinstalar diretamente pelo pacote Debian publicado no repositório:
-
-```bash
-cd /tmp
-curl -fL -o eazy_3.13_all.deb \
-  https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy_3.13_all.deb
-sudo apt install ./eazy_3.13_all.deb
-```

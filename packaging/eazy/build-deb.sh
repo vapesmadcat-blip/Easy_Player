@@ -20,7 +20,7 @@ for required in dpkg-deb install gzip; do
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy-tor" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$SRC_DIR/docs/eazy-help-4.1.7.txt" "$SRC_DIR/docs/eazy-help-4.1.7.html" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy-tor" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy-yt-stream" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$SRC_DIR/docs/eazy-help-5.0.0.txt" "$SRC_DIR/docs/eazy-help-5.0.0.html" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -34,7 +34,6 @@ mkdir -p \
     "$PKGROOT/usr/bin" \
     "$PKGROOT/usr/lib/eazy" \
     "$PKGROOT/usr/local/bin" \
-    "$PKGROOT/home/jim/.local/bin" \
     "$PKGROOT/usr/share/applications" \
     "$PKGROOT/usr/share/man/man1" \
     "$PKGROOT/usr/share/doc/$PACKAGE"
@@ -42,19 +41,20 @@ mkdir -p \
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/lib/eazy/eazy"
 ln -s /usr/bin/eazy "$PKGROOT/usr/local/bin/eazy"
-ln -s /usr/bin/eazy "$PKGROOT/home/jim/.local/bin/eazy"
 install -m 0755 "$SRC_DIR/eazy-notes-editor" "$PKGROOT/usr/lib/eazy/eazy-notes-editor"
 install -m 0755 "$SRC_DIR/eazy-tor" "$PKGROOT/usr/lib/eazy/eazy-tor"
 install -m 0755 "$SRC_DIR/eazy-tor" "$PKGROOT/usr/bin/eazy-tor"
 install -m 0755 "$SRC_DIR/eazy-ai.py" "$PKGROOT/usr/lib/eazy/eazy-ai.py"
 install -m 0755 "$SRC_DIR/eazy-ai.py" "$PKGROOT/usr/bin/eazy-ai.py"
+install -m 0755 "$SRC_DIR/eazy-yt-stream" "$PKGROOT/usr/lib/eazy/eazy-yt-stream"
+install -m 0755 "$SRC_DIR/eazy-yt-stream" "$PKGROOT/usr/bin/eazy-yt-stream"
 install -m 0644 "$SRC_DIR/eazy.desktop" "$PKGROOT/usr/share/applications/eazy.desktop"
 install -m 0644 "$SRC_DIR/README.md" "$PKGROOT/usr/share/doc/$PACKAGE/README.md"
 install -m 0644 "$SRC_DIR/CHANGELOG.md" "$PKGROOT/usr/share/doc/$PACKAGE/CHANGELOG.md"
 install -m 0644 "$SRC_DIR/EAZY_EXPLICADO.md" "$PKGROOT/usr/share/doc/$PACKAGE/EAZY_EXPLICADO.md"
 install -m 0644 "$SRC_DIR/GUIA_RAPIDO.md" "$PKGROOT/usr/share/doc/$PACKAGE/GUIA_RAPIDO.md"
-install -m 0644 "$SRC_DIR/docs/eazy-help-4.1.7.txt" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.txt"
-install -m 0644 "$SRC_DIR/docs/eazy-help-4.1.7.html" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.html"
+install -m 0644 "$SRC_DIR/docs/eazy-help-5.0.0.txt" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.txt"
+install -m 0644 "$SRC_DIR/docs/eazy-help-5.0.0.html" "$PKGROOT/usr/share/doc/$PACKAGE/eazy-help.html"
 install -m 0644 "$DEBIAN_DIR/control" "$PKGROOT/DEBIAN/control"
 install -m 0644 "$DEBIAN_DIR/changelog" "$PKGROOT/usr/share/doc/$PACKAGE/changelog.Debian"
 install -m 0644 "$DEBIAN_DIR/copyright" "$PKGROOT/usr/share/doc/$PACKAGE/copyright"

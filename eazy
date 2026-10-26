@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Base: DIRLOCAL; cálculo de status global: eazy_global_correto_PERSISTENCIA_CALCULO_QUANTIDADE
-#  eazy 4.5.0 (IA) — navegador e reprodutor multimídia no terminal
+#  eazy 5.0.0 — navegador e reprodutor multimídia no terminal
 #  Revisão 4.2.2 — tmp em ~/.config/eazy/tmp; export HTML (Ctrl-H) seleção|tela; caches/listas no config
 #  https://github.com/vapesmadcat-blip/Easy_Player
 #  fzf + mpv/mplayer/cvlc/ffplay | seleção persistente | manutenção do sistema
@@ -13,6 +13,7 @@ set -o pipefail
 # Default: silencioso (sem barra de ficheiros). --verbose mostra o processamento.
 EAZY_VERBOSE="${EAZY_VERBOSE:-0}"
 EAZY_IGNORE="${EAZY_IGNORE:-0}"   # --ignore: anónimo — não carrega nem grava persistências
+EAZY_UNSELECT="${EAZY_UNSELECT:-0}"  # --unselect: limpa seleção global e local
 _eazy_args=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -29,6 +30,10 @@ while [ "$#" -gt 0 ]; do
             EAZY_VERBOSE="${EAZY_VERBOSE:-0}"
             shift
             ;;
+        --unselect|--noselect|--no-select|--clear-selection)
+            EAZY_UNSELECT=1
+            shift
+            ;;
         --)
             shift
             _eazy_args+=("$@")
@@ -41,7 +46,7 @@ while [ "$#" -gt 0 ]; do
     esac
 done
 set -- "${_eazy_args[@]}"
-export EAZY_VERBOSE EAZY_IGNORE
+export EAZY_VERBOSE EAZY_IGNORE EAZY_UNSELECT
 
 
 # --- Não rodar o navegador como root ---
@@ -62,7 +67,7 @@ case "${1:-}" in
         ;;
 esac
 
-EAZY_VERSION="4.5.0"
+EAZY_VERSION="5.0.0"
 EAZY_CODENAME="help-html"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -91,6 +96,7 @@ EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
 EAZY_AI_CLIENT="${EAZY_AI_CLIENT:-$EAZY_INSTALL_DIR/eazy-ai.py}"
+EAZY_STREAM_SCRIPT="${EAZY_STREAM_SCRIPT:-$EAZY_INSTALL_DIR/eazy-yt-stream}"
 [ -f "$EAZY_AI_CLIENT" ] || EAZY_AI_CLIENT="/usr/lib/eazy/eazy-ai.py"
 CONFIG_FILE="$CONFIG_DIR/config"
 KEYS_FILE="$CONFIG_DIR/keys"
@@ -218,6 +224,46 @@ eazy_ensure_tmp() {
 }
 
 # selected_paths + .dirs + .local — nunca falhar com "Arquivo ou diretório inexistente"
+
+# Limpa seleção global + local (+ caches de bytes / dirs)
+eazy_limpar_selecao() {
+    local base="${CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/eazy}"
+    local tmp="${EAZY_TMP_DIR:-$base/tmp}"
+    local f
+    mkdir -p "$base" "$tmp" 2>/dev/null || true
+
+    # caminhos canonicos (global persistente)
+    for f in \
+        "$base/selected_paths" \
+        "$base/selected_paths.dirs" \
+        "$base/selected_paths.local" \
+        "$base/selected_paths.bytes" \
+        "$base/selected_paths.dirs.bytes" \
+        "$base/selected_paths.local.bytes"
+    do
+        : > "$f" 2>/dev/null || rm -f "$f" 2>/dev/null || true
+    done
+
+    # se SELECTED_FILE aponta para outro sitio, limpa tambem
+    if [ -n "${SELECTED_FILE:-}" ]; then
+        : > "$SELECTED_FILE" 2>/dev/null || true
+        : > "${SELECTED_FILE}.dirs" 2>/dev/null || true
+        : > "${SELECTED_FILE}.local" 2>/dev/null || true
+        rm -f "${SELECTED_FILE}.bytes" "${SELECTED_FILE}.dirs.bytes" "${SELECTED_FILE}.local.bytes" 2>/dev/null || true
+    fi
+    SELECTED_DIRS_FILE="${SELECTED_FILE:-$base/selected_paths}.dirs"
+    SELECTED_LOCAL_FILE="${SELECTED_FILE:-$base/selected_paths}.local"
+    : > "${SELECTED_DIRS_FILE:-/dev/null}" 2>/dev/null || true
+    : > "${SELECTED_LOCAL_FILE:-/dev/null}" 2>/dev/null || true
+
+    # tmp de sessao (qualquer eazy_selected_*)
+    rm -f "$tmp"/eazy_selected_* "$tmp"/fzf_dup_selected_* "$tmp"/fzf_dup_fixed_* 2>/dev/null || true
+    if [ -n "${DUP_SELECTED_FILE:-}" ]; then : > "$DUP_SELECTED_FILE" 2>/dev/null || true; fi
+    if [ -n "${DUP_FIXED_FILE:-}" ]; then : > "$DUP_FIXED_FILE" 2>/dev/null || true; fi
+
+    return 0
+}
+
 eazy_ensure_selection() {
     local base="${CONFIG_DIR:-$HOME/.config/eazy}"
     mkdir -p "$base" "${EAZY_TMP_DIR:-$base/tmp}" 2>/dev/null || true
@@ -1284,8 +1330,10 @@ Opções:
   --verbose, -v      Mostra ficheiros a processar (barra de estado)
   --silent, -q       Silencioso (padrão): sem barra de processamento
   --ignore           Anónimo: sem sessão, seleção, posições, histórico, filas
+  --unselect         Limpa seleção global e local (selected_paths) e continua
   --install          Instala dependências, comando global e scripts auxiliares
   --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
+  --stream           Abre a Central completa de streaming/filmes
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
   --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
@@ -1307,7 +1355,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-P             Alternar: dir → filas 1-3 → listas tmp → histórico → dup → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
-  Ctrl-B             Downloads (inclui magnets/.torrent e destino padrão: $HOME/Downloads)
+  Ctrl-B             Downloads, fila de streams e Central eazy-yt-stream
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
@@ -1541,7 +1589,7 @@ S
         dl) cat <<'S'
 DOWNLOADS, TOR E TORRENTS
 ─────────────────────────
-  Ctrl-B             Gerenciador de downloads (fila)
+  Ctrl-B             Gerenciador de downloads e fila de streams
   Enter na fila      SEMPRE pergunta app + Tor (sugere o último usado)
   eazy-tor           Downloader de magnet/.torrent (incluso no .deb)
   Tor                Opção por item + torsocks (socks5://127.0.0.1:9050)
@@ -1620,8 +1668,10 @@ LINHA DE COMANDO
   eazy [pasta|arquivo]
   eazy --verbose          Mostra o que está a processar
   eazy --ignore           Anónimo (sem persistências)
+  eazy --unselect         Limpa seleção global/local e abre o eazy
   eazy --install          Instala deps + eazy + tor + IA + editor
   eazy --update-all       Atualiza todas as dependências do sistema
+  eazy --stream            Abre a Central completa de streaming/filmes
   eazy --shell-init       Função bash para cd ao sair
   eazy --torrent …        Encaminha ao eazy-tor
   eazy --update-ytdlp     Atualiza yt-dlp (binário oficial)
@@ -3558,6 +3608,8 @@ if [ "$1" = "--install" ]; then
     [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
     AI_SRC="$SCRIPT_DIR/eazy-ai.py"
     [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
+    STREAM_SRC="$SCRIPT_DIR/eazy-yt-stream"
+    [ -f "$STREAM_SRC" ] || STREAM_SRC="/usr/lib/eazy/eazy-yt-stream"
     TOR_SRC="$SCRIPT_DIR/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="/usr/lib/eazy/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="$(command -v eazy-tor 2>/dev/null || true)"
@@ -3596,6 +3648,17 @@ if [ "$1" = "--install" ]; then
     else
         echo -e "\033[1;33m!\033[0m Cliente de IA não encontrado (eazy-ai.py)"
     fi
+    if [ -f "$STREAM_SRC" ]; then
+        if sudo install -Dm755 "$STREAM_SRC" /usr/lib/eazy/eazy-yt-stream \
+            && sudo install -Dm755 "$STREAM_SRC" /usr/bin/eazy-yt-stream; then
+            echo -e "\033[1;32m✓\033[0m Central de streaming: /usr/lib/eazy/eazy-yt-stream (+ /usr/bin)"
+        else
+            echo -e "\033[1;31m✗\033[0m Falha ao instalar eazy-yt-stream" >&2
+            exit 1
+        fi
+    else
+        echo -e "\033[1;33m!\033[0m eazy-yt-stream não encontrado ao lado do script"
+    fi
     if [ -n "$TOR_SRC" ] && [ -f "$TOR_SRC" ]; then
         if sudo install -Dm755 "$TOR_SRC" /usr/lib/eazy/eazy-tor \
             && sudo install -Dm755 "$TOR_SRC" /usr/bin/eazy-tor; then
@@ -3627,7 +3690,7 @@ if [ "$1" = "--install" ]; then
     # Man page embutida (não depende de eazy.1 ao lado do script)
     MAN_TMP=$(mktemp "${EAZY_TMP_DIR:-${CONFIG_DIR:-$HOME/.config/eazy}/tmp}/eazy-man.XXXXXX")
     cat > "$MAN_TMP" <<'EAZY_MAN_EOF'
-.TH EAZY 1 "September 2026" "eazy 4.2.3" "User Commands"
+.TH EAZY 1 "September 2026" "eazy 5.0.0" "User Commands"
 .SH NAME
 eazy \- terminal media browser, player and download manager
 .SH SYNOPSIS
@@ -3768,7 +3831,7 @@ EAZY_MAN_EOF
     rm -f "$MAN_TMP"
 
     echo -e "\n\033[1;36m--- verificação ---\033[0m"
-    for _b in eazy eazy-tor eazy-ai.py eazy-notes-editor fzf mpv aria2c tor torsocks python3; do
+    for _b in eazy eazy-tor eazy-ai.py eazy-notes-editor eazy-yt-stream fzf mpv aria2c tor torsocks python3; do
         if command -v "$_b" &>/dev/null; then
             echo -e "  \033[1;32m✓\033[0m $_b → $(command -v "$_b")"
         else
@@ -3800,6 +3863,12 @@ elif [ "$1" = "--uninstall" ]; then
     fi
     if [ -f /usr/lib/eazy/eazy-ai.py ]; then
         sudo rm -f /usr/lib/eazy/eazy-ai.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-ai.py" && REMOVIDO=1
+    fi
+    if [ -f /usr/lib/eazy/eazy-yt-stream ]; then
+        sudo rm -f /usr/lib/eazy/eazy-yt-stream && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-yt-stream" && REMOVIDO=1
+    fi
+    if [ -f /usr/bin/eazy-yt-stream ]; then
+        sudo rm -f /usr/bin/eazy-yt-stream && echo -e "\033[1;32m✓\033[0m /usr/bin/eazy-yt-stream" && REMOVIDO=1
     fi
     INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
     INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
@@ -3867,6 +3936,9 @@ elif [ "$1" = "--restore-keys" ]; then
 elif [ "$1" = "--config" ]; then
     configurar_defaults
     exit 0
+elif [ "$1" = "--stream" ]; then
+    eazy_stream_open_advanced
+    exit $?
 elif [ "$1" = "--ai" ]; then
     eazy_ia_chat
     exit $?
@@ -4089,6 +4161,21 @@ elif [ "${SEL_GLOBAL_OP:-1}" = "0" ]; then
 else
     SELECTED_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/eazy/selected_paths"
 fi
+
+# --unselect / --noselect: apaga seleção global e local (sempre, a cada arranque)
+if [ "${EAZY_UNSELECT:-0}" = "1" ]; then
+    CONFIG_DIR="${CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/eazy}"
+    SELECTED_FILE="${CONFIG_DIR}/selected_paths"
+    SELECTED_DIRS_FILE="${SELECTED_FILE}.dirs"
+    SELECTED_LOCAL_FILE="${SELECTED_FILE}.local"
+    eazy_limpar_selecao
+    # segunda passagem apos paths definidos
+    : > "$SELECTED_FILE" 2>/dev/null || true
+    : > "$SELECTED_DIRS_FILE" 2>/dev/null || true
+    : > "$SELECTED_LOCAL_FILE" 2>/dev/null || true
+    rm -f "$SELECTED_FILE.bytes" "$SELECTED_DIRS_FILE.bytes" "$SELECTED_LOCAL_FILE.bytes" 2>/dev/null || true
+    printf '\033[1;32meazy: seleção limpa (--unselect)\033[0m\n' > /dev/tty 2>/dev/null || true
+fi
 DUP_MANUAL_FILE="${EAZY_TMP_DIR}/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" "$EAZY_TMP_DIR" 2>/dev/null || true
 : > "$TMP_FILE" 2>/dev/null || true
@@ -4178,19 +4265,69 @@ eazy_html_escape() {
 }
 
 eazy_html_file_url() {
-    # WSL/Windows-aware (wsl.localhost / C:/...) via eazy_caminho_para_url_local
-    local caminho="$1" u
+    # URL para browser Windows/WSL. Nunca file:///mnt/wsl/... cru.
+    local caminho="$1" u p abs win distro drive rest
+    [ -z "$caminho" ] && return 1
+
     if type eazy_caminho_para_url_local >/dev/null 2>&1; then
         u=$(eazy_caminho_para_url_local "$caminho" 2>/dev/null || true)
+        case "$u" in
+            file:///mnt/*|file://mnt/*|file:///home/*|file:///usr/*) u="" ;;
+        esac
         if [ -n "$u" ]; then
             printf '%s' "$u"
             return 0
         fi
     fi
-    if command -v python3 >/dev/null 2>&1; then
-        printf '%s' "$caminho" | python3 -c 'import sys,urllib.parse; print("file://"+urllib.parse.quote(sys.stdin.read().strip()))' 2>/dev/null && return 0
+
+    p="$caminho"
+    if [[ "$p" != /* ]]; then
+        p="$(pwd -P)/${p#./}"
     fi
-    printf 'file://%s' "$caminho"
+    abs=$(readlink -f -- "$p" 2>/dev/null || printf '%s' "$p")
+    p="$abs"
+    win=""
+
+    if command -v wslpath >/dev/null 2>&1; then
+        win=$(wslpath -w -- "$p" 2>/dev/null || true)
+        case "$win" in
+            /mnt/*|/home/*|/usr/*) win="" ;;
+        esac
+    fi
+
+    if [ -z "$win" ]; then
+        case "$p" in
+            /mnt/[a-zA-Z]/*)
+                drive=$(printf '%s' "${p:5:1}" | tr '[:lower:]' '[:upper:]')
+                rest="${p:7}"
+                rest="${rest#/}"
+                # C:\path\...
+                win=$(printf '%s:\\%s' "$drive" "${rest//\//\\}")
+                ;;
+            *)
+                distro="${WSL_DISTRO_NAME:-Ubuntu}"
+                # \\wsl.localhost\Ubuntu\path
+                win=$(printf '\\\\wsl.localhost\\%s%s' "$distro" "${p//\//\\}")
+                ;;
+        esac
+    fi
+
+    # barras normais no URL
+    win=${win//\\//}
+    win=${win// /%20}
+    win=${win//#/%23}
+    win=${win//\?/%3F}
+
+    case "$win" in
+        //*|wsl.localhost/*|wsl\$/*)
+            win=${win#/}
+            win=${win#/}
+            printf 'file://%s' "$win"
+            ;;
+        *)
+            printf 'file:///%s' "$win"
+            ;;
+    esac
 }
 
 eazy_html_ext_badge() {
@@ -4314,11 +4451,38 @@ eazy_count_lines() {
     echo
 }
 
-# Decide fonte: seleção (se houver) ou tela inteira
+# Converte ficheiro de caminhos (um por linha, tipo fila/histórico) → TSV de export
+eazy_paths_list_file_to_tsv() {
+    local src="$1" out="$2" line abs
+    : > "$out" || return 1
+    [ -f "$src" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        line=$(printf '%s' "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/\r$//')
+        [ -z "$line" ] && continue
+        [[ "$line" =~ ^# ]] && continue
+        if type caminho_absoluto >/dev/null 2>&1; then
+            abs=$(caminho_absoluto "$line" 2>/dev/null || printf '%s' "$line")
+        else
+            abs="$line"
+            [[ "$abs" != /* ]] && abs="$(pwd -P)/${abs#./}"
+        fi
+        abs=$(readlink -f -- "$abs" 2>/dev/null || printf '%s' "$abs")
+        [ -n "$abs" ] || continue
+        if type eazy_path_to_tsv_line >/dev/null 2>&1; then
+            eazy_path_to_tsv_line "$abs" >> "$out"
+        else
+            local sz=0
+            [ -e "$abs" ] && sz=$(stat -c%s -- "$abs" 2>/dev/null || echo 0)
+            printf '%s\t0\tf\t%s\t%s\n' "$sz" "$(basename -- "$abs")" "$abs" >> "$out"
+        fi
+    done < "$src"
+}
+
+# Decide fonte: seleção, lista aberta (fila/histórico/playlist), ou tela
 eazy_capturar_export_tsv() {
     local out="$1"
     local escopo_var="${2:-_eazy_export_escopo}"
-    local n_sel=0 src=""
+    local n_sel=0 src="" n_list=0
 
     : > "$out" || return 1
 
@@ -4337,7 +4501,6 @@ eazy_capturar_export_tsv() {
         n_sel=${n_sel:-0}
         if [ "$n_sel" -gt 0 ]; then
             eazy_paths_file_to_tsv "$SELECTED_FILE" "$out"
-            # inclui dirs marcados se existirem
             if [ -s "${SELECTED_DIRS_FILE:-}" ]; then
                 eazy_paths_file_to_tsv "$SELECTED_DIRS_FILE" "${out}.dirs"
                 cat "${out}.dirs" >> "$out" 2>/dev/null || true
@@ -4349,10 +4512,102 @@ eazy_capturar_export_tsv() {
         fi
     fi
 
+    # Lista aberta (fila 1–3, histórico, playlist .m3u, lista custom)
+    if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
+        eazy_paths_list_file_to_tsv "$ARQUIVO_PLAYLIST_ABERTO" "$out"
+        n_list=$(eazy_count_lines "$out")
+        n_list=${n_list:-0}
+        if [ "$n_list" -gt 0 ]; then
+            eval "$escopo_var=\"Lista: $(basename -- "$ARQUIVO_PLAYLIST_ABERTO") ($n_list item(ns))\""
+            return 0
+        fi
+    fi
+
+    # Duplicados (lista completa se sem selecao)
+    if [ "${MODO_DUP:-0}" -eq 1 ] && [ -s "${DUP_FILE:-}" ]; then
+        eazy_paths_file_to_tsv "$DUP_FILE" "$out" 2>/dev/null || eazy_paths_list_file_to_tsv "$DUP_FILE" "$out"
+        n_list=$(eazy_count_lines "$out"); n_list=${n_list:-0}
+        if [ "$n_list" -gt 0 ]; then
+            eval "$escopo_var=\"Lista de duplicados ($n_list item(ns))\""
+            return 0
+        fi
+    fi
+
     eazy_capturar_lista_tela_tsv "$out" "${FZF_QUERY:-}"
     eval "$escopo_var=\"Conteúdo da tela (filtro/pesquisa inclusos)\""
     return 0
 }
+
+# Exporta HTML a partir de um ficheiro de lista (filas, histórico, …)
+eazy_exportar_lista_por_arquivo() {
+    local arquivo="$1"
+    local rotulo="${2:-lista}"
+    local tmp n crit
+    if [ -z "$arquivo" ] || [ ! -f "$arquivo" ]; then
+        whiptail --title "Exportar lista" --msgbox "Lista vazia ou inexistente:\n${arquivo:-?}" 9 55
+        return 1
+    fi
+    n=$(eazy_count_lines "$arquivo")
+    n=${n:-0}
+    if [ "$n" -eq 0 ]; then
+        whiptail --title "Exportar lista" --msgbox "A lista está vazia:\n$arquivo" 9 55
+        return 1
+    fi
+    tmp=$(mktemp "${EAZY_TMP_DIR}/eazy-lista-html.XXXXXX") || return 1
+    eazy_paths_list_file_to_tsv "$arquivo" "$tmp"
+    n=$(eazy_count_lines "$tmp"); n=${n:-0}
+    if [ "$n" -eq 0 ]; then
+        rm -f "$tmp"
+        whiptail --title "Exportar lista" --msgbox "Nenhum caminho válido na lista." 8 50
+        return 1
+    fi
+    crit="Lista: $rotulo
+Arquivo: $arquivo
+Itens: $n
+Pasta eazy: $(pwd -P)"
+    exportar_lista_html "$tmp" "$rotulo" "$crit" "Lista: $rotulo ($n item(ns))"
+    local rc=$?
+    rm -f "$tmp"
+    return "$rc"
+}
+
+eazy_menu_exportar_listas() {
+    local escolha n1 n2 n3 nh nd
+    n1=$(eazy_count_lines "${PLAYLIST_1:-}"); n1=${n1:-0}
+    n2=$(eazy_count_lines "${PLAYLIST_2:-}"); n2=${n2:-0}
+    n3=$(eazy_count_lines "${PLAYLIST_3:-}"); n3=${n3:-0}
+    nh=$(eazy_count_lines "${HISTORY_FILE:-}"); nh=${nh:-0}
+    nd=$(eazy_count_lines "${DUP_LISTA:-}"); nd=${nd:-0}
+
+    escolha=$(whiptail --title "Ctrl-H — Listas" --menu "Exportar qual lista para HTML?
+(links com caminho Windows/WSL + escolha de browser)" 18 70 9 \
+        "atual"  "Lista/fila aberta agora" \
+        "f1"     "Fila 1 ($n1 itens)" \
+        "f2"     "Fila 2 ($n2 itens)" \
+        "f3"     "Fila 3 ($n3 itens)" \
+        "hist"   "Histórico ($nh itens)" \
+        "dup"    "Duplicados tmp ($nd itens)" \
+        "tela"   "O que está no ecrã / seleção" \
+        "0"      "Cancelar" \
+        3>&1 1>&2 2>&3) || return 0
+
+    case "$escolha" in
+        atual)
+            if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -f "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
+                eazy_exportar_lista_por_arquivo "$ARQUIVO_PLAYLIST_ABERTO" "lista-$(basename -- "$ARQUIVO_PLAYLIST_ABERTO")"
+            else
+                exportar_tela_html
+            fi
+            ;;
+        f1) eazy_exportar_lista_por_arquivo "$PLAYLIST_1" "Fila-1" ;;
+        f2) eazy_exportar_lista_por_arquivo "$PLAYLIST_2" "Fila-2" ;;
+        f3) eazy_exportar_lista_por_arquivo "$PLAYLIST_3" "Fila-3" ;;
+        hist) eazy_exportar_lista_por_arquivo "$HISTORY_FILE" "Historico" ;;
+        dup) eazy_exportar_lista_por_arquivo "${DUP_LISTA:-$CONFIG_DIR/temp_duplicados}" "Duplicados" ;;
+        tela) exportar_tela_html ;;
+    esac
+}
+
 
 
 # --- árvore HTML (expand all) ---
@@ -4629,6 +4884,15 @@ exportar_lista_html() {
   @media (max-width: 720px) {
     .hide-sm { display: none; }
     thead th:nth-child(1), tbody td:nth-child(1) { display: none; }
+    .wrap { padding: 16px 12px 48px; }
+    h1 { font-size: 1.2rem; }
+    tbody td { padding: 10px 12px; }
+  }
+  @media (min-width: 1200px) {
+    .wrap { max-width: 1200px; }
+  }
+  @media (min-width: 1600px) {
+    .wrap { max-width: 1400px; }
   }
 </style>
 </head>
@@ -7620,6 +7884,19 @@ eazy_stream_delete_item() {
     whiptail --title "Streams" --msgbox "Removido." 7 30
 }
 
+eazy_stream_open_advanced() {
+    local stream="${EAZY_STREAM_SCRIPT:-${EAZY_INSTALL_DIR:-$HOME/.local/lib/eazy}/eazy-yt-stream}"
+    [ -x "$stream" ] || stream="/usr/lib/eazy/eazy-yt-stream"
+    if [ ! -x "$stream" ]; then
+        whiptail --title "eazy-yt-stream" --msgbox "Central de streaming não instalada.
+
+Reinstale com:
+eazy --install" 10 65 2>/dev/null || printf '%s\n' "Central de streaming não instalada: eazy --install"
+        return 1
+    fi
+    EAZY_YT_OUT="${DOWNLOAD_DIR:-$HOME/Downloads}" EAZY_YT_DATA="${CONFIG_DIR:-$HOME/.config/eazy}/yt-stream" bash "$stream"
+}
+
 eazy_menu_streams() {
     local op n_st line tmp url quality
     while true; do
@@ -7628,6 +7905,7 @@ eazy_menu_streams() {
         op=$(whiptail --title "Streams · Ctrl+B" --menu \
 "Fila de links para stream (play direto).
 Itens: $n_st" 18 68 7 \
+            "advanced" "🎬 Central completa — pesquisa, filmes e favoritos" \
             "play"     "▶ PLAY — tocar da fila" \
             "add"      "＋ Adicionar link" \
             "incluir"  "▶ Incluir + PLAY" \
@@ -7637,6 +7915,7 @@ Itens: $n_st" 18 68 7 \
             "voltar"   "Voltar" \
             3>&1 1>&2 2>&3) || return 0
         case "$op" in
+            advanced) eazy_stream_open_advanced ;;
             play)
                 line=$(eazy_stream_escolher_item "PLAY stream ❯ ") || continue
                 url=$(printf '%s' "$line" | cut -d'|' -f1)
@@ -11381,29 +11660,31 @@ menu_pdf() {
 
 # --- WSL / caminho Windows para HTML ---
 eazy_caminho_para_url_local() {
-    # Path Linux → URL file:// para browser Windows (WSL) ou Linux.
-    # SEMPRE tenta URL utilizável em todos os tipos de ficheiro (video, html, img, …).
-    local p="$1" win="" distro abs
+    # /mnt/c → file:///C:/...
+    # /mnt/wsl/PHYSICALDRIVE... e /home → file://wsl.localhost/<distro>/...
+    local p="$1" win="" distro abs drive rest
     [ -z "$p" ] && return 1
-    # absoluto
     if [[ "$p" != /* ]]; then
         p="$(pwd -P)/${p#./}"
     fi
     abs=$(readlink -f -- "$p" 2>/dev/null || printf '%s' "$p")
     p="$abs"
+    win=""
 
-    # 1) wslpath -w (melhor no WSL)
     if command -v wslpath >/dev/null 2>&1; then
         win=$(wslpath -w -- "$p" 2>/dev/null || true)
+        case "$win" in
+            /mnt/*|/home/*|/usr/*) win="" ;;
+        esac
     fi
 
     if [ -z "$win" ]; then
         case "$p" in
             /mnt/[a-zA-Z]/*)
-                local drive rest
                 drive=$(printf '%s' "${p:5:1}" | tr '[:lower:]' '[:upper:]')
-                rest="${p:7}"; rest="${rest#/}"
-                win="${drive}:\\${rest//\//\\}"
+                rest="${p:7}"
+                rest="${rest#/}"
+                win=$(printf '%s:\\%s' "$drive" "${rest//\//\\}")
                 ;;
             *)
                 distro="${WSL_DISTRO_NAME:-}"
@@ -11412,20 +11693,26 @@ eazy_caminho_para_url_local() {
                     distro=$(printf '%s' "$distro" | awk '{print $1}')
                 fi
                 distro="${distro:-Ubuntu}"
-                win="\\\\wsl.localhost\\${distro}${p//\//\\}"
+                win=$(printf '\\\\wsl.localhost\\%s%s' "$distro" "${p//\//\\}")
                 ;;
         esac
     fi
 
-    win=$(printf '%s' "$win" | sed 's|\\|/|g')
-    win=$(printf '%s' "$win" | sed 's/ /%20/g; s/#/%23/g; s/?/%3F/g; s/\[/%5B/g; s/\]/%5D/g')
+    win=${win//\\//}
+    win=${win// /%20}
+    win=${win//#/%23}
+    win=${win//\?/%3F}
 
-    if [[ "$win" == //* ]] || [[ "$win" == wsl.localhost/* ]] || [[ "$win" == wsl$/* ]]; then
-        win=$(printf '%s' "$win" | sed 's|^/*||')
-        printf 'file://%s\n' "$win"
-    else
-        printf 'file:///%s\n' "$win"
-    fi
+    case "$win" in
+        //*|wsl.localhost/*|wsl\$/*)
+            win=${win#/}
+            win=${win#/}
+            printf 'file://%s\n' "$win"
+            ;;
+        *)
+            printf 'file:///%s\n' "$win"
+            ;;
+    esac
 }
 
 eazy_browser_cmd_exists() {
@@ -11566,6 +11853,24 @@ HTML: $(basename -- "$html")
     return 0
 }
 
+
+# Pergunta se HTML inclui subpastas (maxdepth)
+eazy_html_perguntar_subdirs() {
+    # imprime maxdepth para find: 1 = so este dir; 999 = recursivo
+    local r
+    r=$(whiptail --title "HTML — profundidade" --menu \
+"Incluir ficheiros em subpastas?
+
+Pasta: $(pwd -P)" 14 64 3 \
+        "1" "Só este diretório (sem subpastas)" \
+        "999" "Incluir subpastas (recursivo)" \
+        3>&1 1>&2 2>&3) || echo "1"
+    case "$r" in
+        999) echo 999 ;;
+        *) echo 1 ;;
+    esac
+}
+
 eazy_gerar_html_videos() {
     local dir thumbs_dir html nome_dir lista n=0 v base thumb rel_v titulo
     dir=$(pwd -P)
@@ -11573,6 +11878,8 @@ eazy_gerar_html_videos() {
     titulo="Videos — $nome_dir"
     thumbs_dir="$dir/.eazy_thumbs"
     html="$dir/eazy_videos.html"
+    local maxd
+    maxd=$(eazy_html_perguntar_subdirs)
 
     if ! command -v ffmpeg >/dev/null 2>&1; then
         whiptail --title "HTML videos" --msgbox \
@@ -11583,11 +11890,11 @@ Instale: sudo apt install ffmpeg" 11 55
     fi
 
     mapfile -t lista < <(
-        find "$dir" -maxdepth 1 -type f \( \
+        find "$dir" -maxdepth "$maxd" -type f \( \
             -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o \
             -iname '*.webm' -o -iname '*.m4v' -o -iname '*.wmv' -o -iname '*.flv' -o \
             -iname '*.mpeg' -o -iname '*.mpg' -o -iname '*.ts' \
-        \) -print 2>/dev/null | LC_ALL=C sort
+        \) ! -path '*/.eazy_thumbs/*' -print 2>/dev/null | LC_ALL=C sort
     )
     n=${#lista[@]}
     if [ "$n" -eq 0 ]; then
@@ -11626,8 +11933,26 @@ Player HTML5 + botao Abrir." 14 70; then
   header { padding: 1rem 1.25rem; background: #1a1d24; border-bottom: 1px solid #2a2f3a; position: sticky; top: 0; z-index: 2; }
   header h1 { margin: 0; font-size: 1.15rem; }
   header p { margin: .35rem 0 0; color: #9aa0a6; font-size: .85rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 1.25rem; }
-  .card { background: #1a1d24; border-radius: 12px; overflow: hidden; border: 1px solid #2a2f3a; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: clamp(0.6rem, 1.5vw, 1.1rem);
+    padding: clamp(0.75rem, 2vw, 1.35rem);
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr)); gap: 0.6rem; padding: 0.7rem; }
+    header { padding: 0.75rem 0.9rem; }
+    header h1 { font-size: 1rem; }
+    .card .name, .name { font-size: 0.8rem; }
+    .card .acts a.btn, a.btn { font-size: 0.7rem; padding: 0.28rem 0.45rem; }
+  }
+  @media (min-width: 1100px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  }
+  @media (min-width: 1600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  }
+  .card { display: flex; flex-direction: column; background: #1a1d24; border-radius: 12px; overflow: hidden; border: 1px solid #2a2f3a; }
   .card:hover { border-color: #5c6bc0; }
   .thumb-wrap { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; cursor: pointer; }
   .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -11644,7 +11969,7 @@ Player HTML5 + botao Abrir." 14 70; then
     background: #2a2f3a; color: #e8eaed; text-decoration: none; border: 0; cursor: pointer; font-family: inherit; }
   .card a.btn:hover, .card button.btn:hover { background: #5c6bc0; }
   .card a.btn.primary, .card button.btn.primary { background: #3f51b5; }
-  .hidden { display: none !important; }
+  .hidden { display: none !important; height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; }
   .tip { margin: 0 1.25rem 1rem; padding: .75rem 1rem; background: #1a1d24; border-left: 3px solid #5c6bc0;
     color: #9aa0a6; font-size: .8rem; border-radius: 0 8px 8px 0; }
 </style>
@@ -11661,8 +11986,9 @@ CSS
             i=$((i + 1))
             base=$(basename -- "$v")
             base_esc=$(printf '%s' "$base" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-            rel_v="$base"
-            thumb="$thumbs_dir/${base%.*}.jpg"
+            rel_v="${v#"$dir"/}"
+            [ "$rel_v" = "$v" ] && rel_v="$base"
+            thumb="$thumbs_dir/$(printf '%s' "$rel_v" | sed 's|/|__|g;s| |_|g').jpg"
             ext=$(printf '%s' "${base##*.}" | tr '[:upper:]' '[:lower:]')
             case "$ext" in
                 webm) mime="video/webm" ;;
@@ -11671,7 +11997,7 @@ CSS
                 *) mime="video/mp4" ;;
             esac
 
-            echo -e "  \033[0;90m[$i/$n]\033[0m $base"
+            echo -e "  \033[0;90m[$i/$n]\033[0m $base" > /dev/tty 2>/dev/null || echo "[$i/$n] $base" >&2
             if [ ! -s "$thumb" ]; then
                 ffmpeg -hide_banner -loglevel error -y \
                     -ss 3 -i "$v" -frames:v 1 -q:v 4 \
@@ -11697,8 +12023,8 @@ CSS
                 b64=$(base64 -w 0 "$thumb" 2>/dev/null || base64 "$thumb" 2>/dev/null | tr -d '\n')
             fi
 
+            # Um so quadro: thumb + nome em baixo. Video escondido (sem segundo quadro).
             printf '<div class="card" id="c%d">\n' "$i"
-            # Thumb clicavel (funciona mesmo se <video> falhar no Firefox)
             printf '<div class="thumb-wrap" onclick="playCard(%d)" title="Reproduzir">\n' "$i"
             if [ -n "$b64" ]; then
                 printf '<img src="data:image/jpeg;base64,%s" alt="%s">\n' "$b64" "$base_esc"
@@ -11706,17 +12032,14 @@ CSS
                 printf '<div class="ph">▶</div>\n'
             fi
             printf '<div class="play">▶</div></div>\n'
-            # video: source com type — Firefox e mais exigente
-            printf '<video id="v%d" class="hidden" controls preload="none" playsinline>\n' "$i"
+            printf '<video id="v%d" class="hidden" controls preload="none" playsinline style="display:none">\n' "$i"
             printf '<source src="%s" type="%s">\n' "$rel_v" "$mime"
-            printf '%s\n' 'O browser nao consegue reproduzir este formato.'
             printf '</video>\n'
-            printf '<div class="meta">\n'
-            printf '<div class="name">%s</div>\n' "$base_esc"
+            printf '<div class="meta"><div class="name">%s</div>\n' "$base_esc"
             printf '<div class="sub">%s · %s</div>\n' "$mb" "$ext"
             printf '<div class="acts">\n'
             printf '<button type="button" class="btn primary" onclick="playCard(%d)">Play</button>\n' "$i"
-            printf '<a class="btn" href="%s" download="%s">Abrir / Download</a>\n' "$rel_v" "$base_esc"
+            printf '<a class="btn" href="%s" download="%s">Abrir</a>\n' "$rel_v" "$base_esc"
             printf '</div></div></div>\n'
         done
 
@@ -11729,13 +12052,14 @@ function playCard(i) {
   if (!v) return;
   // pausa outros
   document.querySelectorAll('video').forEach(function(o) {
-    if (o !== v) { try { o.pause(); } catch(e) {} o.classList.add('hidden');
+    if (o !== v) { try { o.pause(); } catch(e) {} o.classList.add('hidden'); o.style.display='none';
       var tw = o.parentElement && o.parentElement.querySelector('.thumb-wrap');
-      if (tw) tw.classList.remove('hidden');
+      if (tw) { tw.classList.remove('hidden'); tw.style.display=''; }
     }
   });
-  if (t) t.classList.add('hidden');
+  if (t) { t.classList.add('hidden'); t.style.display='none'; }
   v.classList.remove('hidden');
+  v.style.display='block';
   var p = v.play();
   if (p && p.catch) {
     p.catch(function() {
@@ -11778,8 +12102,10 @@ eazy_gerar_html_dirs() {
     titulo="Pastas — $nome_dir"
     html="$dir/eazy_pastas.html"
 
+    local maxd
+    maxd=$(eazy_html_perguntar_subdirs)
     mapfile -t lista < <(
-        find "$dir" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -print 2>/dev/null | LC_ALL=C sort
+        find "$dir" -mindepth 1 -maxdepth "$maxd" -type d ! -name '.*' ! -path '*/.eazy_thumbs/*' -print 2>/dev/null | LC_ALL=C sort
     )
     n=${#lista[@]}
     if [ "$n" -eq 0 ]; then
@@ -11814,7 +12140,25 @@ Cada cartao mostra nome, contagens e link para abrir no Explorer." 14 70; then
   header { padding: 1rem 1.25rem; background: #1a1d24; border-bottom: 1px solid #2a2f3a; position: sticky; top: 0; z-index: 2; }
   header h1 { margin: 0; font-size: 1.15rem; }
   header p { margin: .35rem 0 0; color: #9aa0a6; font-size: .85rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; padding: 1.25rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: clamp(0.6rem, 1.5vw, 1.1rem);
+    padding: clamp(0.75rem, 2vw, 1.35rem);
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr)); gap: 0.6rem; padding: 0.7rem; }
+    header { padding: 0.75rem 0.9rem; }
+    header h1 { font-size: 1rem; }
+    .card .name, .name { font-size: 0.8rem; }
+    .card .acts a.btn, a.btn { font-size: 0.7rem; padding: 0.28rem 0.45rem; }
+  }
+  @media (min-width: 1100px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  }
+  @media (min-width: 1600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  }
   .card { background: #1a1d24; border-radius: 12px; overflow: hidden; border: 1px solid #2a2f3a; display: flex; flex-direction: column; }
   .card:hover { border-color: #5c6bc0; }
   .icon { aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center;
@@ -11829,6 +12173,10 @@ Cada cartao mostra nome, contagens e link para abrir no Explorer." 14 70; then
   a.btn.primary { background: #3f51b5; }
   .tip { margin: 0 1.25rem 1rem; padding: .75rem 1rem; background: #1a1d24; border-left: 3px solid #5c6bc0;
     color: #9aa0a6; font-size: .8rem; border-radius: 0 8px 8px 0; }
+  .hidden { display: none !important; }
+  .card > video.hidden { height: 0; width: 0; margin: 0; padding: 0; border: 0; }
+  .card { display: flex; flex-direction: column; }
+  .card .meta { flex: 0 0 auto; }
 </style>
 </head>
 <body>
@@ -11844,7 +12192,7 @@ CSS
             base=$(basename -- "$d")
             base_esc=$(printf '%s' "$base" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
             rel_d="$base"
-            echo -e "  \033[0;90m[$i/$n]\033[0m $base"
+            echo -e "  \033[0;90m[$i/$n]\033[0m $base" > /dev/tty 2>/dev/null || echo "[$i/$n] $base" >&2
 
             # contagens rapidas (maxdepth 1)
             n_vid=$(find "$d" -maxdepth 1 -type f \( -iname '*.mp4' -o -iname '*.mkv' -o -iname '*.avi' -o -iname '*.mov' -o -iname '*.webm' -o -iname '*.m4v' \) 2>/dev/null | wc -l)
@@ -11912,12 +12260,14 @@ eazy_gerar_html_imagens() {
     titulo="Imagens — $nome_dir"
     thumbs_dir="$dir/.eazy_thumbs"
     html="$dir/eazy_imagens.html"
+    local maxd
+    maxd=$(eazy_html_perguntar_subdirs)
 
     mapfile -t lista < <(
-        find "$dir" -maxdepth 1 -type f \( \
+        find "$dir" -maxdepth "$maxd" -type f \( \
             -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.gif' -o \
             -iname '*.webp' -o -iname '*.bmp' -o -iname '*.tif' -o -iname '*.tiff' \
-        \) -print 2>/dev/null | LC_ALL=C sort
+        \) ! -path '*/.eazy_thumbs/*' -print 2>/dev/null | LC_ALL=C sort
     )
     n=${#lista[@]}
     if [ "$n" -eq 0 ]; then
@@ -11951,7 +12301,25 @@ Thumbs redimensionados (ffmpeg/convert) em base64." 13 70; then
   header { padding: 1rem 1.25rem; background: #1a1d24; border-bottom: 1px solid #2a2f3a; position: sticky; top: 0; z-index: 2; }
   header h1 { margin: 0; font-size: 1.15rem; }
   header p { margin: .35rem 0 0; color: #9aa0a6; font-size: .85rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: .85rem; padding: 1.15rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: clamp(0.6rem, 1.5vw, 1.1rem);
+    padding: clamp(0.75rem, 2vw, 1.35rem);
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr)); gap: 0.6rem; padding: 0.7rem; }
+    header { padding: 0.75rem 0.9rem; }
+    header h1 { font-size: 1rem; }
+    .card .name, .name { font-size: 0.8rem; }
+    .card .acts a.btn, a.btn { font-size: 0.7rem; padding: 0.28rem 0.45rem; }
+  }
+  @media (min-width: 1100px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  }
+  @media (min-width: 1600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  }
   .card { background: #1a1d24; border-radius: 12px; overflow: hidden; border: 1px solid #2a2f3a; cursor: pointer; }
   .card:hover { border-color: #5c6bc0; }
   .card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; background: #000; }
@@ -11962,6 +12330,10 @@ Thumbs redimensionados (ffmpeg/convert) em base64." 13 70; then
   #lb .bar { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; }
   #lb a, #lb button { font-size: .85rem; padding: .4rem .7rem; border-radius: 6px; border: 0; background: #2a2f3a; color: #fff; text-decoration: none; cursor: pointer; }
   #lb a.primary, #lb button.primary { background: #3f51b5; }
+  .hidden { display: none !important; }
+  .card > video.hidden { height: 0; width: 0; margin: 0; padding: 0; border: 0; }
+  .card { display: flex; flex-direction: column; }
+  .card .meta { flex: 0 0 auto; }
 </style>
 </head><body>
 CSS
@@ -11973,9 +12345,10 @@ CSS
             i=$((i + 1))
             base=$(basename -- "$v")
             base_esc=$(printf '%s' "$base" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-            rel="$base"
-            thumb="$thumbs_dir/img_${base%.*}.jpg"
-            echo -e "  \033[0;90m[$i/$n]\033[0m $base"
+            rel="${v#"$dir"/}"
+            [ "$rel" = "$v" ] && rel="$base"
+            thumb="$thumbs_dir/img_$(printf '%s' "$rel" | sed 's|/|__|g;s| |_|g').jpg"
+            echo -e "  \033[0;90m[$i/$n]\033[0m $base" > /dev/tty 2>/dev/null || echo "[$i/$n] $base" >&2
             if [ ! -s "$thumb" ]; then
                 if command -v ffmpeg >/dev/null 2>&1; then
                     ffmpeg -hide_banner -loglevel error -y -i "$v" -vf "scale=360:-2" -q:v 5 "$thumb" 2>/dev/null || true
@@ -11997,16 +12370,15 @@ CSS
             else
                 mb=$(awk -v b="$sz" 'BEGIN{printf "%.0f KB", (b+512)/1024}')
             fi
-            printf '<div class="card" onclick="openLb(%d)">\n' "$i"
+            # um so cartao: imagem + nome em baixo (sem script na grelha = sem quadro vazio)
+            printf '<div class="card" data-i="%d" data-src="%s" data-name="%s" onclick="openLb(this)">\n' \
+                "$i" "$rel" "$base_esc"
             if [ -n "$b64" ]; then
                 printf '<img src="data:image/jpeg;base64,%s" alt="%s" loading="lazy">\n' "$b64" "$base_esc"
             else
                 printf '<img src="%s" alt="%s" loading="lazy">\n' "$rel" "$base_esc"
             fi
             printf '<div class="meta">%s · %s</div></div>\n' "$base_esc" "$mb"
-            # data for lightbox
-            printf '<script>window._imgs=window._imgs||[];window._imgs[%d]={src:"%s",name:"%s"};</script>\n' \
-                "$i" "$rel" "$base_esc"
         done
 
         cat <<'JS'
@@ -12019,12 +12391,14 @@ CSS
   </div>
 </div>
 <script>
-function openLb(i){
-  var d=(window._imgs||[])[i]; if(!d) return;
+function openLb(el){
+  if(!el || !el.getAttribute) return;
+  var src=el.getAttribute('data-src')||'';
+  var name=el.getAttribute('data-name')||'';
   var lb=document.getElementById('lb');
   var im=document.getElementById('lb-img');
   var a=document.getElementById('lb-open');
-  im.src=d.src; im.alt=d.name; a.href=d.src; a.download=d.name;
+  im.src=src; im.alt=name; a.href=src; a.download=name;
   lb.classList.add('open');
 }
 function closeLb(){ document.getElementById('lb').classList.remove('open'); }
@@ -12061,13 +12435,18 @@ eazy_gerar_html_tudo() {
     html="$dir/eazy_pasta.html"
     thumbs_dir="$dir/.eazy_thumbs"
     mkdir -p "$thumbs_dir" 2>/dev/null || true
+    local maxd
+    maxd=$(eazy_html_perguntar_subdirs)
 
     vids=(); imgs=(); auds=(); htmls=(); outros=()
     while IFS= read -r f; do
         [ -f "$f" ] || continue
         base=$(basename -- "$f")
         case "$base" in
-            eazy_*.html|.eazy_thumbs) continue ;;
+            eazy_*.html) continue ;;
+        esac
+        case "$f" in
+            */.eazy_thumbs/*) continue ;;
         esac
         ext=$(printf '%s' "${base##*.}" | tr '[:upper:]' '[:lower:]')
         case "$ext" in
@@ -12077,7 +12456,7 @@ eazy_gerar_html_tudo() {
             html|htm) htmls+=("$f") ;;
             *) outros+=("$f") ;;
         esac
-    done < <(find "$dir" -maxdepth 1 -type f ! -name '.*' -print 2>/dev/null | LC_ALL=C sort)
+    done < <(find "$dir" -maxdepth "$maxd" -type f ! -name '.*' ! -path '*/.eazy_thumbs/*' -print 2>/dev/null | LC_ALL=C sort)
 
     n=$((${#vids[@]} + ${#imgs[@]} + ${#auds[@]} + ${#htmls[@]} + ${#outros[@]}))
     if [ "$n" -eq 0 ]; then
@@ -12113,7 +12492,25 @@ Links com caminho Windows/WSL correcto para TODOS." 16 70; then
   header h1 { margin: 0; font-size: 1.15rem; }
   header p { margin: .35rem 0 0; color: #9aa0a6; font-size: .85rem; }
   h2 { margin: 1.25rem 1.25rem .5rem; font-size: 1rem; color: #b9c0cc; font-weight: 650; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; padding: 0 1.25rem 1.25rem; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+    gap: clamp(0.6rem, 1.5vw, 1.1rem);
+    padding: clamp(0.75rem, 2vw, 1.35rem);
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr)); gap: 0.6rem; padding: 0.7rem; }
+    header { padding: 0.75rem 0.9rem; }
+    header h1 { font-size: 1rem; }
+    .card .name, .name { font-size: 0.8rem; }
+    .card .acts a.btn, a.btn { font-size: 0.7rem; padding: 0.28rem 0.45rem; }
+  }
+  @media (min-width: 1100px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  }
+  @media (min-width: 1600px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  }
   .card { background: #1a1d24; border-radius: 12px; overflow: hidden; border: 1px solid #2a2f3a; display: flex; flex-direction: column; }
   .card:hover { border-color: #5c6bc0; }
   .card video, .card img.thumb { width: 100%; aspect-ratio: 16/9; object-fit: cover; background: #000; display: block; }
@@ -12129,6 +12526,10 @@ Links com caminho Windows/WSL correcto para TODOS." 16 70; then
   a.btn.primary { background: #3f51b5; }
   .tip { margin: .75rem 1.25rem; padding: .7rem 1rem; background: #1a1d24; border-left: 3px solid #5c6bc0;
     color: #9aa0a6; font-size: .8rem; border-radius: 0 8px 8px 0; }
+  .hidden { display: none !important; }
+  .card > video.hidden { height: 0; width: 0; margin: 0; padding: 0; border: 0; }
+  .card { display: flex; flex-direction: column; }
+  .card .meta { flex: 0 0 auto; }
 </style></head><body>
 CSS
         printf '<header><h1>%s</h1>\n' "$titulo"
@@ -12149,7 +12550,8 @@ CSS
             for f in "${vids[@]}"; do
                 i=$((i+1)); base=$(basename -- "$f")
                 base_esc=$(printf '%s' "$base" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-                rel="$base"
+                rel="${f#"$dir"/}"
+                [ "$rel" = "$f" ] && rel="$base"
                 url_abs=$(eazy_caminho_para_url_local "$f")
                 thumb="$thumbs_dir/${base%.*}.jpg"
                 [ -s "$thumb" ] || ffmpeg -hide_banner -loglevel error -y -ss 3 -i "$f" -frames:v 1 -q:v 5 -vf "scale=420:-2" "$thumb" 2>/dev/null || true
@@ -12158,7 +12560,7 @@ CSS
                 mb=$(_emit_size "$(stat -c%s -- "$f" 2>/dev/null || echo 0)")
                 ext=$(printf '%s' "${base##*.}" | tr '[:upper:]' '[:lower:]')
                 case "$ext" in webm) mime="video/webm" ;; *) mime="video/mp4" ;; esac
-                echo -e "  \033[0;90m[vid $i]\033[0m $base"
+                echo -e "  \033[0;90m[vid $i]\033[0m $base" > /dev/tty 2>/dev/null || echo "[vid $i] $base" >&2
                 printf '<div class="card">\n'
                 if [ -n "$b64" ]; then
                     printf '<video controls preload="none" poster="data:image/jpeg;base64,%s" src="%s"></video>\n' "$b64" "$rel"
@@ -12178,13 +12580,14 @@ CSS
             for f in "${imgs[@]}"; do
                 i=$((i+1)); base=$(basename -- "$f")
                 base_esc=$(printf '%s' "$base" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
-                rel="$base"
+                rel="${f#"$dir"/}"
+                [ "$rel" = "$f" ] && rel="$base"
                 url_abs=$(eazy_caminho_para_url_local "$f")
                 thumb="$thumbs_dir/img_${base%.*}.jpg"
                 [ -s "$thumb" ] || ffmpeg -hide_banner -loglevel error -y -i "$f" -vf "scale=360:-2" -q:v 5 "$thumb" 2>/dev/null || cp -f -- "$f" "$thumb" 2>/dev/null || true
                 b64=""; [ -s "$thumb" ] && b64=$(base64 -w 0 "$thumb" 2>/dev/null || base64 "$thumb" 2>/dev/null | tr -d '\n')
                 mb=$(_emit_size "$(stat -c%s -- "$f" 2>/dev/null || echo 0)")
-                echo -e "  \033[0;90m[img $i]\033[0m $base"
+                echo -e "  \033[0;90m[img $i]\033[0m $base" > /dev/tty 2>/dev/null || echo "[img $i] $base" >&2
                 printf '<div class="card">\n'
                 if [ -n "$b64" ]; then
                     printf '<a href="%s"><img class="sq" src="data:image/jpeg;base64,%s" alt="%s"></a>\n' "$url_abs" "$b64" "$base_esc"
@@ -13274,11 +13677,12 @@ Depois use:
         continue
     elif [ "$tecla" = "ctrl-h" ]; then
         # Ctrl-H: galeria de vídeos (thumbnails) OU export HTML da tela
-        _h=$(whiptail --title "Ctrl-H — HTML" --menu "O que gerar?" 18 68 7 \
+        _h=$(whiptail --title "Ctrl-H — HTML" --menu "O que gerar?" 20 70 9 \
             "tudo"    "Tudo nesta pasta (video+img+html+outros)" \
             "videos"  "So videos (thumbs + play)" \
             "imagens" "So imagens (thumbs + lightbox)" \
             "pastas"  "So pastas (subdiretorios)" \
+            "listas"  "Listas: filas 1-3 / historico / atual" \
             "tela"    "Exportar tela / selecao (tabela + links)" \
             "0"       "Cancelar" \
             3>&1 1>&2 2>&3) || true
@@ -13287,6 +13691,7 @@ Depois use:
             videos) eazy_gerar_html_videos ;;
             imagens) eazy_gerar_html_imagens ;;
             pastas) eazy_gerar_html_dirs ;;
+            listas) eazy_menu_exportar_listas ;;
             tela) exportar_tela_html ;;
         esac
         continue

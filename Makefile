@@ -1,6 +1,6 @@
 PREFIX ?= /usr/local
 BINDIR ?= $(PREFIX)/bin
-VERSION = 3.2.2
+VERSION = 5.0.0
 BIN_DIR = bin
 BIN_TARGET = $(BIN_DIR)/eazy-linux-x86_64
 

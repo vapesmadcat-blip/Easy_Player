@@ -1,0 +1,88 @@
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>eazy 5.0.0 — Help</title><style>body{font:16px system-ui;max-width:1000px;margin:40px auto;padding:0 20px;background:#10141c;color:#e8eef7}pre{white-space:pre-wrap;line-height:1.45;background:#171e2b;padding:24px;border-radius:12px}h1{color:#6ee7b7}</style><h1>eazy 5.0.0</h1><pre>eazy 5.0.0 (help-html) — navegador e player multimídia no terminal
+
+Made by John B Kersting
+Uso:
+  eazy [OPÇÕES] [PASTA|ARQUIVO]
+
+Argumentos:
+  PASTA              Abre o eazy nesse diretório
+  ARQUIVO            Abre a pasta do arquivo e posiciona o cursor nele
+
+Opções:
+  -h, --help         Mostra esta ajuda
+  -V, --version      Mostra a versão
+  --config           Assistente de configuração (inclui pasta de downloads)
+  --ai               Abre o chat de IA configurado via OpenRouter
+  --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
+  --shell-init       Imprime função bash: eazy muda de pasta ao sair
+  --verbose, -v      Mostra ficheiros a processar (barra de estado)
+  --silent, -q       Silencioso (padrão): sem barra de processamento
+  --ignore           Anónimo: sem sessão, seleção, posições, histórico, filas
+  --unselect         Limpa seleção global e local (selected_paths) e continua
+  --install          Instala dependências, comando global e scripts auxiliares
+  --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
+  --stream           Abre a Central completa de streaming/filmes
+  --uninstall        Remove os destinos eazy instalados e o launcher .desktop
+  --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+  --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
+  --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
+  -m, --maintenance  Manutenção + backup/restaurar (escolhe o que salvar)
+  --backup           Backup selecionável (~/.config/eazy e afins)
+  --restore-backup   Restaurar um .tar.gz de backup
+  -a, --advanced-maintenance
+                     Manutenção avançada (seleção fina de arquivos do eazy)
+
+Atalhos principais (dentro do eazy):
+  Enter              Abrir/tocar; em .deb mostra dados e instala com confirmação
+  Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
+  Tab · Espaço       Marcar itens (seleção persistente entre pastas)
+  Ctrl-A             Selecionar todos os visíveis
+  Ctrl-X             Limpar seleção do diretório atual
+  Ctrl-R             Inverter seleção (marcas + persistência)
+  Insert             Enviar seleção para fila tmp 1/2/3 ou lista personalizada
+  Ctrl-P             Alternar: dir → filas 1-3 → listas tmp → histórico → dup → dir
+  Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
+  Ctrl-D             Duplicados
+  Ctrl-B             Downloads, fila de streams e Central eazy-yt-stream
+  Ctrl-O             Abrir playlist .m3u / .pls
+  Ctrl-G             Histórico
+  Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
+  Ctrl-Y / Ctrl-U    Copiar / mover seleção
+  Ctrl-E             Tocar seleção em ordem aleatória
+  Ctrl-L             Ir à pasta do arquivo
+  Ctrl-Backspace     Voltar ao último diretório
+  Ctrl-H             Exportar HTML: seleção (se houver) ou conteúdo da tela
+  Alt+0 (ou Alt+F10) Tela do terminal (status) + pausa Enter
+  Ctrl-/             Preview on/off (persiste)
+  Del               Apagar só o item sob o cursor
+  Shift+Del         Apagar seleção (pergunta: local ou global)
+  Alt-D             Apagar do disco
+  F9                 Configuração, overview e teste de som
+  F10                Ajuda expandida (atalhos, .deb, downloads, Tor e configuração)
+  F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
+  Q · X · Ctrl-Q     Sair (salva sessão)
+
+Manutenção (eazy -m):
+  1  Dados do próprio eazy (sem sudo)
+  2  Manutenção do sistema (sudo quando necessário)
+  3  Manutenção COMPLETA — RAM/Disco/CPU/órfãos/TRIM (sudo)
+
+No mpv:
+  d                  Marcar para exclusão ao sair
+  D                  Marcar e ir ao próximo
+
+Arquivos de configuração:
+  ~/.config/eazy/config
+  ~/.config/eazy/session
+  ~/.config/eazy/selected_paths
+  ~/.config/eazy/temp_playlist_{1,2,3}
+  ~/.config/eazy/tmp/          (temporários do eazy — não usa /tmp)
+  ~/.config/eazy/scripts/manut-completa.sh
+
+Em um arquivo .deb: pressione Enter para conferir o pacote e instalar com APT.
+A lista usa TAM · DATA · TIPO e mantém o ciclo visual idx3 de três cores.
+
+Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk
+Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools
+
+</pre></html>

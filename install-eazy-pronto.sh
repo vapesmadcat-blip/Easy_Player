@@ -1,34 +1,23 @@
 #!/usr/bin/env bash
-# eazy 3.2 — SEM sudo → ~/.local/bin
-# Baixa base + aplica patch de conversões (seleção)
+# Instalação local do Easy 5.0.0 sem sudo.
+# Os componentes ficam juntos em ~/.local/bin para que o stream seja encontrado pelo eazy.
 set -euo pipefail
-BIN="$HOME/.local/bin"
+VERSION="5.0.0"
+BASE="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main"
+BIN="${HOME}/.local/bin"
 mkdir -p "$BIN"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-cd "$TMP"
-echo ">> Baixando eazy 3.2..."
-curl -fsSL "https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/c91e1859617135dc827bbe9110662ca79246a5b7/eazy" -o eazy
-echo ">> Baixando patch..."
-curl -fsSL "https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/eazy-conv-sel.patch" -o eazy-conv-sel.patch
-# Se o patch do GitHub estiver quebrado, usa base pura
-if patch -p1 --dry-run -i eazy-conv-sel.patch >/dev/null 2>&1; then
-  patch -p1 -i eazy-conv-sel.patch
-  echo ">> Patch de conversões aplicado"
-else
-  echo ">> Aviso: patch não aplicou; instalando base 3.2 (ainda funciona)"
-fi
-if ! head -1 eazy | grep -q '^#!'; then
-  { echo '#!/usr/bin/env bash'; cat eazy; } > eazy.x && mv eazy.x eazy
-fi
-chmod +x eazy
-cp -f eazy "$BIN/eazy"
-chmod +x "$BIN/eazy"
-grep -q '.local/bin' "$HOME/.bashrc" 2>/dev/null || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
+for file in eazy eazy-yt-stream eazy-ai.py eazy-tor eazy-notes-editor; do
+  echo ">> Baixando $file $VERSION..."
+  curl -fsSL "$BASE/$file" -o "$BIN/$file"
+  chmod 755 "$BIN/$file"
+done
+grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$HOME/.bashrc" 2>/dev/null || \
+  printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$HOME/.bashrc"
 export PATH="$BIN:$PATH"
 echo
 echo "OK: $($BIN/eazy --version)"
+echo "Stream: $BIN/eazy-yt-stream"
 echo
-echo "Nesta sessão:"
+echo 'Se o PATH ainda não estiver atualizado nesta sessão:'
 echo '  export PATH="$HOME/.local/bin:$PATH"'
-echo "  eazy"
+echo '  eazy --stream'

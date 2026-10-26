@@ -1,0 +1,982 @@
+#!/usr/bin/env bash
+# eazy-yt-stream — streaming YouTube (yt-dlp + mpv/mplayer), script separado
+# Otimizado para WSL2
+#
+# Uso:
+#   ./eazy-yt-stream                         # menu
+#   ./eazy-yt-stream "https://youtube.com/..."
+#   ./eazy-yt-stream -s "lofi hip hop"
+#   ./eazy-yt-stream -a "URL"
+#   ./eazy-yt-stream -q 480 "URL"
+#   ./eazy-yt-stream --download "URL"
+#
+set -euo pipefail
+
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+CYAN=$'\033[0;36m'
+NC=$'\033[0m'
+
+PLAYER="${EAZY_YT_PLAYER:-mpv}"
+YTDLP="${EAZY_YTDLP:-yt-dlp}"
+OUT_DIR="${EAZY_YT_OUT:-$HOME/Downloads}"
+DATA_DIR="${EAZY_YT_DATA:-$HOME/.config/eazy-yt-stream}"
+SEARCH_INDEX="$DATA_DIR/searches.tsv"
+FAVORITES_FILE="$DATA_DIR/favorites.tsv"
+TV_FAVORITES_FILE="$DATA_DIR/tv_favorites.tsv"
+YTDLP_AUTH_ARGS=()
+if [ -n "${EAZY_YT_COOKIES:-}" ]; then
+  YTDLP_AUTH_ARGS+=(--cookies "$EAZY_YT_COOKIES")
+elif [ -n "${EAZY_YT_BROWSER_COOKIES:-}" ]; then
+  YTDLP_AUTH_ARGS+=(--cookies-from-browser "$EAZY_YT_BROWSER_COOKIES")
+fi
+
+ytdlp() { "$YTDLP" "${YTDLP_AUTH_ARGS[@]}" "$@"; }
+# Cache do MPlayer em KiB; pode ser ajustado sem editar o script.
+# 64 MiB/30% reduz esvaziamentos em streams HTTP com bitrate variável.
+MPLAYER_CACHE="${EAZY_MPLAYER_CACHE:-65536}"
+MPLAYER_CACHE_MIN="${EAZY_MPLAYER_CACHE_MIN:-30}"
+TOKYVIDEO_URL="https://www.tokyvideo.com/br/video/todo-mundo-em-panico-4"
+TEST_URL="$TOKYVIDEO_URL"
+QUALITY=""
+AUDIO_ONLY=0
+DOWNLOAD=0
+SEARCH=0
+
+usage() {
+  cat <<'U'
+eazy-yt-stream — stream YouTube com yt-dlp + mpv/mplayer
+
+  ./eazy-yt-stream                  # menu interativo
+  ./eazy-yt-stream URL
+  ./eazy-yt-stream -s "termo"
+  ./eazy-yt-stream -a URL           # só áudio
+  ./eazy-yt-stream -q 480 URL       # limitar resolução
+  ./eazy-yt-stream --download URL   # gravar em ~/Downloads e tocar
+  ./eazy-yt-stream --test           # testar com o TokyVideo
+  ./eazy-yt-stream --tokyvideo      # abrir a fonte Top Videos/TokyVideo
+  ./eazy-yt-stream --tv             # menu TV Aberta (lives/canais)
+  ./eazy-yt-stream --filmes         # pesquisar filmes completos gratuitos
+  ./eazy-yt-stream --adulto         # menu Adulto 18+
+
+Variáveis:
+  EAZY_YT_PLAYER=mpv|mplayer|ffplay|cvlc
+  EAZY_YT_VO=x11|gl|null (WSL: evita XV/BadMatch)
+  EAZY_YT_OUT=~/Downloads
+  EAZY_YTDLP=yt-dlp
+  EAZY_MPLAYER_CACHE=65536          # cache do MPlayer em KiB
+  EAZY_MPLAYER_CACHE_MIN=30         # percentual antes de iniciar
+  EAZY_YT_SEARCH_COUNT=30           # resultados exibidos para escolher
+  EAZY_YT_DATA=~/.config/eazy-yt-stream  # histórico e favoritos
+  EAZY_YT_COOKIES=~/youtube-cookies.txt # cookies exportados do navegador
+  EAZY_YT_BROWSER_COOKIES=chrome        # alternativa: chrome, firefox, edge
+U
+}
+
+need() {
+  local bin="$1" pkg="${2:-$1}"
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    printf '%s\n' "${RED}Comando não encontrado: $bin${NC}"
+    printf '%s\n' "Instale: sudo apt-get install -y $pkg"
+    exit 1
+  fi
+}
+
+eazy_is_wsl() {
+  [ -n "${WSL_DISTRO_NAME:-}" ] && return 0
+  [ -n "${WSL_INTEROP:-}" ] && return 0
+  grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null && return 0
+  return 1
+}
+
+eazy_wsl_setup() {
+  eazy_is_wsl || return 0
+  export EAZY_WSL=1
+  if [ -z "${DISPLAY:-}" ] && [ -z "${WAYLAND_DISPLAY:-}" ]; then
+    if [ -e /mnt/wslg/runtime-dir ]; then
+      export DISPLAY="${DISPLAY:-:0}"
+      export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+      export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/mnt/wslg/runtime-dir}"
+    else
+      export DISPLAY="${DISPLAY:-:0}"
+    fi
+  fi
+}
+
+choose_fmt() {
+  if [ "$AUDIO_ONLY" -eq 1 ]; then
+    echo "bestaudio/best"
+    return
+  fi
+  case "$PLAYER" in
+    mplayer)
+      # progressivo (1 URL) primeiro; senão DASH (2 URLs → -audiofile)
+      if [ -n "$QUALITY" ]; then
+        echo "18/22/best[height<=${QUALITY}]/bestvideo[height<=${QUALITY}]+bestaudio/best"
+      else
+        echo "18/22/best[height<=480]/bestvideo[height<=720]+bestaudio/best"
+      fi
+      ;;
+    *)
+      if [ -n "$QUALITY" ]; then
+        echo "bestvideo[height<=${QUALITY}]+bestaudio/best[height<=${QUALITY}]/best"
+      else
+        echo "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+      fi
+      ;;
+  esac
+}
+
+play_mplayer() {
+  local target="$1" fmt="$2"
+  local -a urls=()
+  local url vurl aurl
+  local -a vo=()
+  local -a cache_args=(-cache "$MPLAYER_CACHE" -cache-min "$MPLAYER_CACHE_MIN")
+
+  if eazy_is_wsl; then
+    vo=(-vo "${EAZY_YT_VO:-x11,gl,null}")
+  elif [ -n "${EAZY_YT_VO:-}" ]; then
+    vo=(-vo "$EAZY_YT_VO")
+  fi
+
+  mapfile -t urls < <(ytdlp -f "$fmt" -g --no-playlist "$target" 2>/dev/null || true)
+  if [ "${#urls[@]}" -eq 0 ]; then
+    mapfile -t urls < <(ytdlp -f "18/22/best" -g --no-playlist "$target" 2>/dev/null || true)
+  fi
+  if [ "${#urls[@]}" -eq 0 ]; then
+    printf '%s\n' "${RED}Não obteve URL de stream${NC}"
+    return 1
+  fi
+
+  if [ "$AUDIO_ONLY" -eq 1 ]; then
+    url="${urls[-1]}"
+    printf '%s\n' "${GREEN}▶ mplayer só áudio${NC}"
+    mplayer "${cache_args[@]}" -novideo -- "$url" || true
+    return 0
+  fi
+
+  if [ "${#urls[@]}" -ge 2 ]; then
+    vurl="${urls[0]}"
+    aurl="${urls[-1]}"
+    printf '%s\n' "${CYAN}  DASH: vídeo + áudio (2 URLs)${NC}"
+    # -audiofile funciona com http em mplayer recente
+    if mplayer "${cache_args[@]}" -audiofile "$aurl" "${vo[@]}" -- "$vurl"; then
+      return 0
+    fi
+    printf '%s\n' "${YELLOW}  fallback: só vídeo (sem áudio separado)${NC}"
+    mplayer "${cache_args[@]}" "${vo[@]}" -- "$vurl" || true
+    return 0
+  fi
+
+  url="${urls[0]}"
+  printf '%s\n' "${CYAN}  stream progressivo (1 URL)${NC}"
+  mplayer "${cache_args[@]}" "${vo[@]}" -- "$url" || true
+}
+
+play_stream() {
+  local target="$1"
+  local title fmt
+
+  eazy_wsl_setup
+  need "$YTDLP" "yt-dlp"
+  need "$PLAYER" "$PLAYER"
+
+  printf '%s\n' "${CYAN}A obter título...${NC}"
+  title=$(ytdlp --get-title --no-playlist "$target" 2>/dev/null | head -n1 || echo "YouTube")
+  printf '%s\n' "${GREEN}▶ ${title}${NC}"
+
+  fmt=$(choose_fmt)
+
+  if [ "$DOWNLOAD" -eq 1 ]; then
+    mkdir -p "$OUT_DIR"
+    printf '%s\n' "${YELLOW}▶ download → $OUT_DIR${NC}"
+    local out_tpl="$OUT_DIR/%(title).80B [%(id)s].%(ext)s"
+    # merge para ficheiro completo
+    ytdlp -f "bestvideo[height<=720]+bestaudio/best" --merge-output-format mp4 \
+      -o "$out_tpl" --no-playlist "$target" || \
+    ytdlp -f "18/22/best" -o "$out_tpl" --no-playlist "$target"
+    local last
+    last=$(find "$OUT_DIR" -type f \( -iname '*.mp4' -o -iname '*.webm' -o -iname '*.mkv' -o -iname '*.m4a' -o -iname '*.opus' \) -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)
+    if [ -n "$last" ] && [ -f "$last" ]; then
+      printf '%s\n' "${GREEN}✓ $last${NC}"
+      "$PLAYER" -- "$last" || true
+    fi
+    return 0
+  fi
+
+  printf '%s\n' "${GREEN}▶ stream (sem gravar) player=$PLAYER fmt=$fmt${NC}"
+
+  case "$PLAYER" in
+    mplayer)
+      play_mplayer "$target" "$fmt"
+      ;;
+    mpv)
+      local -a vo_args=(--vo=x11 --cache=yes --ao=pulse --framedrop=vo)
+      local -a mpv_args=(--ytdl --ytdl-format="$fmt")
+      if [ -n "${EAZY_YT_COOKIES:-}" ]; then
+        mpv_args+=(--ytdl-raw-options="cookies=$EAZY_YT_COOKIES")
+      elif [ -n "${EAZY_YT_BROWSER_COOKIES:-}" ]; then
+        mpv_args+=(--ytdl-raw-options="cookies-from-browser=$EAZY_YT_BROWSER_COOKIES")
+      fi
+      [ "$AUDIO_ONLY" -eq 1 ] && mpv_args+=(--vid=no)
+      mpv "${mpv_args[@]}" "${vo_args[@]}" -- "$target" || true
+      ;;
+    ffplay)
+      local url
+      mapfile -t _u < <(ytdlp -f "$fmt" -g --no-playlist "$target" 2>/dev/null)
+      url="${_u[0]:-}"
+      [ -n "$url" ] || { printf '%s\n' "${RED}Sem URL${NC}"; return 1; }
+      ffplay -autoexit -loglevel warning -i "$url" || true
+      ;;
+    cvlc|vlc)
+      local url
+      mapfile -t _u < <(ytdlp -f "$fmt" -g --no-playlist "$target" 2>/dev/null)
+      url="${_u[0]:-}"
+      [ -n "$url" ] || { printf '%s\n' "${RED}Sem URL${NC}"; return 1; }
+      cvlc --play-and-exit "$url" || true
+      ;;
+    *)
+      printf '%s\n' "${RED}Player não suportado: $PLAYER${NC}"
+      return 1
+      ;;
+  esac
+}
+
+search_id() {
+  printf '%s' "$1" | sha256sum | awk '{print substr($1,1,16)}'
+}
+
+save_search() {
+  local query="$1" file="$2" id
+  id=$(search_id "$query")
+  mkdir -p "$DATA_DIR/searches"
+  cp -- "$file" "$DATA_DIR/searches/$id.tsv"
+  touch "$SEARCH_INDEX"
+  grep -Fqx -- "$id|$query" "$SEARCH_INDEX" 2>/dev/null || printf '%s|%s\n' "$id" "$query" >> "$SEARCH_INDEX"
+}
+
+save_favorite() {
+  local id="$1" title="$2" url="$3"
+  mkdir -p "$DATA_DIR"
+  touch "$FAVORITES_FILE"
+  grep -Fq -- "$id|" "$FAVORITES_FILE" 2>/dev/null || printf '%s|%s|%s\n' "$id" "$title" "$url" >> "$FAVORITES_FILE"
+  printf '%s\n' "${GREEN}✓ Favorito salvo${NC}"
+}
+
+video_action_menu() {
+  local id="$1" title="$2" url="$3" action
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    action=$(whiptail --title "Vídeo selecionado" --menu \
+      "${title}\n\nEscolha uma ação:" 16 86 8 \
+      "play" "▶ Assistir agora" \
+      "download" "⬇ Baixar e tocar" \
+      "audio" "🎧 Baixar/tocar somente áudio" \
+      "browser" "🌐 Abrir no navegador" \
+      "favorite" "★ Salvar nos favoritos" \
+      "back" "Voltar" 3>&1 1>&2 2>&3) || return 0
+  else
+    printf '\n%s\n' "${YELLOW}${title}${NC}"
+    printf '%s\n' '1) Assistir agora' '2) Baixar e tocar' '3) Só áudio' '4) Abrir no navegador' '5) Favoritar' '0) Voltar'
+    printf 'Escolha: '; read -r action || return 0
+    case "$action" in 1) action=play;; 2) action=download;; 3) action=audio;; 4) action=browser;; 5) action=favorite;; *) action=back;; esac
+  fi
+  case "$action" in
+    play) AUDIO_ONLY=0; DOWNLOAD=0; play_stream "$url" ;;
+    download) AUDIO_ONLY=0; DOWNLOAD=1; play_stream "$url"; DOWNLOAD=0 ;;
+    audio) AUDIO_ONLY=1; DOWNLOAD=1; play_stream "$url"; AUDIO_ONLY=0; DOWNLOAD=0 ;;
+    browser) if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 & else printf '%s\n' "URL: $url"; fi ;;
+    favorite) save_favorite "$id" "$title" "$url" ;;
+  esac
+}
+
+choose_saved_result() {
+  local query="$1" file="$2" selected index id title duration field3 url
+  local -a ids=() titles=() durations=() menu=()
+  [ -s "$file" ] || { printf '%s\n' "${RED}Nenhum resultado salvo.${NC}"; return 1; }
+  while IFS='|' read -r id title field3; do
+    [ -n "$id" ] || continue
+    duration=""
+    # Pesquisas salvas usam id|título|duração; favoritos antigos usam id|título|url.
+    if [[ "$field3" =~ ^([0-9]{1,2}:)?[0-9]{1,2}:[0-9]{2}$ ]]; then duration="$field3"; fi
+    ids+=("$id"); titles+=("$title"); durations+=("$duration")
+    menu+=("${#ids[@]}" "${duration:+[$duration] }$title")
+  done < "$file"
+  [ "${#ids[@]}" -gt 0 ] || return 1
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    selected=$(whiptail --title "Resultados: $query" --menu "Escolha um vídeo — duração entre colchetes:" 22 110 12 "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+  else
+    printf '%s\n' "${YELLOW}Resultados: $query${NC}"
+    for index in "${!ids[@]}"; do printf ' %2d) [%s] %s\n' "$((index+1))" "${durations[$index]:-duração indisponível}" "${titles[$index]}"; done
+    printf '%s' "Escolha: "; read -r selected || return 0
+  fi
+  [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#ids[@]}" ] || return 1
+  index=$((selected-1)); id="${ids[$index]}"; title="${titles[$index]}"; url="https://www.youtube.com/watch?v=$id"
+  video_action_menu "$id" "$title" "$url"
+}
+
+choose_saved_search() {
+  local selected index id query
+  local -a ids=() queries=() menu=()
+  [ -s "$SEARCH_INDEX" ] || { printf '%s\n' "${YELLOW}Nenhuma pesquisa salva.${NC}"; return 1; }
+  while IFS='|' read -r id query; do
+    [ -n "$id" ] || continue
+    ids+=("$id"); queries+=("$query"); menu+=("${#ids[@]}" "$query")
+  done < "$SEARCH_INDEX"
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    selected=$(whiptail --title "Pesquisas salvas" --menu "Escolha uma pesquisa:" 20 90 12 "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+  else
+    for index in "${!queries[@]}"; do printf ' %2d) %s\n' "$((index+1))" "${queries[$index]}"; done
+    printf '%s' "Escolha: "; read -r selected || return 0
+  fi
+  [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#ids[@]}" ] || return 1
+  index=$((selected-1)); choose_saved_result "${queries[$index]}" "$DATA_DIR/searches/${ids[$index]}.tsv"
+}
+
+choose_favorite() {
+  [ -s "$FAVORITES_FILE" ] || { printf '%s\n' "${YELLOW}Nenhum favorito salvo.${NC}"; return 1; }
+  choose_saved_result "Favoritos" "$FAVORITES_FILE"
+}
+
+search_and_play() {
+  local query="$1"
+  local page_size="${EAZY_YT_SEARCH_COUNT:-30}"
+  local start_at=1 end_at line id title duration selected index target saved_results
+  local -a page_results=() results=() menu=() ids=() titles=() durations=()
+
+  need "$YTDLP" "yt-dlp"
+  while true; do
+    end_at=$((start_at + page_size - 1))
+    printf '%s\n' "${CYAN}A pesquisando resultados $start_at–$end_at: $query${NC}"
+    mapfile -t page_results < <(ytdlp --flat-playlist --playlist-start "$start_at" --playlist-end "$end_at" \
+      --no-warnings --print '%(id)s|%(title)s|%(duration_string)s' "ytsearch${end_at}:${query}" 2>/dev/null || true)
+    [ "${#page_results[@]}" -gt 0 ] || {
+      [ "${#results[@]}" -gt 0 ] || printf '%s\n' "${RED}Nenhum vídeo encontrado.${NC}"
+      return 1
+    }
+    for line in "${page_results[@]}"; do
+      IFS='|' read -r id title duration <<< "$line"
+      [ -n "$id" ] || continue
+      results+=("$id|$title|${duration:-}")
+      ids+=("$id"); titles+=("$title"); durations+=("${duration:-}")
+    done
+    [ "${#ids[@]}" -gt 0 ] || { printf '%s\n' "${RED}Nenhum resultado válido.${NC}"; return 1; }
+
+    saved_results=$(mktemp)
+    printf '%s\n' "${results[@]}" > "$saved_results"
+    save_search "$query" "$saved_results"
+    rm -f -- "$saved_results"
+
+    menu=()
+    for index in "${!ids[@]}"; do
+      menu+=("$((index+1))" "[${durations[$index]:---:--}] ${titles[$index]}")
+    done
+    menu+=("more" "＋ Mostrar mais $page_size resultados")
+
+    if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+      selected=$(whiptail --title "Resultados: $query" \
+        --menu "Escolha um vídeo — duração entre colchetes:" 24 112 16 \
+        "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+    else
+      printf '%s\n' "${YELLOW}Resultados encontrados: $query${NC}"
+      for index in "${!ids[@]}"; do printf ' %2d) [%s] %s\n' "$((index+1))" "${durations[$index]:-duração indisponível}" "${titles[$index]}"; done
+      printf ' M) Mostrar mais %s resultados\nEscolha [1-%s/M/0]: ' "$page_size" "${#ids[@]}"
+      read -r selected || return 0
+      [ "$selected" != "0" ] || return 0
+      [[ "$selected" =~ ^[Mm]$ ]] && selected=more
+    fi
+
+    if [ "$selected" = "more" ]; then
+      start_at=$((end_at + 1))
+      continue
+    fi
+    if ! [[ "$selected" =~ ^[0-9]+$ ]] || [ "$selected" -lt 1 ] || [ "$selected" -gt "${#ids[@]}" ]; then
+      printf '%s\n' "${RED}Opção inválida.${NC}"
+      return 1
+    fi
+    index=$((selected - 1))
+    target="https://www.youtube.com/watch?v=${ids[$index]}"
+    video_action_menu "${ids[$index]}" "${titles[$index]}" "$target"
+    return 0
+  done
+}
+
+
+open_web_source() {
+  local url="$1" label="$2"
+  printf '%s\n' "${CYAN}Abrindo $label:${NC} $url"
+  if command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 &
+  else
+    printf '%s\n' "Abra manualmente: $url"
+  fi
+}
+
+search_free_movies() {
+  local query="${1:-filmes completos grátis dublados}"
+  AUDIO_ONLY=0 DOWNLOAD=0
+  search_and_play "$query" || true
+}
+
+browse_video_source() {
+  local label="$1" source_url="$2" count="${EAZY_YT_SEARCH_COUNT:-30}"
+  local line id title duration selected index target
+  local -a results=() ids=() titles=() durations=() menu=()
+  need "$YTDLP" "yt-dlp"
+  printf '%s\n' "${CYAN}Carregando $label...${NC}"
+  mapfile -t results < <(ytdlp --flat-playlist --playlist-end "$count" \
+    --no-warnings --print '%(id)s|%(title)s|%(duration_string)s' "$source_url" 2>/dev/null || true)
+  for line in "${results[@]}"; do
+    IFS='|' read -r id title duration <<< "$line"
+    [ -n "$id" ] || continue
+    ids+=("$id"); titles+=("$title"); durations+=("${duration:-}")
+    menu+=("${#ids[@]}" "[${duration:---:--}] $title")
+  done
+  [ "${#ids[@]}" -gt 0 ] || { printf '%s\n' "${RED}Nenhum vídeo público encontrado em $label.${NC}"; return 1; }
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    selected=$(whiptail --title "$label" --menu \
+      "Escolha um filme (até $count resultados):" 24 104 16 "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+    index=$selected
+  else
+    printf '%s\n' "${YELLOW}$label${NC}"
+    for index in "${!ids[@]}"; do printf ' %2d) [%s] %s\n' "$((index+1))" "${durations[$index]:-duração indisponível}" "${titles[$index]}"; done
+    printf 'Escolha [1-%s] (0 cancela): ' "${#ids[@]}"; read -r index || return 0
+    [ "$index" != 0 ] || return 0
+  fi
+  [[ "$index" =~ ^[0-9]+$ ]] && [ "$index" -ge 1 ] && [ "$index" -le "${#ids[@]}" ] || return 1
+  target="https://www.youtube.com/watch?v=${ids[$((index-1))]}"
+  video_action_menu "${ids[$((index-1))]}" "${titles[$((index-1))]}" "$target"
+}
+
+menu_filmes_genero() {
+  local op q
+  while true; do
+    op=$(whiptail --title "Filmes gratuitos — escolher por gênero" --menu \
+      "Até ${EAZY_YT_SEARCH_COUNT:-30} resultados por pesquisa:" 22 86 12 \
+      "acao" "Ação / aventura" \
+      "terror" "Terror / suspense" \
+      "ficcao" "Ficção científica / fantasia" \
+      "comedia" "Comédia / romance" \
+      "brasil" "Cinema brasileiro / dublado" \
+      "documentario" "Documentários" \
+      "classicos" "Clássicos / domínio público" \
+      "livre" "Pesquisar outro gênero" \
+      "voltar" "Voltar" 3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+      acao) q="filmes completos de ação grátis full movie" ;;
+      terror) q="filmes completos de terror grátis dublados" ;;
+      ficcao) q="filmes completos ficção científica grátis full movie" ;;
+      comedia) q="filmes completos comédia romance grátis dublado" ;;
+      brasil) q="filmes brasileiros completos grátis O2 Play Film Plus" ;;
+      documentario) q="documentários completos grátis full documentary movie" ;;
+      classicos) q="filmes clássicos completos domínio público public domain" ;;
+      livre)
+        q=$(whiptail --title "Pesquisar gênero" --inputbox "Digite gênero ou tema:" 10 72 "" 3>&1 1>&2 2>&3) || continue
+        [ -n "$q" ] || continue
+        q="filmes completos grátis $q"
+        ;;
+      voltar|*) return 0 ;;
+    esac
+    search_free_movies "$q"
+  done
+}
+
+menu_filmes_canais() {
+  local op
+  while true; do
+    op=$(whiptail --title "Filmes gratuitos — canais" --menu \
+      "Fontes públicas; disponibilidade e catálogo podem variar por país:" 22 96 12 \
+      "moviecentral" "Movie Central — ação, horror, sci-fi" \
+      "filmplus" "Film Plus — filmes dublados em português" \
+      "netmovies" "NetMovies — filmes dublados e séries" \
+      "o2play" "O2 Play — cinema brasileiro e terror" \
+      "kinolorber" "Kino Lorber — documentários e clássicos" \
+      "mosfilm" "Mosfilm — cinema russo com legendas" \
+      "publicdomain" "Public Domain Films — clássicos" \
+      "filmesbr" "Filmes para Assistir BR — filmes dublados" \
+      "tokyvideo" "Top Videos / TokyVideo — colar URL" \
+      "voltar" "Voltar" 3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+      moviecentral) browse_video_source "Movie Central" "https://www.youtube.com/@MovieCentral/videos" ;;
+      filmplus) browse_video_source "Film Plus" "https://www.youtube.com/@filmplusbr/videos" ;;
+      netmovies) browse_video_source "NetMovies" "https://www.youtube.com/channel/UCK5RRQ3TdwAbbCWrtnXsN3Q/videos" ;;
+      o2play) browse_video_source "O2 Play TV" "https://www.youtube.com/playlist?list=PLXYu_pGX-3fs" ;;
+      kinolorber) browse_video_source "Kino Lorber — Free Movies on Demand" "https://www.youtube.com/playlist?list=PLiYnNom7SVRNFN32Eb7KISF2HsO8IvVbQ" ;;
+      mosfilm) browse_video_source "Mosfilm — filmes com legendas" "https://www.youtube.com/playlist?list=PL7EqAsBxqGggrcgR5EkZmWtLydBdTS6hF" ;;
+      publicdomain) browse_video_source "Public Domain Films" "https://www.youtube.com/@PublicDomainFilms/videos" ;;
+      filmesbr) browse_video_source "Filmes para Assistir BR" "https://www.youtube.com/@FilmesParaAssistirBR/videos" ;;
+      tokyvideo)
+        local tv_url
+        tv_url=$(whiptail --title "Top Videos / TokyVideo" --inputbox "Cole o link do vídeo TokyVideo:" 10 78 "$TOKYVIDEO_URL" 3>&1 1>&2 2>&3) || continue
+        [ -n "$tv_url" ] && video_action_menu "tokyvideo" "TokyVideo" "$tv_url"
+        ;;
+      voltar|*) return 0 ;;
+    esac
+  done
+}
+
+menu_filmes_gratis() {
+  local op q
+  while true; do
+    op=$(whiptail --title "Filmes gratuitos" --menu \
+      "Escolha como procurar:" 18 82 8 \
+      "genero" "Escolher por gênero" \
+      "canais" "Escolher canal ou playlist" \
+      "pesquisar" "Pesquisar qualquer tema" \
+      "url" "Assistir/baixar por URL" \
+      "voltar" "Voltar" 3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+      genero) menu_filmes_genero ;;
+      canais) menu_filmes_canais ;;
+      pesquisar)
+        q=$(whiptail --title "Pesquisar filmes" --inputbox "Tema, gênero ou título:" 10 72 "filmes completos grátis" 3>&1 1>&2 2>&3) || continue
+        [ -n "$q" ] && search_free_movies "$q"
+        ;;
+      url)
+        local u
+        u=$(whiptail --title "URL de vídeo" --inputbox "Cole a URL do vídeo:" 10 78 "https://" 3>&1 1>&2 2>&3) || continue
+        [ -n "$u" ] && [ "$u" != "https://" ] && video_action_menu "url" "Vídeo por URL" "$u"
+        ;;
+      voltar|*) return 0 ;;
+    esac
+  done
+}
+
+# --- TV Aberta: atalhos para lives/canais oficiais no YouTube ---
+# Nota: Globo/SBT/Record oficiais usam apps com DRM; aqui vão fontes
+# públicas/YouTube que o yt-dlp costuma abrir (TV pública, notícias, esporte).
+play_channel_live() {
+  local handle="$1" label="${2:-$1}"
+  local url="https://www.youtube.com/${handle}/live"
+  local ok=0
+  printf '%s\n' "${CYAN}▶ TV Aberta: $label${NC}"
+  printf '%s\n' "${YELLOW}  $url${NC}"
+  if ytdlp --get-title --no-playlist "$url" >/dev/null 2>&1; then
+    AUDIO_ONLY=0 DOWNLOAD=0
+    play_stream "$url" || true
+    ok=1
+  fi
+  if [ "$ok" -eq 0 ]; then
+    printf '%s\n' "${YELLOW}Sem live em /live — a pesquisar: ${label} ao vivo${NC}"
+    AUDIO_ONLY=0 DOWNLOAD=0
+    search_and_play "${label} ao vivo" || true
+  fi
+  # Oferece marcar canal como favorito da TV Aberta
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    if whiptail --title "Favorito TV Aberta" --yesno \
+"Marcar este canal como favorito?\n\n$label\n$handle" 11 60; then
+      save_tv_favorite "$handle" "$label" "$url"
+    fi
+  fi
+}
+
+save_tv_favorite() {
+  local handle="$1" label="$2" url="$3"
+  mkdir -p "$DATA_DIR"
+  touch "$TV_FAVORITES_FILE"
+  # evita duplicar pelo handle
+  if grep -Fq -- "${handle}|" "$TV_FAVORITES_FILE" 2>/dev/null; then
+    printf '%s\n' "${YELLOW}Já está nos favoritos: $label${NC}"
+    return 0
+  fi
+  printf '%s|%s|%s\n' "$handle" "$label" "$url" >> "$TV_FAVORITES_FILE"
+  printf '%s\n' "${GREEN}✓ Canal favorito: $label${NC}"
+}
+
+remove_tv_favorite() {
+  local handle="$1"
+  [ -s "$TV_FAVORITES_FILE" ] || return 0
+  grep -Fv -- "${handle}|" "$TV_FAVORITES_FILE" > "${TV_FAVORITES_FILE}.tmp" 2>/dev/null \
+    && mv -f "${TV_FAVORITES_FILE}.tmp" "$TV_FAVORITES_FILE" || true
+}
+
+choose_tv_favorite() {
+  local selected index handle label url
+  local -a handles=() labels=() urls=() menu=()
+  [ -s "$TV_FAVORITES_FILE" ] || {
+    whiptail --title "Favoritos TV Aberta" --msgbox \
+"Nenhum canal favorito ainda.
+
+Abre um canal e responde Sim em
+«Marcar como favorito», ou usa
+«Adicionar aos favoritos»." 12 55
+    return 1
+  }
+  while IFS='|' read -r handle label url; do
+    [ -n "$handle" ] || continue
+    handles+=("$handle"); labels+=("$label"); urls+=("$url")
+    menu+=("${#handles[@]}" "$label  ($handle)")
+  done < "$TV_FAVORITES_FILE"
+  [ "${#handles[@]}" -gt 0 ] || return 1
+  selected=$(whiptail --title "Favoritos TV Aberta" --menu \
+"Escolha o canal:" 20 72 12 "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+  [[ "$selected" =~ ^[0-9]+$ ]] || return 1
+  index=$((selected - 1))
+  handle="${handles[$index]}"; label="${labels[$index]}"
+  local acao
+  acao=$(whiptail --title "$label" --menu "O que fazer?" 12 50 3 \
+    "play" "▶ Tocar / live" \
+    "del"  "🗑 Remover dos favoritos" \
+    "voltar" "Cancelar" \
+    3>&1 1>&2 2>&3) || return 0
+  case "$acao" in
+    play) play_channel_live "$handle" "$label" ;;
+    del)
+      remove_tv_favorite "$handle"
+      whiptail --title "Favoritos" --msgbox "Removido: $label" 8 40
+      ;;
+  esac
+}
+
+add_tv_favorite_dialog() {
+  local op handle label
+  op=$(whiptail --title "Adicionar favorito TV Aberta" --menu \
+"Escolha o canal para favoritar:" 20 70 11 \
+    "tvbrasil"   "TV Brasil" \
+    "cultura"    "TV Cultura" \
+    "camara"     "TV Câmara" \
+    "senado"     "TV Senado" \
+    "cnn"        "CNN Brasil" \
+    "jovempan"   "Jovem Pan News" \
+    "cazetv"     "CazéTV" \
+    "recordnews" "Record News" \
+    "outro"      "Outro (@handle manual)" \
+    3>&1 1>&2 2>&3) || return 0
+  case "$op" in
+    tvbrasil)   handle="@tvbrasil"; label="TV Brasil" ;;
+    cultura)    handle="@tvcultura"; label="TV Cultura" ;;
+    camara)     handle="@camara"; label="TV Câmara" ;;
+    senado)     handle="@TVSenado"; label="TV Senado" ;;
+    cnn)        handle="@cnnbrasil"; label="CNN Brasil" ;;
+    jovempan)   handle="@JovemPanNews"; label="Jovem Pan News" ;;
+    cazetv)     handle="@CazeTV"; label="CazéTV" ;;
+    recordnews) handle="@recordnews"; label="Record News" ;;
+    outro)
+      handle=$(whiptail --title "Handle YouTube" --inputbox \
+"Handle do canal (ex.: @tvbrasil):" 10 60 "@" 3>&1 1>&2 2>&3) || return 0
+      [ -z "$handle" ] && return 0
+      case "$handle" in @*) ;; *) handle="@$handle" ;; esac
+      label=$(whiptail --title "Nome" --inputbox "Nome para a lista:" 10 60 "$handle" 3>&1 1>&2 2>&3) || return 0
+      [ -z "$label" ] && label="$handle"
+      ;;
+    *) return 0 ;;
+  esac
+  save_tv_favorite "$handle" "$label" "https://www.youtube.com/${handle}/live"
+  whiptail --title "Favoritos" --msgbox "Salvo:\n$label\n$handle" 9 45
+}
+
+menu_tv_aberta() {
+  need "$YTDLP" "yt-dlp"
+  need "$PLAYER" "$PLAYER"
+  while true; do
+    local op n_fav
+    n_fav=0
+    [ -s "${TV_FAVORITES_FILE:-}" ] && n_fav=$(grep -cve '^[[:space:]]*$' "$TV_FAVORITES_FILE" 2>/dev/null || echo 0)
+    n_fav=$(printf '%s' "$n_fav" | tr -cd '0-9'); n_fav=${n_fav:-0}
+    op=$(whiptail --title "TV Aberta — lives / canais" --menu \
+"Fontes públicas e oficiais no YouTube (yt-dlp).
+Globo/SBT/Record completos: use os apps (DRM).
+Player: $PLAYER | Favoritos: $n_fav" 22 74 14 \
+      "favs"       "★ Meus canais favoritos ($n_fav)" \
+      "addfav"     "＋ Adicionar canal aos favoritos" \
+      "tvbrasil"   "TV Brasil (EBC) — live" \
+      "cultura"    "TV Cultura — live / ao vivo" \
+      "camara"     "TV Câmara — live" \
+      "senado"     "TV Senado — live" \
+      "cnn"        "CNN Brasil — live" \
+      "jovempan"   "Jovem Pan News — live" \
+      "cazetv"     "CazéTV (esporte) — live" \
+      "getv"       "GE TV (esporte) — pesquisar" \
+      "recordnews" "Record News — live" \
+      "sbtnews"    "SBT News — pesquisar" \
+      "filmes"     "Filmes completos gratuitos — pesquisar" \
+      "tokyvideo"  "Top Videos / TokyVideo — filme por URL" \
+      "pluto"      "Pluto TV — abrir filmes e TV grátis" \
+      "plex"       "Plex — abrir filmes e TV grátis" \
+      "busca"      "Pesquisar canal / ao vivo..." \
+      "voltar"     "Voltar" \
+      3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+      favs)       choose_tv_favorite || true ;;
+      addfav)     add_tv_favorite_dialog || true ;;
+      tvbrasil)   play_channel_live "@tvbrasil" "TV Brasil" ;;
+      cultura)    play_channel_live "@tvcultura" "TV Cultura" ;;
+      camara)     play_channel_live "@camara" "TV Câmara" ;;
+      senado)     play_channel_live "@TVSenado" "TV Senado" ;;
+      cnn)        play_channel_live "@cnnbrasil" "CNN Brasil" ;;
+      jovempan)   play_channel_live "@JovemPanNews" "Jovem Pan News" ;;
+      cazetv)     play_channel_live "@CazeTV" "CazéTV" ;;
+      getv)
+        AUDIO_ONLY=0 DOWNLOAD=0
+        search_and_play "GE TV ao vivo" || true
+        ;;
+      recordnews) play_channel_live "@recordnews" "Record News" ;;
+      sbtnews)
+        AUDIO_ONLY=0 DOWNLOAD=0
+        search_and_play "SBT News ao vivo" || true
+        ;;
+      filmes)
+        menu_filmes_gratis
+        ;;
+      tokyvideo)
+        local tv_url
+        tv_url=$(whiptail --title "Top Videos / TokyVideo" --inputbox \
+          "Cole o link do vídeo TokyVideo:" 10 78 "$TOKYVIDEO_URL" 3>&1 1>&2 2>&3) || continue
+        [ -z "$tv_url" ] && continue
+        video_action_menu "tokyvideo" "TokyVideo" "$tv_url"
+        ;;
+      pluto)
+        open_web_source "https://pluto.tv/" "Pluto TV"
+        ;;
+      plex)
+        open_web_source "https://watch.plex.tv/pt/movies-and-shows" "Plex"
+        ;;
+      busca)
+        local q
+        q=$(whiptail --title "TV Aberta — pesquisar" --inputbox \
+          "Termo (ex.: Band ao vivo, Globo jornal):" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$q" ] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        search_and_play "$q" || true
+        ;;
+      voltar|*) return 0 ;;
+    esac
+  done
+}
+
+
+# --- Adulto 18+ ---
+menu_adulto() {
+  need "$YTDLP" "yt-dlp"
+  need "$PLAYER" "$PLAYER"
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    if ! whiptail --title "Adulto 18+" --yesno \
+"Conteúdo exclusivo para maiores de 18 anos.
+
+Confirma que tens 18+ anos e queres continuar?" 11 60; then
+      return 0
+    fi
+  else
+    printf '%s\n' "${YELLOW}Adulto 18+ — confirma idade (s/N): ${NC}"
+    read -r _ok || return 0
+    [[ "$_ok" =~ ^[Ss]$ ]] || return 0
+  fi
+  while true; do
+    local op
+    op=$(whiptail --title "Adulto 18+" --menu \
+"Stream / pesquisa (yt-dlp).
+Sites com DRM ou login podem falhar.
+Player: $PLAYER" 20 72 9 \
+      "url"      "Stream por URL (qualquer site yt-dlp)" \
+      "busca"    "Pesquisar no YouTube" \
+      "audio"    "Só áudio por URL" \
+      "dl"       "Download + tocar (URL)" \
+      "ph"       "Atalho: colar link Pornhub" \
+      "xv"       "Atalho: colar link XVideos" \
+      "xn"       "Atalho: colar link XNXX" \
+      "voltar"   "Voltar" \
+      3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+      url)
+        local u
+        u=$(whiptail --title "Adulto 18+ — URL" --inputbox "URL do vídeo:" 10 72 "https://" 3>&1 1>&2 2>&3) || continue
+        [ -z "$u" ] || [[ "$u" == "https://" ]] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        play_stream "$u" || true
+        ;;
+      busca)
+        local q
+        q=$(whiptail --title "Adulto 18+ — pesquisa YT" --inputbox \
+"Termo (YouTube; resultados variam por restrição da conta/cookies):" 11 72 3>&1 1>&2 2>&3) || continue
+        [ -z "$q" ] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        search_and_play "$q" || true
+        ;;
+      audio)
+        local u
+        u=$(whiptail --title "Adulto 18+ — só áudio" --inputbox "URL:" 10 72 "https://" 3>&1 1>&2 2>&3) || continue
+        [ -z "$u" ] || [[ "$u" == "https://" ]] && continue
+        AUDIO_ONLY=1 DOWNLOAD=0
+        play_stream "$u" || true
+        AUDIO_ONLY=0
+        ;;
+      dl)
+        local u
+        u=$(whiptail --title "Adulto 18+ — download" --inputbox "URL:" 10 72 "https://" 3>&1 1>&2 2>&3) || continue
+        [ -z "$u" ] || [[ "$u" == "https://" ]] && continue
+        DOWNLOAD=1 AUDIO_ONLY=0
+        play_stream "$u" || true
+        DOWNLOAD=0
+        ;;
+      ph|xv|xn)
+        local tip u
+        case "$op" in
+          ph) tip="Pornhub" ;;
+          xv) tip="XVideos" ;;
+          xn) tip="XNXX" ;;
+        esac
+        u=$(whiptail --title "Adulto 18+ — $tip" --inputbox \
+"Cola o link do vídeo ($tip):
+(yt-dlp costuma funcionar sem login em muitos vídeos)" 12 72 "https://" 3>&1 1>&2 2>&3) || continue
+        [ -z "$u" ] || [[ "$u" == "https://" ]] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        play_stream "$u" || true
+        ;;
+      voltar|*) return 0 ;;
+    esac
+  done
+}
+
+# --- parse ---
+ARGS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --test) ARGS+=("$TEST_URL"); shift ;;
+    --tokyvideo|--topvideos)
+      eazy_wsl_setup
+      need "$YTDLP" "yt-dlp"
+      need "$PLAYER" "$PLAYER"
+      video_action_menu "tokyvideo" "TokyVideo" "$TOKYVIDEO_URL"
+      exit 0
+      ;;
+    --filmes|--filmes-gratis)
+      eazy_wsl_setup
+      need "$YTDLP" "yt-dlp"
+      need "$PLAYER" "$PLAYER"
+      menu_filmes_gratis
+      exit 0
+      ;;
+    --tv|--tv-aberta)
+      eazy_wsl_setup
+      need "$YTDLP" "yt-dlp"
+      need "$PLAYER" "$PLAYER"
+      need whiptail "whiptail"
+      menu_tv_aberta
+      exit 0
+      ;;
+    --adulto|--adult|--18)
+      eazy_wsl_setup
+      need "$YTDLP" "yt-dlp"
+      need "$PLAYER" "$PLAYER"
+      need whiptail "whiptail"
+      menu_adulto
+      exit 0
+      ;;
+    -s|--search) SEARCH=1; shift ;;
+    -a|--audio) AUDIO_ONLY=1; shift ;;
+    -q|--quality) QUALITY="${2:-}"; shift 2 ;;
+    --download|-d) DOWNLOAD=1; shift ;;
+    --)
+      shift
+      while [ "$#" -gt 0 ]; do ARGS+=("$1"); shift; done
+      break
+      ;;
+    -*)
+      printf '%s\n' "${RED}Opção desconhecida: $1${NC}"
+      usage
+      exit 1
+      ;;
+    *) ARGS+=("$1"); shift ;;
+  esac
+done
+
+eazy_wsl_setup
+
+# menu se sem args
+if [ "${#ARGS[@]}" -eq 0 ] && [ -t 0 ]; then
+  need "$YTDLP" "yt-dlp"
+  need whiptail "whiptail"
+  while true; do
+    op=$(whiptail --title "eazy-yt-stream — YouTube" --menu \
+      "Player: $PLAYER | Qualidade: ${QUALITY:-auto}\nEscolha:" 21 74 12 \
+      "1" "Stream por URL" \
+      "2" "Pesquisar e stream" \
+      "3" "So audio por URL" \
+      "4" "Pesquisar so audio" \
+      "5" "Download + tocar" \
+      "6" "Qualidade (atual: ${QUALITY:-auto})" \
+      "7" "Trocar player (atual: $PLAYER)" \
+      "8" "Pesquisas salvas" \
+      "9" "Favoritos" \
+      "T" "TV Aberta — lives / canais" \
+      "F" "Filmes completos gratuitos" \
+      "A" "Adulto 18+" \
+      "0" "Sair" \
+      3>&1 1>&2 2>&3) || exit 0
+    case "$op" in
+      1)
+        url=$(whiptail --title "Stream URL" --inputbox "URL YouTube:" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$url" ] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        play_stream "$url" || true
+        ;;
+      2)
+        q=$(whiptail --title "Pesquisar" --inputbox "Termo:" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$q" ] && continue
+        AUDIO_ONLY=0 DOWNLOAD=0
+        search_and_play "$q" || true
+        ;;
+      3)
+        url=$(whiptail --title "So audio" --inputbox "URL YouTube:" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$url" ] && continue
+        AUDIO_ONLY=1 DOWNLOAD=0
+        play_stream "$url" || true
+        ;;
+      4)
+        q=$(whiptail --title "Pesquisar so audio" --inputbox "Termo:" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$q" ] && continue
+        AUDIO_ONLY=1 DOWNLOAD=0
+        search_and_play "$q" || true
+        ;;
+      5)
+        url=$(whiptail --title "Download" --inputbox "URL YouTube:" 10 70 3>&1 1>&2 2>&3) || continue
+        [ -z "$url" ] && continue
+        DOWNLOAD=1
+        play_stream "$url" || true
+        DOWNLOAD=0
+        ;;
+      6)
+        q=$(whiptail --title "Qualidade" --menu "Max:" 14 50 5 \
+          "" "Auto" "360" "360p" "480" "480p" "720" "720p" "1080" "1080p" \
+          3>&1 1>&2 2>&3) || continue
+        QUALITY="$q"
+        ;;
+      7)
+        p=$(whiptail --title "Player" --menu "Player:" 14 50 4 \
+          "mpv" "mpv (padrao)" \
+          "mplayer" "MPlayer" \
+          "ffplay" "FFplay" \
+          "cvlc" "VLC CLI" \
+          3>&1 1>&2 2>&3) || continue
+        PLAYER="$p"
+        ;;
+      8)
+        choose_saved_search || true
+        ;;
+      9)
+        choose_favorite || true
+        ;;
+      T|t)
+        menu_tv_aberta || true
+        ;;
+      F|f)
+        menu_filmes_gratis
+        ;;
+      A|a)
+        menu_adulto || true
+        ;;
+      0) exit 0 ;;
+    esac
+  done
+fi
+
+# CLI
+TARGET="${ARGS[0]:-}"
+[ -n "$TARGET" ] || { usage; exit 1; }
+if [ "$SEARCH" -eq 1 ] || [[ ! "$TARGET" =~ ^https?:// && ! "$TARGET" =~ ^ytsearch ]]; then
+  search_and_play "$TARGET"
+else
+  play_stream "$TARGET"
+fi
