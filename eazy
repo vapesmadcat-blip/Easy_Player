@@ -3482,6 +3482,20 @@ if [ -f "$PASTA_PROTEGIDA_CONFIG" ] 2>/dev/null; then
     done < "$PASTA_PROTEGIDA_CONFIG"
 fi
 
+eazy_stream_open_advanced() {
+    local stream="${EAZY_STREAM_SCRIPT:-${EAZY_INSTALL_DIR:-$HOME/.local/lib/eazy}/eazy-yt-stream}"
+    [ -x "$stream" ] || stream="/usr/lib/eazy/eazy-yt-stream"
+    if [ ! -x "$stream" ]; then
+        whiptail --title "eazy-yt-stream" --msgbox "Central de streaming não instalada.
+
+Reinstale com:
+eazy --install" 10 65 2>/dev/null || printf '%s\n' "Central de streaming não instalada: eazy --install"
+        return 1
+    fi
+    EAZY_YT_OUT="${DOWNLOAD_DIR:-$HOME/Downloads}" EAZY_YT_DATA="${CONFIG_DIR:-$HOME/.config/eazy}/yt-stream" bash "$stream"
+}
+
+
 if [ "$1" = "--install" ]; then
     echo -e "\033[1;36m=== ${EAZY_NAME} ${EAZY_VERSION} — instalador ===\033[0m"
 
@@ -7882,19 +7896,6 @@ eazy_stream_delete_item() {
     fi
     awk -F'|' -v u="$url" '$1 != u { print }' "$STREAM_QUEUE" > "${STREAM_QUEUE}.tmp" && mv -f "${STREAM_QUEUE}.tmp" "$STREAM_QUEUE"
     whiptail --title "Streams" --msgbox "Removido." 7 30
-}
-
-eazy_stream_open_advanced() {
-    local stream="${EAZY_STREAM_SCRIPT:-${EAZY_INSTALL_DIR:-$HOME/.local/lib/eazy}/eazy-yt-stream}"
-    [ -x "$stream" ] || stream="/usr/lib/eazy/eazy-yt-stream"
-    if [ ! -x "$stream" ]; then
-        whiptail --title "eazy-yt-stream" --msgbox "Central de streaming não instalada.
-
-Reinstale com:
-eazy --install" 10 65 2>/dev/null || printf '%s\n' "Central de streaming não instalada: eazy --install"
-        return 1
-    fi
-    EAZY_YT_OUT="${DOWNLOAD_DIR:-$HOME/Downloads}" EAZY_YT_DATA="${CONFIG_DIR:-$HOME/.config/eazy}/yt-stream" bash "$stream"
 }
 
 eazy_menu_streams() {
