@@ -572,10 +572,11 @@ menu_filmes_gratis() {
   local op q
   while true; do
     op=$(whiptail --title "Filmes gratuitos" --menu \
-      "Escolha como procurar:" 18 82 8 \
+      "Escolha como procurar ou retomar:" 20 88 9 \
       "genero" "Escolher por gênero" \
       "canais" "Escolher canal ou playlist" \
       "pesquisar" "Pesquisar qualquer tema" \
+      "historico" "Histórico — filmes selecionados com Enter" \
       "url" "Assistir/baixar por URL" \
       "voltar" "Voltar" 3>&1 1>&2 2>&3) || return 0
     case "$op" in
@@ -584,6 +585,9 @@ menu_filmes_gratis() {
       pesquisar)
         q=$(whiptail --title "Pesquisar filmes" --inputbox "Tema, gênero ou título:" 10 72 "filmes completos grátis" 3>&1 1>&2 2>&3) || continue
         [ -n "$q" ] && search_free_movies "$q"
+        ;;
+      historico)
+        choose_watch_history || true
         ;;
       url)
         local u
