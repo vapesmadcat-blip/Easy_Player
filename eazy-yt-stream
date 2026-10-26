@@ -24,6 +24,7 @@ OUT_DIR="${EAZY_YT_OUT:-$HOME/Downloads}"
 DATA_DIR="${EAZY_YT_DATA:-$HOME/.config/eazy-yt-stream}"
 SEARCH_INDEX="$DATA_DIR/searches.tsv"
 FAVORITES_FILE="$DATA_DIR/favorites.tsv"
+WATCH_HISTORY_FILE="$DATA_DIR/watch_history.tsv"
 TV_FAVORITES_FILE="$DATA_DIR/tv_favorites.tsv"
 YTDLP_AUTH_ARGS=()
 if [ -n "${EAZY_YT_COOKIES:-}" ]; then
@@ -68,7 +69,8 @@ Variáveis:
   EAZY_MPLAYER_CACHE=65536          # cache do MPlayer em KiB
   EAZY_MPLAYER_CACHE_MIN=30         # percentual antes de iniciar
   EAZY_YT_SEARCH_COUNT=30           # resultados exibidos para escolher
-  EAZY_YT_DATA=~/.config/eazy-yt-stream  # histórico e favoritos
+  EAZY_YT_DATA=~/.config/eazy-yt-stream  # pesquisas, histórico e favoritos
+  Histórico de filmes: $EAZY_YT_DATA/watch_history.tsv
   EAZY_YT_COOKIES=~/youtube-cookies.txt # cookies exportados do navegador
   EAZY_YT_BROWSER_COOKIES=chrome        # alternativa: chrome, firefox, edge
 U
@@ -265,6 +267,54 @@ save_favorite() {
   printf '%s\n' "${GREEN}✓ Favorito salvo${NC}"
 }
 
+save_watch_history() {
+  local id="$1" title="$2" url="$3"
+  mkdir -p "$DATA_DIR"
+  touch "$WATCH_HISTORY_FILE"
+  # Mantém cada reprodução/seleção como uma entrada; o histórico é cronológico.
+  printf '%s|%s|%s|%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$id" "$title" "$url" >> "$WATCH_HISTORY_FILE"
+}
+
+ask_favorite_after_play() {
+  local id="$1" title="$2" url="$3"
+  [ -n "$id" ] || return 0
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    if whiptail --title "Filme terminado" --yesno "Quer guardar este filme nos favoritos?\n\n$title" 11 78; then
+      save_favorite "$id" "$title" "$url"
+    fi
+  else
+    printf '%s\n' "${YELLOW}Filme terminado: $title${NC}"
+    printf 'Guardar nos favoritos? [s/N] '
+    local answer
+    read -r answer || answer=""
+    case "$answer" in
+      s|S|sim|SIM|y|Y|yes|YES) save_favorite "$id" "$title" "$url" ;;
+    esac
+  fi
+}
+
+choose_watch_history() {
+  local selected index stamp id title url line
+  local -a stamps=() ids=() titles=() urls=() menu=()
+  [ -s "$WATCH_HISTORY_FILE" ] || { printf '%s\n' "${YELLOW}Nenhum filme no histórico.${NC}"; return 1; }
+  while IFS='|' read -r stamp id title url; do
+    [ -n "$id" ] || continue
+    stamps+=("$stamp"); ids+=("$id"); titles+=("$title"); urls+=("$url")
+  done < <(tail -n 100 "$WATCH_HISTORY_FILE" | tac)
+  for index in "${!ids[@]}"; do
+    menu+=("$((index+1))" "${stamps[$index]} — ${titles[$index]}")
+  done
+  if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
+    selected=$(whiptail --title "Histórico de filmes" --menu "Escolha um filme para assistir novamente:" 24 112 14 "${menu[@]}" 3>&1 1>&2 2>&3) || return 0
+  else
+    for index in "${!ids[@]}"; do printf ' %2d) %s — %s\n' "$((index+1))" "${stamps[$index]}" "${titles[$index]}"; done
+    printf 'Escolha: '; read -r selected || return 0
+  fi
+  [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#ids[@]}" ] || return 1
+  index=$((selected-1))
+  video_action_menu "${ids[$index]}" "${titles[$index]}" "${urls[$index]}"
+}
+
 video_action_menu() {
   local id="$1" title="$2" url="$3" action
   if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
@@ -283,9 +333,9 @@ video_action_menu() {
     case "$action" in 1) action=play;; 2) action=download;; 3) action=audio;; 4) action=browser;; 5) action=favorite;; *) action=back;; esac
   fi
   case "$action" in
-    play) AUDIO_ONLY=0; DOWNLOAD=0; play_stream "$url" ;;
-    download) AUDIO_ONLY=0; DOWNLOAD=1; play_stream "$url"; DOWNLOAD=0 ;;
-    audio) AUDIO_ONLY=1; DOWNLOAD=1; play_stream "$url"; AUDIO_ONLY=0; DOWNLOAD=0 ;;
+    play) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=0; DOWNLOAD=0; play_stream "$url"; ask_favorite_after_play "$id" "$title" "$url" ;;
+    download) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=0; DOWNLOAD=1; play_stream "$url"; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
+    audio) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=1; DOWNLOAD=1; play_stream "$url"; AUDIO_ONLY=0; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
     browser) if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 & else printf '%s\n' "URL: $url"; fi ;;
     favorite) save_favorite "$id" "$title" "$url" ;;
   esac
@@ -957,6 +1007,9 @@ if [ "${#ARGS[@]}" -eq 0 ] && [ -t 0 ]; then
         ;;
       9)
         choose_favorite || true
+        ;;
+      H|h)
+        choose_watch_history || true
         ;;
       T|t)
         menu_tv_aberta || true

@@ -19,9 +19,9 @@ sudo apt install ./eazy_5.0.0_all.deb
 
 ## Streaming
 
-A Central é aberta com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Ela usa `yt-dlp`, mostra a duração dos vídeos, mantém pesquisas salvas, favoritos e permite carregar mais 30 resultados sem repetir a consulta. Também inclui canais públicos de filmes, TV aberta, download, áudio e abertura no navegador.
+A Central é aberta com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Ela usa `yt-dlp`, mostra a duração dos vídeos, mantém histórico de pesquisas e filmes assistidos, pergunta ao terminar se o filme deve ir para os favoritos e permite carregar mais 30 resultados sem repetir a consulta. Também inclui canais públicos de filmes, TV aberta, download, áudio e abertura no navegador.
 
-Os dados da Central ficam em `~/.config/eazy/yt-stream/`. O pacote instala o componente em `/usr/bin/eazy-yt-stream` e `/usr/lib/eazy/eazy-yt-stream`.
+Os dados da Central ficam em `~/.config/eazy/yt-stream/`, incluindo `searches.tsv`, `watch_history.tsv` e `favorites.tsv`. O pacote instala o componente em `/usr/bin/eazy-yt-stream` e `/usr/lib/eazy/eazy-yt-stream`.
 
 ## Componentes
 
