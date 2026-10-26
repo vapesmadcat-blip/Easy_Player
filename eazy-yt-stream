@@ -317,6 +317,8 @@ choose_watch_history() {
 
 video_action_menu() {
   local id="$1" title="$2" url="$3" action
+  # O histórico registra o Enter no resultado, antes mesmo da escolha da ação.
+  save_watch_history "$id" "$title" "$url"
   if command -v whiptail >/dev/null 2>&1 && [ -t 0 ]; then
     action=$(whiptail --title "Vídeo selecionado" --menu \
       "${title}\n\nEscolha uma ação:" 16 86 8 \
@@ -333,9 +335,9 @@ video_action_menu() {
     case "$action" in 1) action=play;; 2) action=download;; 3) action=audio;; 4) action=browser;; 5) action=favorite;; *) action=back;; esac
   fi
   case "$action" in
-    play) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=0; DOWNLOAD=0; play_stream "$url"; ask_favorite_after_play "$id" "$title" "$url" ;;
-    download) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=0; DOWNLOAD=1; play_stream "$url"; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
-    audio) save_watch_history "$id" "$title" "$url"; AUDIO_ONLY=1; DOWNLOAD=1; play_stream "$url"; AUDIO_ONLY=0; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
+    play) AUDIO_ONLY=0; DOWNLOAD=0; play_stream "$url"; ask_favorite_after_play "$id" "$title" "$url" ;;
+    download) AUDIO_ONLY=0; DOWNLOAD=1; play_stream "$url"; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
+    audio) AUDIO_ONLY=1; DOWNLOAD=1; play_stream "$url"; AUDIO_ONLY=0; DOWNLOAD=0; ask_favorite_after_play "$id" "$title" "$url" ;;
     browser) if command -v xdg-open >/dev/null 2>&1; then xdg-open "$url" >/dev/null 2>&1 & else printf '%s\n' "URL: $url"; fi ;;
     favorite) save_favorite "$id" "$title" "$url" ;;
   esac
