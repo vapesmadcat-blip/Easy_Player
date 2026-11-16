@@ -1,8 +1,20 @@
+eazy (5.2.0) stable; urgency=medium
+
+  * Move persistent queues and custom lists from legacy text files to individual SQLite tables.
+  * Ship a separate list migrator with preview, database backup and preservation of the legacy files.
+  * Use batch metadata lookup, incremental directory synchronization and SQL-backed list maintenance.
+  * Keep the 5.1.3 SQLite history migration and fix the logical list name shown in the playlist header.
+  * Refresh CLI help, HTML/TXT help, man page, installers and distribution artifacts for 5.2.0.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Mon, 16 Nov 2026 23:13:22 +0000
+
 eazy (5.1.3) stable; urgency=medium
-  * Fix SQLite history migration to read the preserved legacy file directly, without shell newline/NUL translation.
-  * Rebuild the history table from the source file after the migration marker is removed; preserve the source file.
-  * Route Ctrl+G and Ctrl+P history entry through the same first-use migration guard and query history rows directly from SQLite.
-  * Restore the eazy --stream launcher and ship eazy-index.py with package and local installers; refresh help and manual for 5.1.3.
+
+  * Read the preserved legacy history file directly, without shell newline/NUL translation.
+  * Rebuild the history table after the migration marker is removed; preserve the original source.
+  * Route Ctrl+G and Ctrl+P through the same first-use history migration guard and query SQLite rows.
+  * Restore the eazy --stream launcher and ship eazy-index.py with package and local installers.
+
  -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Mon, 16 Nov 2026 12:00:00 -0300
 
 eazy (5.0.0) stable; urgency=medium

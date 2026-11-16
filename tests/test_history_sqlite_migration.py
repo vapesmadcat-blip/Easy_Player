@@ -44,6 +44,10 @@ def main() -> int:
         # Modela um banco já usado: outra tabela deve permanecer intacta.
         with sqlite3.connect(db_path) as db:
             db.execute("INSERT INTO files(path,name,parent) VALUES(?,?,?)", ("/sentinel", "sentinel", "/"))
+            db.execute(
+                "INSERT INTO files(path,name,parent,mtime_ns) VALUES(?,?,?,?)",
+                (expected[0], Path(expected[0]).name, str(Path(expected[0]).parent), 1673047376000000000),
+            )
             db.execute("CREATE TABLE IF NOT EXISTS history_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             db.execute("INSERT OR REPLACE INTO history_state VALUES('migrated','1')")
             db.execute("INSERT INTO history_items(path,position,played_at) VALUES(?,?,?)", ("CORRUPTED", 0, 1))
@@ -67,6 +71,17 @@ def main() -> int:
         looked_up = run("--db", str(db_path), "--history-lookup").decode("utf-8").splitlines()
         assert len(looked_up) == len(expected), looked_up
         assert [row.split("\t")[4] for row in looked_up] == expected, looked_up
+        assert looked_up[0].split("\t")[1] == "1673047376", looked_up[0]
+
+        lookup0 = run("--db", str(db_path), "--lookup0", input_bytes=expected[0].encode() + b"\0").decode().splitlines()
+        assert lookup0[0].split("\t")[1] == "1673047376", lookup0
+
+        scanned = base / "scan N 0.mp4"
+        scanned.write_bytes(b"test")
+        scan_rows = run("--db", str(db_path), "--scan0", input_bytes=str(scanned).encode() + b"\0").decode().splitlines()
+        assert scan_rows and scan_rows[0].split("\t")[1].isdigit(), scan_rows
+        query_rows = run("--db", str(db_path), "--query", "--root", str(base), "--ext", "TODAS").decode().splitlines()
+        assert query_rows and query_rows[0].split("\t")[1].isdigit(), query_rows
 
         # O importador NUL legado continua funcional, sem confundir a letra N com o byte NUL.
         legacy_db = base / "legacy.sqlite3"
@@ -86,7 +101,8 @@ def main() -> int:
 
     print("PASS: rebuild SQLite igual ao arquivo original; ordem, marcador e arquivo preservados")
     print("PASS: consulta da interface vem do SQLite; Ctrl+G e Ctrl+P passam pela migração comum")
-    print("PASS: caminhos com N, 0, acentos e espaços não são transformados")
+    print("PASS: timestamps do SQLite são emitidos como segundos inteiros para o shell")
+    print("PASS: caminhos com letras, dígitos, espaços e acentos são preservados")
     return 0
 
 

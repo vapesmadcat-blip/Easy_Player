@@ -1,5 +1,5 @@
 Package: eazy
-Version: 5.1.3
+Version: 5.2.0
 Section: video
 Priority: optional
 Architecture: all
@@ -8,8 +8,8 @@ Depends: bash, python3, fzf, whiptail, gawk, findutils, sed, wget | curl, mpv | 
 Suggests: yt-dlp, aria2, axel, chafa, ffmpeg, p7zip-full, rar, pciutils, alsa-utils, pulseaudio-utils, lshw, smartmontools, dmidecode, inxi, usbutils, x11-xserver-utils, mesa-utils, vulkan-tools, iw, network-manager, upower, lm-sensors
 Description: terminal media browser and player
  eazy is a keyboard-driven terminal media browser and player built around
- fzf and a command-line media player. It provides persistent queues,
- recursive search, previews, playlists, downloads, and session state.
+ fzf and a command-line media player. It provides SQLite-backed queues and
+ playlists, recursive search, previews, downloads, and session state.
  .
  The package installs eazy and its streaming, AI, notes and torrent companions
  under /usr/bin and /usr/lib/eazy. User data is stored below ~/.config/eazy.

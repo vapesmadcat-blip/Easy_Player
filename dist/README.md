@@ -1,26 +1,14 @@
-# dist/ — eazy 4.2.1 (fora de Releases)
+# Distribuição — Easy Player 5.2.0
 
-Coloque aqui (via `git push` ou upload na UI do GitHub):
+A release oficial publica no GitHub os artefatos:
 
-- `eazy_4.2.1_all.deb`
-- `eazy_4.2.1_full.zip`
+- `eazy_5.2.0_all.deb` e seu `.sha256`.
+- `eazy_5.2.0_full.zip` e seu `.sha256`.
 
-Depois o install funciona:
+Instalação web:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/install-from-web.sh | bash
 ```
 
-## Enviar o deb a partir do zip local
-
-```bash
-unzip eazy_4.2.1_full.zip
-cd eazy-4.2.1-full
-git clone https://github.com/vapesmadcat-blip/Easy_Player.git
-cd Easy_Player
-mkdir -p dist
-cp ../eazy_4.2.1_all.deb ../eazy_4.2.1_full.zip dist/
-git add dist/
-git commit -m "dist: eazy 4.2.1 deb + zip"
-git push origin main
-```
+O pacote ZIP contém os arquivos necessários para execução sem instalar, incluindo indexador SQLite e migrador separado das listas legadas. O arquivo Debian instala o Easy e seus componentes no sistema.

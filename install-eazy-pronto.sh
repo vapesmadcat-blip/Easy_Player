@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Instalação local do Easy 5.1.3 sem sudo.
+# Instalação local do Easy 5.2.0 sem sudo.
 # Os componentes ficam juntos em ~/.local/bin para que o stream seja encontrado pelo eazy.
 set -euo pipefail
-VERSION="5.1.3"
+VERSION="5.2.0"
 BASE="https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main"
 BIN="${HOME}/.local/bin"
 mkdir -p "$BIN"
-for file in eazy eazy-index.py eazy-yt-stream eazy-ai.py eazy-tor eazy-notes-editor; do
+for file in eazy eazy-index.py migrate_eazy_lists.py eazy-yt-stream eazy-ai.py eazy-tor eazy-notes-editor; do
   echo ">> Baixando $file $VERSION..."
   curl -fsSL "$BASE/$file" -o "$BIN/$file"
   chmod 755 "$BIN/$file"

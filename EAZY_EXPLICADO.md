@@ -74,30 +74,24 @@ Arquivos de texto podem ser lidos diretamente no terminal. Playlists `.m3u` e fo
 
 ## 7. Filas temporárias
 
-O eazy possui três filas temporárias independentes. Elas funcionam como listas de reprodução rápidas e persistentes entre sessões.
-
-| Fila | Arquivo interno |
-|---|---|
-| Fila 1 | `~/.config/eazy/temp_playlist_1` |
-| Fila 2 | `~/.config/eazy/temp_playlist_2` |
-| Fila 3 | `~/.config/eazy/temp_playlist_3` |
+O eazy possui três filas temporárias independentes, persistidas como tabelas SQLite no banco `~/.config/eazy/eazy-index.sqlite3`. Elas funcionam como listas de reprodução rápidas e persistentes entre sessões; os arquivos legados `temp_playlist_1`, `_2` e `_3` não são a fonte de leitura ou gravação depois da migração.
 
 O menu `Insert` envia a seleção atual para uma das filas. O usuário pode escolher substituir, acrescentar ou operar sobre o destino conforme o diálogo apresentado. As filas podem conter arquivos e diretórios. Arquivos são reproduzidos normalmente; diretórios são reconhecidos como pastas e podem ser abertos.
 
-O `Ctrl-P` percorre as filas temporárias e as listas personalizadas. O cabeçalho mostra o nome da fila e a quantidade de itens. A fila atual também pode ser usada para salvar uma playlist permanente.
+O `Ctrl-P` enumera o catálogo SQLite de filas e listas personalizadas. O cabeçalho mostra o nome lógico da fila e a quantidade de itens; não mostra o nome de um snapshot temporário. A fila atual também pode ser usada para salvar uma playlist permanente.
 
 ## 8. Listas temporárias personalizadas
 
-Além das três filas padrão, o menu `Insert` permite criar uma nova lista temporária nomeada. O usuário informa o nome e o eazy grava a lista em um arquivo seguro.
+Além das três filas padrão, o menu `Insert` permite criar uma nova lista temporária nomeada. O nome informado corresponde a uma tabela SQLite; não é criado um arquivo permanente de lista.
 
-As listas personalizadas aparecem no `Insert` e no ciclo do `Ctrl-P`. O nome exibido é o nome fornecido pelo usuário, acompanhado da quantidade de itens. Identificadores internos não são mostrados.
+As listas personalizadas aparecem no `Insert` e no ciclo do `Ctrl-P`. O nome exibido é o nome fornecido pelo usuário, acompanhado da quantidade de itens. O catálogo SQL não depende da existência dos snapshots temporários usados internamente para compatibilidade.
 
 | Exemplo visual | Significado |
 |---|---|
 | `lista-nova2 — 4 itens` | Lista personalizada chamada `lista-nova2` |
 | `minhas-musicas — 28 itens` | Lista personalizada com 28 entradas |
 
-Os arquivos ficam em `~/.config/eazy/temp_playlist_custom_NOME`. Espaços e caracteres incompatíveis com nomes de arquivo são normalizados no momento da criação.
+As tabelas de listas são registradas no banco SQLite. Para migrar instalações antigas, feche o Easy, confira a prévia com `python3 migrate_eazy_lists.py` e aplique com `python3 migrate_eazy_lists.py --apply`. O migrador faz backup do banco e preserva os arquivos de origem. Os snapshots transitórios ficam em `~/.config/eazy/tmp/` e não são o armazenamento persistente.
 
 Se uma lista personalizada contiver um diretório, esse diretório aparece como pasta. Pressionar `Enter` nele abre a pasta; pressionar `..` depois retorna à lista que estava aberta antes da navegação.
 
@@ -345,13 +339,14 @@ O eazy grava a sessão ao sair pelos atalhos de saída. A sessão inclui diretó
 | `config` | Preferências gerais |
 | `session` | Último estado da sessão |
 | `dir_positions` | Posições salvas por diretório ou lista |
-| `history` | Histórico de reprodução |
+| `history` | Arquivo legado do histórico; fonte preservada durante a migração SQLite |
 | `last_copy_destination` | Último destino de cópia |
 | `last_move_destination` | Último destino de movimentação |
 | `saved_searches/` | Pesquisas nomeadas |
 | `notas/` | Notas rápidas |
-| `temp_playlist_1` a `_3` | Filas temporárias |
-| `temp_playlist_custom_*` | Listas nomeadas |
+| `eazy-index.sqlite3` | Índice, histórico e tabelas das filas/listas temporárias |
+| `temp_playlist_1` a `_3` | Arquivos legados de fila, preservados na migração |
+| `temp_playlist_custom_*` | Arquivos legados de listas nomeadas, preservados na migração |
 
 A persistência reduz a necessidade de refazer configurações e permite interromper o trabalho sem perder o contexto.
 

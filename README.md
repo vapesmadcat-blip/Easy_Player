@@ -1,10 +1,10 @@
-# Easy Player 5.1.3
+# Easy Player 5.2.0
 
-Navegador e reprodutor multimídia no terminal, com seleção persistente, playlists, downloads, manutenção, IA, editor de notas, torrents e uma Central completa de streaming.
+Navegador e reprodutor multimídia no terminal, com seleção persistente, filas e listas temporárias SQLite, histórico SQLite, downloads, manutenção, IA, editor de notas, torrents e Central de streaming.
 
-## Executar a versão beta sem instalação
+## Executar sem instalação
 
-Para abrir a cópia descompactada numa pasta, use `./run-beta.sh` (ou `./eazy`) com `eazy-index.py` ao lado do executável. Isso não instala nada no sistema.
+Para testar uma cópia descompactada, execute `./run-beta.sh` (ou `./eazy`) com `eazy-index.py` ao lado do programa. Isso não instala nada.
 
 ## Instalação
 
@@ -12,40 +12,46 @@ Para abrir a cópia descompactada numa pasta, use `./run-beta.sh` (ou `./eazy`) 
 curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/install-from-web.sh | bash
 ```
 
-Para instalar o pacote manualmente:
+Instalação manual pelo pacote Debian:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.1.3/eazy_5.1.3_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.1.3/eazy_5.1.3_all.deb.sha256
-sha256sum -c eazy_5.1.3_all.deb.sha256
-sudo apt install ./eazy_5.1.3_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.2.0/eazy_5.2.0_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.2.0/eazy_5.2.0_all.deb.sha256
+sha256sum -c eazy_5.2.0_all.deb.sha256
+sudo apt install ./eazy_5.2.0_all.deb
 ```
+
+## Persistência local SQLite
+
+O banco padrão fica em `~/.config/eazy/eazy-index.sqlite3`. O histórico e as filas/listas temporárias são armazenados em tabelas SQLite. Arquivos de texto em `~/.config/eazy/tmp/` são snapshots efêmeros usados somente para compatibilidade com componentes que consomem linhas; não são a fonte persistente. O cabeçalho e o menu Ctrl+P usam o nome lógico da lista.
+
+Na primeira entrada no Histórico, por `Ctrl+G` ou `Ctrl+P`, o Easy lê o arquivo legado `~/.config/eazy/history`, recria a tabela de histórico e preserva intacto o arquivo original. A primeira tentativa conclui a migração e retorna; abra o Histórico novamente.
+
+Para migrar filas/listas antigas `temp_playlist_*` antes de usar a versão SQLite, feche o Easy e execute o migrador incluído na distribuição. Primeiro confira a prévia e depois aplique:
+
+```bash
+python3 migrate_eazy_lists.py
+python3 migrate_eazy_lists.py --apply
+```
+
+No pacote Debian, o migrador fica em `/usr/lib/eazy/migrate_eazy_lists.py`. O migrador cria backup do banco existente antes de gravar e não apaga os arquivos legados. Não use `--replace` a menos que tenha verificado a prévia e queira substituir o conteúdo SQL divergente pelo arquivo original.
 
 ## Streaming
 
-A Central é aberta com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Ela usa `yt-dlp`, mostra a duração dos vídeos, mantém histórico de pesquisas e filmes assistidos, pergunta ao terminar se o filme deve ir para os favoritos e permite carregar mais 30 resultados sem repetir a consulta. Também inclui canais públicos de filmes, TV aberta, download, áudio e abertura no navegador.
-
-Na tela `Filmes gratuitos`, a opção `Histórico — filmes selecionados com Enter` reabre os títulos escolhidos anteriormente. Os dados ficam em `~/.config/eazy/yt-stream/`, incluindo `searches.tsv`, `watch_history.tsv` e `favorites.tsv`. O pacote instala o componente em `/usr/bin/eazy-yt-stream` e `/usr/lib/eazy/eazy-yt-stream`.
-
-## Histórico de reprodução
-
-O histórico é guardado em `~/.config/eazy/history` e indexado em `~/.config/eazy/eazy-index.sqlite3`. Na primeira entrada no Histórico, pelo `Ctrl+G` ou pelo menu `Ctrl+P`, o Easy avisa, lê o arquivo original linha a linha, recria `history_items` no SQLite e mantém intacto o arquivo de origem. A primeira tentativa faz apenas a migração; entre novamente no Histórico. Depois disso, contagem, listagem e metadados são consultados no banco.
+A Central abre com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Usa `yt-dlp`, apresenta duração e paginação, mantém pesquisas e histórico de filmes assistidos, permite favoritos e inclui fontes públicas de filmes e TV aberta.
 
 ## Componentes
 
-A release inclui `eazy`, `eazy-index.py` (instalado em `/usr/lib/eazy`), `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e help HTML/TXT. O instalador não usa caminhos de usuário fixos e não instala arquivos na raiz do projeto.
+A distribuição inclui `eazy`, `eazy-index.py`, `migrate_eazy_lists.py`, `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e Help HTML/TXT. Os instaladores colocam os componentes nos caminhos de sistema ou do usuário sem caminhos de usuário fixos.
 
-## Desenvolvimento
+## Desenvolvimento e validação
 
 ```bash
 bash -n eazy eazy-yt-stream
+python3 -m unittest discover -s tests -p 'test_sqlite_*.py' -v
 ./packaging/build-deb.sh
 ./eazy --version
 ./eazy --help
 ```
-
-Para recompilar o binário Linux, use `./tools/compilar-eazy.sh eazy bin/eazy-linux-x86_64`. O executável compilado continua dependendo das ferramentas do sistema usadas pelo Easy.
-
-## Autoria
 
 **Made by John B Kersting.**

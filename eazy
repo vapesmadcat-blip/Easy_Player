@@ -67,8 +67,9 @@ case "${1:-}" in
         ;;
 esac
 
-EAZY_VERSION="5.1.3"
-EAZY_CODENAME="history-sqlite-only-direct-key"
+EAZY_VERSION="5.2.0"
+EAZY_REVISION="2"
+EAZY_CODENAME="sqlite-history-and-playlists"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
 
@@ -1147,7 +1148,7 @@ configurar_diretorios_eazy() {
 }
 
 eazy_atualizar_banco_dados() {
-    local raiz log total progresso pid feitos percentual atual rc
+    local raiz log total progresso paths_file pid feitos percentual atual rc estado
     raiz=$(whiptail --title "Banco de dados do eazy" --inputbox \
         "Digite a pasta do HD a indexar.\n\nA varredura inclui subpastas e atualiza somente arquivos novos ou alterados.\n\nBanco: $EAZY_INDEX_DB" 14 78 "${EAZY_INDEX_ROOT:-$(pwd -P)}" 3>&1 1>&2 2>&3) || return 0
     [ -n "$raiz" ] || return 0
@@ -1166,29 +1167,38 @@ eazy_atualizar_banco_dados() {
     mkdir -p "$EAZY_TMP_DIR" "$(dirname -- "$EAZY_INDEX_DB")" 2>/dev/null || true
     log="$EAZY_TMP_DIR/index-update.log"
     progresso="$EAZY_TMP_DIR/index-progress-$$.tsv"
+    paths_file="$EAZY_TMP_DIR/index-paths-$$.nul"
     : > "$log"
-    total=$(find "$raiz" -xdev \( -type d -o -type f \) -printf 'x\n' 2>/dev/null | wc -l | tr -cd '0-9')
+    find "$raiz" -xdev \( -type d -o -type f \) -print0 >"$paths_file" 2>>"$log"
+    total=$(tr -cd '\000' < "$paths_file" | wc -c | tr -cd '0-9')
     total=${total:-0}
     : > "$progresso"
-    find "$raiz" -xdev \( -type d -o -type f \) -print0 2>/dev/null | \
-        "$PYTHON_CMD" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --scan0 >"$progresso" 2>"$log" &
+    "$PYTHON_CMD" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --scan0 \
+        --progress-file "$progresso" <"$paths_file" >/dev/null 2>>"$log" &
     pid=$!
     (
         while kill -0 "$pid" 2>/dev/null; do
-            feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
+            estado=$(cat "$progresso" 2>/dev/null || true)
+            if [ -n "$estado" ]; then
+                IFS=$'\t' read -r feitos atual <<< "$estado"
+            else
+                feitos=0; atual="preparando..."
+            fi
+            feitos=$(printf '%s' "$feitos" | tr -cd '0-9'); feitos=${feitos:-0}
             if [ "${total:-0}" -gt 0 ]; then
                 percentual=$((feitos * 100 / total))
                 [ "$percentual" -gt 99 ] && percentual=99
             else
                 percentual=0
             fi
-            atual=$(tail -n 1 "$progresso" 2>/dev/null | awk -F '\t' '{print $5}')
             [ -n "$atual" ] || atual="preparando..."
             printf 'XXX\n%s\nArquivos processados: %s de %s\nArquivo atual: %s\nArquivos sem alteração estão sendo reaproveitados.\nXXX\n' \
                 "$percentual" "$feitos" "$total" "$atual"
             sleep 1
         done
-        feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
+        estado=$(cat "$progresso" 2>/dev/null || true)
+        IFS=$'\t' read -r feitos atual <<< "$estado"
+        feitos=$(printf '%s' "${feitos:-0}" | tr -cd '0-9'); feitos=${feitos:-0}
         printf 'XXX\n100\nArquivos processados: %s de %s\nIndexação concluída.\nXXX\n' "$feitos" "$total"
     ) | whiptail --title "Atualizando banco de dados" --gauge \
         "Ponto inicial:\n$raiz" 14 78 0
@@ -1197,12 +1207,18 @@ eazy_atualizar_banco_dados() {
     else
         rc=$?
     fi
-    feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
-    rm -f "$progresso"
+    estado=$(cat "$progresso" 2>/dev/null || true)
+    IFS=$'\t' read -r feitos atual <<< "$estado"
+    feitos=$(printf '%s' "${feitos:-0}" | tr -cd '0-9'); feitos=${feitos:-0}
+    rm -f "$progresso" "$paths_file" "$progresso".*.tmp
     if [ "$rc" -ne 0 ]; then
         whiptail --title "Banco de dados" --msgbox "A atualização encontrou um erro.\n\n$(tail -n 8 "$log" 2>/dev/null)" 12 72
         return "$rc"
     fi
+    # O scan atualiza o SQLite, mas as listas do navegador podem estar em cache
+    # persistente (inclusive com a mesma mtime de segundo). Recria-as do índice.
+    eazy_lista_cache_invalidate all
+    EAZY_LAST_DIR_SYNC_CONTEXT=""
     total=$("$PYTHON_CMD" - "$EAZY_INDEX_DB" "$raiz" <<'PYDB'
 import sqlite3, sys
 try:
@@ -1471,7 +1487,7 @@ Opções:
   --silent, -q       Silencioso (padrão): sem barra de processamento
   --ignore           Anónimo: sem sessão, seleção, posições, histórico, filas
   --unselect         Limpa seleção global e local (selected_paths) e continua
-  --install          Instala dependências, comando global e scripts auxiliares
+  --install          Instala dependências, comando global, scripts e migrador SQLite
   --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
@@ -1527,9 +1543,14 @@ Arquivos de configuração:
   ~/.config/eazy/config
   ~/.config/eazy/session
   ~/.config/eazy/selected_paths
-  ~/.config/eazy/temp_playlist_{1,2,3}
-  ~/.config/eazy/tmp/          (temporários do eazy — não usa /tmp)
+  ~/.config/eazy/eazy-index.sqlite3 (índice, histórico e filas/listas SQL)
+  ~/.config/eazy/tmp/          (snapshots transitórios — não usa /tmp)
   ~/.config/eazy/scripts/manut-completa.sh
+
+Filas 1–3 e listas personalizadas são tabelas SQLite. Arquivos em tmp são
+snapshots temporários, não listas permanentes. Para migrar listas legadas,
+feche o Easy, confira a prévia com python3 migrate_eazy_lists.py e aplique
+com python3 migrate_eazy_lists.py --apply; os arquivos originais são mantidos.
 
 Em um arquivo .deb: pressione Enter para conferir o pacote e instalar com APT.
 A lista usa TAM · DATA · TIPO e mantém o ciclo visual idx3 de três cores.
@@ -1559,8 +1580,8 @@ NAVEGAÇÃO E SELEÇÃO
   Ctrl-H           Exportar HTML (seleção ou tela)
 
 FILAS E AÇÕES
-  Insert         Fila 1/2/3 ou lista nova
-  Ctrl-P         Alterna filas / listas / dir
+  Insert         Fila SQL 1/2/3 ou lista SQL nova
+  Ctrl-P         Alterna diretório, filas/listas SQL, histórico e duplicados
   Ctrl-K/Y/U/E   Ações / copiar / mover / shuffle
 
 BUSCA E DISCO
@@ -2529,7 +2550,7 @@ limpeza_auto() {
 
 # Backup selectivo de dados do eazy (~/.config/eazy e afins)
 eazy_backup_menu() {
-    local selecionados dest stamp arq lista item caminhos=() base
+    local selecionados dest stamp arq lista item caminhos=() base backup_lists_error=0 list_table list_count list_hash
     mkdir -p "${BACKUPS_DIR:-$CONFIG_DIR/backups}" 2>/dev/null || true
     selecionados=$(whiptail --title "Backup eazy ${EAZY_VERSION}" --checklist \
         "Escolha o que incluir no backup:\n(destino padrão: ~/.config/eazy/backups/)" 22 78 12 \
@@ -2581,7 +2602,19 @@ eazy_backup_menu() {
                 ;;
             filas)
                 mkdir -p "$base/eazy-backup/filas"
-                cp -a "$CONFIG_DIR"/temp_playlist_* "$base/eazy-backup/filas/" 2>/dev/null || true
+                if [ "${EAZY_SQL_LISTS_READY:-0}" = "1" ]; then
+                    : > "$base/eazy-backup/filas/LISTS.index"
+                    while IFS= read -r -d '' list_table && IFS= read -r -d '' list_count; do
+                        list_hash=$(printf '%s' "$list_table" | sha256sum | awk '{print $1}') || { backup_lists_error=1; continue; }
+                        printf '%s\0%s\0' "$list_table" "$list_hash" >> "$base/eazy-backup/filas/LISTS.index"
+                        if ! eazy_sql_list_indexer "--list-export=$list_table" > "$base/eazy-backup/filas/list-$list_hash.txt"; then
+                            backup_lists_error=1
+                        fi
+                    done < <(eazy_sql_list_indexer --list-menu0 2>/dev/null)
+                else
+                    mkdir -p "$base/eazy-backup/filas/legacy-files"
+                    cp -a "$CONFIG_DIR"/temp_playlist_* "$base/eazy-backup/filas/legacy-files/" 2>/dev/null || true
+                fi
                 echo "filas" >> "$base/eazy-backup/MANIFEST.txt"
                 ;;
             historico)
@@ -2647,6 +2680,11 @@ eazy_backup_menu() {
         esac
     done <<< "$selecionados"
 
+    if [ "$backup_lists_error" -ne 0 ]; then
+        rm -rf "$base"
+        whiptail --title "Backup" --msgbox "Falha ao exportar uma ou mais listas SQLite; nenhum backup foi criado." 9 66
+        return 1
+    fi
     if tar -C "$base" -czf "$arq" eazy-backup 2>/dev/null; then
         local sz
         sz=$(du -h -- "$arq" 2>/dev/null | awk '{print $1}')
@@ -2661,7 +2699,7 @@ eazy_backup_menu() {
 }
 
 eazy_restore_backup_menu() {
-    local arq dest
+    local arq dest list_table list_hash list_file restore_lists_error=0 list_line view_path
     mkdir -p "${BACKUPS_DIR:-$CONFIG_DIR/backups}" 2>/dev/null || true
     arq=$(whiptail --title "Restaurar backup" --inputbox \
         "Caminho do .tar.gz de backup:" 10 72 "${BACKUPS_DIR}/" 3>&1 1>&2 2>&3) || return 0
@@ -2686,7 +2724,36 @@ eazy_restore_backup_menu() {
              last_download_engine last_download_tor; do
         [ -e "$tmp/eazy-backup/$f" ] && cp -a "$tmp/eazy-backup/$f" "$CONFIG_DIR/" 2>/dev/null || true
     done
-    [ -d "$tmp/eazy-backup/filas" ] && cp -a "$tmp/eazy-backup/filas"/. "$CONFIG_DIR/" 2>/dev/null || true
+    if [ -f "$tmp/eazy-backup/filas/LISTS.index" ]; then
+        if [ "${EAZY_SQL_LISTS_READY:-0}" != "1" ]; then
+            whiptail --title "Restaurar listas" --msgbox "As tabelas SQLite não estão prontas. Execute a migração das listas antigas e tente restaurar novamente." 10 68
+            rm -rf "$tmp"
+            return 1
+        fi
+        while IFS= read -r -d '' list_table && IFS= read -r -d '' list_hash; do
+            [[ "$list_hash" =~ ^[0-9a-f]{64}$ ]] || { restore_lists_error=1; continue; }
+            list_file="$tmp/eazy-backup/filas/list-$list_hash.txt"
+            [ -f "$list_file" ] || { restore_lists_error=1; continue; }
+            if ! eazy_sql_list_indexer "--list-count=$list_table" >/dev/null 2>&1; then
+                eazy_sql_list_indexer "--list-create=$list_table" >/dev/null 2>&1 || { restore_lists_error=1; continue; }
+            fi
+            if ! (while IFS= read -r list_line || [ -n "$list_line" ]; do printf '%s\0' "$list_line"; done < "$list_file" | eazy_sql_list_indexer "--list-replace0=$list_table" >/dev/null); then
+                restore_lists_error=1
+            fi
+        done < "$tmp/eazy-backup/filas/LISTS.index"
+        if [ "$restore_lists_error" -ne 0 ]; then
+            whiptail --title "Restaurar listas" --msgbox "Uma ou mais listas não puderam ser restauradas integralmente. Verifique o banco e o arquivo de backup." 10 68
+            rm -rf "$tmp"
+            return 1
+        fi
+        for view_path in "${!EAZY_SQL_LIST_VIEW_TABLE[@]}"; do
+            eazy_sql_list_refresh_view "${EAZY_SQL_LIST_VIEW_TABLE[$view_path]}" 2>/dev/null || true
+        done
+    elif [ -d "$tmp/eazy-backup/filas/legacy-files" ]; then
+        cp -a "$tmp/eazy-backup/filas/legacy-files"/. "$CONFIG_DIR/" 2>/dev/null || true
+    elif [ -d "$tmp/eazy-backup/filas" ]; then
+        cp -a "$tmp/eazy-backup/filas"/. "$CONFIG_DIR/" 2>/dev/null || true
+    fi
     [ -d "$tmp/eazy-backup/pesquisas" ] && [ -n "${SAVED_SEARCHES_DIR:-}" ] && \
         mkdir -p "$SAVED_SEARCHES_DIR" && cp -a "$tmp/eazy-backup/pesquisas"/. "$SAVED_SEARCHES_DIR/" 2>/dev/null || true
     [ -d "$tmp/eazy-backup/notas" ] && [ -n "${NOTES_DIR:-}" ] && \
@@ -2698,7 +2765,7 @@ eazy_restore_backup_menu() {
 
 
 manutencao_dados_eazy() {
-    local selecionados confirmacao item total_bytes=0
+    local selecionados confirmacao item total_bytes=0 sql_table sql_count sql_view_path
     local -a itens=()
     local -a caminhos=()
     mkdir -p "$CONFIG_DIR" "${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}" 2>/dev/null || true
@@ -2722,7 +2789,7 @@ manutencao_dados_eazy() {
         itens+=("$item")
         case "$item" in
             playlists) caminhos+=("$PLAYLIST_DIR_PADRAO") ;;
-            listas) caminhos+=("$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$CONFIG_DIR"/temp_playlist_custom_*) ;;
+            listas) caminhos+=("$DUP_LISTA") ;;
             pesquisas) caminhos+=("$SAVED_SEARCHES_DIR") ;;
             notas) caminhos+=("$NOTES_DIR") ;;
             historico) caminhos+=("$HISTORY_FILE") ;;
@@ -2758,7 +2825,19 @@ manutencao_dados_eazy() {
     for item in "${itens[@]}"; do
         case "$item" in
             playlists) find "$PLAYLIST_DIR_PADRAO" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + 2>/dev/null || true ;;
-            listas) rm -f -- "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$CONFIG_DIR"/temp_playlist_custom_* 2>/dev/null || true ;;
+            listas)
+                if [ "${EAZY_IGNORE:-0}" != "1" ] && eazy_sql_lists_require; then
+                    while IFS= read -r -d '' sql_table && IFS= read -r -d '' sql_count; do
+                        eazy_sql_list_indexer "--list-clear=$sql_table" >/dev/null 2>&1 || true
+                    done < <(eazy_sql_list_indexer --list-menu0 2>/dev/null)
+                    for sql_view_path in "${!EAZY_SQL_LIST_VIEW_TABLE[@]}"; do
+                        eazy_sql_list_refresh_view "${EAZY_SQL_LIST_VIEW_TABLE[$sql_view_path]}" 2>/dev/null || true
+                    done
+                else
+                    : > "$PLAYLIST_1"; : > "$PLAYLIST_2"; : > "$PLAYLIST_3"
+                fi
+                rm -f -- "$DUP_LISTA" 2>/dev/null || true
+                ;;
             pesquisas) rm -rf -- "$SAVED_SEARCHES_DIR" 2>/dev/null || true; mkdir -p "$SAVED_SEARCHES_DIR" ;;
             notas) rm -rf -- "$NOTES_DIR" 2>/dev/null || true; mkdir -p "$NOTES_DIR" ;;
             historico) rm -f -- "$HISTORY_FILE" ;;
@@ -2774,9 +2853,36 @@ manutencao_dados_eazy() {
     eazy_pausa_terminal "Pressione Enter para voltar."
 }
 
+eazy_sql_list_filter_missing() {
+    local table="$1" linha candidato list_paths list_view
+    local -a manter=()
+    list_paths=$(mktemp "${EAZY_TMP_DIR}/eazy-list-sql-export.XXXXXX") || return 1
+    if ! eazy_sql_list_indexer "--list-export0=$table" > "$list_paths"; then
+        rm -f -- "$list_paths"
+        return 1
+    fi
+    while IFS= read -r -d '' linha; do
+        [ -n "$linha" ] || continue
+        candidato="$linha"
+        [[ "$candidato" == /* ]] || candidato="$CONFIG_DIR/$candidato"
+        [ -e "$candidato" ] && manter+=("$linha")
+    done < "$list_paths"
+    rm -f -- "$list_paths"
+    printf '%s\0' "${manter[@]}" | eazy_sql_list_indexer "--list-replace0=$table" >/dev/null || return 1
+    eazy_sql_list_refresh_view "$table" || return 1
+    list_view=$(eazy_sql_list_view_path "$table") || return 1
+    eazy_playlist_cache_invalidate "$list_view"
+}
+
 eazy_limpar_playlist_ausentes() {
     local arquivo="$1" linha candidato tmp
     [ -f "$arquivo" ] || return
+    local sql_table
+    sql_table=$(eazy_sql_list_table_for_view "$arquivo" 2>/dev/null || true)
+    if [ -n "$sql_table" ]; then
+        eazy_sql_list_filter_missing "$sql_table"
+        return
+    fi
     tmp=$(mktemp "${EAZY_TMP_DIR}/eazy-playlist-fix.XXXXXX") || return
     while IFS= read -r linha || [ -n "$linha" ]; do
         linha="${linha%%$'\r'}"
@@ -2793,6 +2899,12 @@ eazy_limpar_playlist_ausentes() {
 eazy_limpar_lista_ausentes() {
     local arquivo="$1" linha tmp
     [ -f "$arquivo" ] || return
+    local sql_table
+    sql_table=$(eazy_sql_list_table_for_view "$arquivo" 2>/dev/null || true)
+    if [ -n "$sql_table" ]; then
+        eazy_sql_list_filter_missing "$sql_table"
+        return
+    fi
     tmp=$(mktemp "${EAZY_TMP_DIR}/eazy-list-fix.XXXXXX") || return
     while IFS= read -r linha || [ -n "$linha" ]; do
         [ -n "$linha" ] && [ -e "$linha" ] && printf '%s\n' "$linha" >> "$tmp"
@@ -2812,7 +2924,8 @@ eazy_limpar_snapshot_ausentes() {
 }
 
 validar_dados_eazy() {
-    local selecionados item rel alvo ok falha total=0 validos=0 invalidos=0 report targets
+    local selecionados item rel alvo ok falha total=0 validos=0 invalidos=0 report targets list_table list_count list_view list_paths list_catalog candidato table_missing repair_failed=0 query_failed=0
+    local -a validation_list_files=() validation_sql_tables=()
     report=$(mktemp "${EAZY_TMP_DIR}/eazy-validacao.XXXXXX") || return 1
     targets=$(mktemp "${EAZY_TMP_DIR}/eazy-validacao-targets.XXXXXX") || { rm -f "$report"; return 1; }
     selecionados=$(whiptail --title "🔎 Validação do eazy" --checklist \
@@ -2853,6 +2966,51 @@ validar_dados_eazy() {
                 ;;
             listas)
                 printf '\033[1;35m▶ LISTAS TEMPORÁRIAS\033[0m\n' >> "$report"
+                validation_list_files=("$DUP_LISTA")
+                if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+                    validation_list_files=("$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA")
+                elif [ "${EAZY_SQL_LISTS_READY:-0}" = "1" ]; then
+                    list_catalog=$(mktemp "${EAZY_TMP_DIR}/eazy-validation-list-menu.XXXXXX") || { query_failed=1; continue; }
+                    if eazy_sql_list_indexer --list-menu0 > "$list_catalog" 2>/dev/null; then
+                        while IFS= read -r -d '' list_table && IFS= read -r -d '' list_count; do
+                            validation_sql_tables+=("$list_table")
+                        done < "$list_catalog"
+                    else
+                        query_failed=1
+                        printf '  \033[1;31m✗ Não foi possível ler o catálogo SQLite de listas.\033[0m\n' >> "$report"
+                    fi
+                    rm -f -- "$list_catalog"
+                else
+                    query_failed=1
+                    printf '  \033[1;33m⚠ Listas SQLite indisponíveis; arquivos antigos não serão usados como fonte.\033[0m\n' >> "$report"
+                fi
+
+                if [ "${EAZY_IGNORE:-0}" != "1" ] && [ "${#validation_sql_tables[@]}" -gt 0 ]; then
+                    list_paths=$(mktemp "${EAZY_TMP_DIR}/eazy-validation-list-paths.XXXXXX") || { query_failed=1; continue; }
+                    for list_table in "${validation_sql_tables[@]}"; do
+                        table_missing=0
+                        printf '  \033[1;34mTabela SQLite: %s\033[0m\n' "$list_table" >> "$report"
+                        if ! eazy_sql_list_indexer "--list-export0=$list_table" > "$list_paths" 2>/dev/null; then
+                            query_failed=1
+                            printf '    \033[1;31m✗ Falha ao ler a tabela SQLite.\033[0m\n' >> "$report"
+                            continue
+                        fi
+                        while IFS= read -r -d '' rel; do
+                            [ -n "$rel" ] || continue
+                            candidato="$rel"
+                            [[ "$candidato" == /* ]] || candidato="$CONFIG_DIR/$candidato"
+                            total=$((total+1))
+                            if [ -e "$candidato" ]; then
+                                validos=$((validos+1)); printf '    \033[1;32m✓\033[0m %s\n' "$candidato" >> "$report"
+                            else
+                                invalidos=$((invalidos+1)); printf '    \033[1;31m✗ AUSENTE\033[0m %s\n' "$candidato" >> "$report"
+                                table_missing=1
+                            fi
+                        done < "$list_paths"
+                        [ "$table_missing" -eq 0 ] || printf 'SQL:%s\n' "$list_table" >> "$targets"
+                    done
+                    rm -f -- "$list_paths"
+                fi
                 while IFS= read -r alvo; do
                     [ -f "$alvo" ] || continue
                     printf '%s\n' "$alvo" >> "$targets"
@@ -2862,7 +3020,7 @@ validar_dados_eazy() {
                         total=$((total+1))
                         if [ -e "$rel" ]; then validos=$((validos+1)); printf '    \033[1;32m✓\033[0m %s\n' "$rel" >> "$report"; else invalidos=$((invalidos+1)); printf '    \033[1;31m✗ AUSENTE\033[0m %s\n' "$rel" >> "$report"; fi
                     done < "$alvo"
-                done < <(printf '%s\n' "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA"; find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
+                done < <(printf '%s\n' "${validation_list_files[@]}")
                 printf '\n' >> "$report"
                 ;;
             pesquisas)
@@ -2892,7 +3050,13 @@ validar_dados_eazy() {
         printf '  Referências verificadas : %s\n' "$total"
         printf '  \033[1;32m✓ Existentes             : %s\033[0m\n' "$validos"
         printf '  \033[1;31m✗ Ausentes               : %s\033[0m\n' "$invalidos"
-        [ "$invalidos" -eq 0 ] && printf '\n\033[1;32mSTATUS: ÍNTEGRO — nenhuma referência ausente encontrada.\033[0m\n' || printf '\n\033[1;31mSTATUS: ATENÇÃO — existem referências ausentes.\033[0m\n'
+        if [ "$query_failed" -ne 0 ]; then
+            printf '\n\033[1;31mSTATUS: INCOMPLETO — falha ao consultar uma ou mais listas SQLite.\033[0m\n'
+        elif [ "$invalidos" -eq 0 ]; then
+            printf '\n\033[1;32mSTATUS: ÍNTEGRO — nenhuma referência ausente encontrada.\033[0m\n'
+        else
+            printf '\n\033[1;31mSTATUS: ATENÇÃO — existem referências ausentes.\033[0m\n'
+        fi
         printf '\n\033[0;90mPressione Enter para voltar ou Esc para cancelar.\033[0m\n'
     } >> "$report"
     clear
@@ -2909,6 +3073,10 @@ validar_dados_eazy() {
             case "$resposta" in
                 S)
                     while IFS= read -r alvo; do
+                        if [[ "$alvo" == SQL:* ]]; then
+                            eazy_sql_list_filter_missing "${alvo#SQL:}" || repair_failed=1
+                            continue
+                        fi
                         [ -f "$alvo" ] || continue
                         case "$alvo" in
                             *.m3u|*.M3U|*.m3u8|*.M3U8|*.pls|*.PLS) eazy_limpar_playlist_ausentes "$alvo" ;;
@@ -2916,7 +3084,11 @@ validar_dados_eazy() {
                             *) eazy_limpar_lista_ausentes "$alvo" ;;
                         esac
                     done < "$targets"
-                    printf '\n\033[1;32m✓ CORREÇÃO CONCLUÍDA: entradas ausentes removidas.\033[0m\n'
+                    if [ "$repair_failed" -eq 0 ]; then
+                        printf '\n\033[1;32m✓ CORREÇÃO CONCLUÍDA: entradas ausentes removidas.\033[0m\n'
+                    else
+                        printf '\n\033[1;31m✗ A correção de pelo menos uma tabela SQLite falhou.\033[0m\n'
+                    fi
                     printf '\033[1;32m  Nenhum arquivo do disco foi apagado.\033[0m\n'
                     break
                     ;;
@@ -2947,9 +3119,7 @@ manutencao_avancada_eazy() {
         done
     }
     mapfile -t _pls < <(find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -name '*.m3u' -o -name '*.m3u8' -o -name '*.pls' \) -print 2>/dev/null | sort)
-    adicionar_segmento "PLAYLISTS" "${_pls[@]}" "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
-    mapfile -t _tmp < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist*' -print 2>/dev/null | sort)
-    adicionar_segmento "LISTAS TEMPORÁRIAS" "${_tmp[@]}"
+    adicionar_segmento "PLAYLISTS EXTERNAS" "${_pls[@]}"
     adicionar_segmento "DUPLICADOS" "$DUP_LISTA"
     mapfile -t _pesq < <(find "$SAVED_SEARCHES_DIR" -type f -print 2>/dev/null | sort)
     adicionar_segmento "PESQUISAS SALVAS" "${_pesq[@]}"
@@ -3788,13 +3958,15 @@ if [ "$1" = "--install" ]; then
     INDEXER_SRC="$SCRIPT_DIR/eazy-index.py"
     [ -f "$INDEXER_SRC" ] || INDEXER_SRC="/usr/lib/eazy/eazy-index.py"
     [ -f "$INDEXER_SRC" ] || { echo "Indexador SQLite não encontrado: eazy-index.py" >&2; exit 1; }
+    MIGRATOR_SRC="$SCRIPT_DIR/migrate_eazy_lists.py"
+    [ -f "$MIGRATOR_SRC" ] || MIGRATOR_SRC="/usr/lib/eazy/migrate_eazy_lists.py"
     TOR_SRC="$SCRIPT_DIR/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="/usr/lib/eazy/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="$(command -v eazy-tor 2>/dev/null || true)"
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     # Estrutura completa de dados do usuário; o cache de busca continua temporário.
     mkdir -p "$CONFIG_DIR" "$EAZY_TMP_DIR" "$NOTES_DIR" "$SAVED_SEARCHES_DIR" "$MPV_SCRIPT_DIR" "$SCRIPTS_DIR" "$BACKUPS_DIR" "$PLAYLIST_DIR_PADRAO" "$(eazy_dir_notas_export)" "$(eazy_dir_html_export)" "${TORRENT_DIR:-$HOME/Downloads/Torrents}"
-    touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$TORRENT_QUEUE" "$STREAM_QUEUE"
+    touch "$DUP_LISTA" "$HISTORY_FILE" "$DOWNLOAD_QUEUE" "$TORRENT_QUEUE" "$STREAM_QUEUE"
     eazy_instalar_script_manut_completa >/dev/null 2>&1 || true
 
     echo -e "\033[1;34mInstalando eazy ${EAZY_VERSION} nos destinos compatíveis...\033[0m"
@@ -3806,6 +3978,11 @@ if [ "$1" = "--install" ]; then
     sudo install -Dm644 "$INDEXER_SRC" /usr/lib/eazy/eazy-index.py
     install -Dm644 "$INDEXER_SRC" "$(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
     printf '%s\n' "  ✓ $DEST_USR_BIN" "  ✓ $DEST_USR_LIB" "  ✓ $DEST_USR_LOCAL -> $DEST_USR_BIN" "  ✓ $DEST_USER_LOCAL" "  ✓ /usr/lib/eazy/eazy-index.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
+    if [ -f "$MIGRATOR_SRC" ]; then
+        sudo install -Dm755 "$MIGRATOR_SRC" /usr/lib/eazy/migrate_eazy_lists.py
+        install -Dm755 "$MIGRATOR_SRC" "$(dirname -- "$DEST_USER_LOCAL")/migrate_eazy_lists.py"
+        printf '%s\n' "  ✓ /usr/lib/eazy/migrate_eazy_lists.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/migrate_eazy_lists.py"
+    fi
     if [ -f "$EDITOR_SRC" ]; then
         if sudo install -Dm755 "$EDITOR_SRC" /usr/lib/eazy/eazy-notes-editor \
             && sudo install -Dm755 "$EDITOR_SRC" /usr/bin/eazy-notes-editor; then
@@ -3859,140 +4036,143 @@ if [ "$1" = "--install" ]; then
     # Man page embutida (não depende de eazy.1 ao lado do script)
     MAN_TMP=$(mktemp "${EAZY_TMP_DIR:-${CONFIG_DIR:-$HOME/.config/eazy}/tmp}/eazy-man.XXXXXX")
     cat > "$MAN_TMP" <<'EAZY_MAN_EOF'
-.TH EAZY 1 "November 2026" "eazy 5.1.3" "User Commands"
+.TH EAZY 1 "2026-11-16" "eazy 5.2.0" "User Commands"
 .SH NAME
-eazy \- terminal media browser, player and download manager
+eazy \- navegador de arquivos, reprodutor multimídia, downloads e streaming no terminal
 .SH SYNOPSIS
 .B eazy
 [\fIOPTIONS\fR] [\fIPATH\fR]
 .br
-.B eazy \-\-install
+.B eazy \-\-stream
 .br
-.B eazy \-\-torrent
-[\fIargs\fR]
+.B eazy \-\-install
 .SH DESCRIPTION
 .B eazy
-is a keyboard-driven terminal media browser built around
-.BR fzf (1)
-and players such as
-.BR mpv (1).
-It browses folders, playlists, temporary queues, history, finds duplicates,
-exports HTML, and manages downloads (optional Tor) via companions
-.BR eazy\-index.py ,
-.BR eazy\-tor ,
-.BR eazy\-ai.py
-and
-.BR eazy\-notes\-editor .
+é um navegador de arquivos e reprodutor multimídia para o terminal, baseado em fzf e players como mpv, mplayer, VLC ou ffplay. Mantém seleção, filas e listas temporárias, pesquisa, histórico, downloads, exportação HTML, manutenção e backups.
+.P
+Filas e listas personalizadas são persistidas em tabelas SQLite individuais no banco local. Arquivos temporários em ~/.config/eazy/tmp são snapshots efêmeros de compatibilidade, não a fonte permanente dos dados.
+.P
+A Central complementar \fBeazy-yt-stream\fR oferece pesquisa de vídeos, duração, paginação, pesquisas persistentes, favoritos, canais de filmes gratuitos e TV aberta. Usa yt-dlp e não contorna DRM.
 .SH OPTIONS
 .TP
-.B \-h, \-\-help
-Short CLI help.
+.BR \-h ", " \-\-help
+Mostra a ajuda resumida.
 .TP
-.B \-V, \-\-version
-Print version.
+.BR \-V ", " \-\-version
+Mostra a versão e revisão instalada.
+.TP
+.B \-\-stream
+Abre a Central eazy-yt-stream.
 .TP
 .B \-\-install
-Install dependencies (fzf, mpv, aria2, axel, wget, yt\-dlp, ffmpeg, tor,
-torsocks, python3, \.\.\.), install
-.B eazy
-and companions to
-.IR /usr/bin ,
-desktop launcher, eazy-index.py in /usr/lib/eazy and this man page.
+Instala dependências, eazy, eazy-index.py, o migrador de listas, eazy-yt-stream, eazy-tor, eazy-ai.py, eazy-notes-editor, launcher e man page.
 .TP
-.B \-\-shell\-init
-Print a bash function so quitting eazy can
-.B cd
-to the last folder.
+.B \-\-update-all
+Atualiza dependências e o binário oficial yt-dlp.
 .TP
-.B \-\-torrent
-Forward to
-.BR eazy\-tor
-(magnet / \.torrent).
+.BR \-m ", " \-\-maintenance
+Abre as ferramentas de manutenção do sistema e do próprio eazy.
 .TP
-.B \-\-update\-ytdlp
-Install/update the official yt\-dlp binary.
+.B \-\-backup
+Abre o gerenciador de backup.
+.TP
+.B \-\-restore-backup
+Abre o restaurador de backup.
+.TP
+.BR \-a ", " \-\-advanced-maintenance
+Abre a manutenção avançada para selecionar arquivos próprios do eazy.
 .SH KEY BINDINGS
 .TP
-.B F1 / F2 / Ctrl\-T
-Sort by size / name / date. Works in folders, history, playlists, queues and temp lists.
-.TP
-.B F3
-Toggle fullscreen / windowed player hints.
+.B F1 / F2 / Ctrl-T
+Ordena por tamanho, nome ou data.
 .TP
 .B F9
-Config, hardware, sound, AI chat.
+Configuração, diagnóstico, som e IA.
 .TP
 .B F10
-Full help (HTML, terminal, or by section).
+Ajuda expandida no terminal ou em HTML.
 .TP
-.B Alt\-+0
-Terminal log behind fzf.
+.B Ctrl-B
+Gerenciador de downloads e Central de streaming.
 .TP
-.B Enter
-Play / open. In the download queue: always ask which app and whether to use Tor
-(last choices are only suggested next time).
+.B Ctrl-D
+Localiza duplicados.
 .TP
-.B Ctrl\-B
-Download queue.
+.B Ctrl-F
+Pesquisa recursiva.
 .TP
-.B Ctrl\-D
-Duplicates.
+.B Ctrl-G
+Abre o histórico de reprodução.
 .TP
-.B Ctrl\-F
-Recursive search.
+.B Ctrl-H
+Exporta HTML da seleção ou da tela atual.
 .TP
-.B Ctrl\-G
-Play history. On first entry, eazy announces migration, rebuilds history_items directly from ~/.config/eazy/history, leaves that source untouched, and asks you to enter History again.
+.B Insert
+Adiciona a seleção à fila SQL escolhida ou cria uma nova lista SQL.
 .TP
-.B Ctrl\-H
-Export HTML (selection or current screen).
+.B Ctrl-P
+Alterna entre diretório, filas SQL 1–3, listas personalizadas, histórico e duplicados. O cabeçalho exibe o nome lógico da lista, não o nome do snapshot.
 .TP
-.B Ctrl\-P
-Cycle: dir → queues 1–3 → temp lists → history → duplicates → dir. Selecting History uses the same first-entry migration guard as Ctrl-G.
+.B Del / Alt-D
+Del remove o item apenas da lista; Alt-D apaga o arquivo físico após confirmação.
 .TP
-.B Q / Ctrl\-Q
-Save session and quit.
+.B Q / Ctrl-Q
+Salva a sessão e sai.
+.SH PERSISTENCE AND MIGRATION
+.TP
+.B SQLite database
+O banco padrão é ~/.config/eazy/eazy-index.sqlite3. Ele contém o índice de arquivos, o histórico e as tabelas de filas/listas.
+.TP
+.B Legacy history
+Na primeira entrada em Histórico por Ctrl-G ou Ctrl-P, o Easy avisa, reconstrói history_items lendo ~/.config/eazy/history linha a linha e preserva intacto o arquivo de origem. A primeira tentativa migra e retorna; entre novamente no Histórico.
+.TP
+.B Legacy queue/list migration
+Antes de usar filas/listas antigas em arquivos, feche o Easy e confira a prévia com python3 migrate_eazy_lists.py. Em instalação Debian, use python3 /usr/lib/eazy/migrate_eazy_lists.py. Aplique com --apply. O migrador faz backup do banco e preserva os arquivos antigos. Não use --replace sem revisar a divergência.
 .SH FILES
 .TP
-.I ~/.config/eazy/
-Config, queues, session, selection.
+.I ~/.config/eazy/eazy-index.sqlite3
+Índice local, histórico, filas e tabelas de listas temporárias.
 .TP
 .I ~/.config/eazy/tmp/
-Temporary files (not system /tmp).
+Snapshots e outros arquivos temporários da sessão; não são fonte permanente das listas.
 .TP
-.I ~/.config/eazy/eazy-index.sqlite3
-File index and playback history; the legacy ~/.config/eazy/history file remains intact during migration.
+.I ~/.config/eazy/history
+Arquivo original de histórico legado, preservado durante a migração.
 .TP
-.I ~/.config/eazy/last_download_engine
-Last download app (suggestion only).
+.I /usr/bin/eazy
+Executável principal.
 .TP
-.I ~/.config/eazy/last_download_tor
-Last Tor yes/no (suggestion only).
+.I /usr/lib/eazy/
+Componentes auxiliares, incluindo eazy-index.py e o migrador de listas.
 .TP
 .I /usr/share/man/man1/eazy.1.gz
-This manual page.
+Esta man page.
 .SH COMPANIONS
 .TP
-.B eazy\-index.py
-File index and SQLite playback-history helper.
+.B eazy-index.py
+Indexação de arquivos e operações transacionais SQLite.
 .TP
-.B eazy\-tor
-Magnet and \.torrent (optional \-\-tor).
+.B migrate_eazy_lists.py
+Prévia e migração das listas legadas para tabelas SQLite.
 .TP
-.B eazy\-ai.py
-AI chat (F9 → IA).
+.B eazy-yt-stream
+Streaming, pesquisas, filmes gratuitos, TV aberta, favoritos e downloads.
 .TP
-.B eazy\-notes\-editor
-Quick notes (Ctrl\-N).
+.B eazy-tor
+Magnets e arquivos .torrent.
+.TP
+.B eazy-ai.py
+Cliente de IA acessível pelo F9.
+.TP
+.B eazy-notes-editor
+Editor de notas rápidas.
+.SH AUTHOR
+John B Kersting
 .SH SEE ALSO
 .BR fzf (1),
 .BR mpv (1),
-.BR aria2c (1),
-.BR yt\-dlp (1),
-.BR torsocks (1).
-.SH AUTHOR
-John B Kersting
-
+.BR yt-dlp (1),
+.BR aria2c (1)
 EAZY_MAN_EOF
     if sudo install -Dm644 "$MAN_TMP" /usr/share/man/man1/eazy.1; then
         sudo gzip -n -9 -f /usr/share/man/man1/eazy.1 2>/dev/null || true
@@ -4044,6 +4224,9 @@ elif [ "$1" = "--uninstall" ]; then
     if [ -f /usr/lib/eazy/eazy-index.py ]; then
         sudo rm -f /usr/lib/eazy/eazy-index.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-index.py" && REMOVIDO=1
     fi
+    if [ -f /usr/lib/eazy/migrate_eazy_lists.py ]; then
+        sudo rm -f /usr/lib/eazy/migrate_eazy_lists.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/migrate_eazy_lists.py" && REMOVIDO=1
+    fi
     INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
     INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
     [ -n "$INSTALL_HOME" ] || INSTALL_HOME="$HOME"
@@ -4052,6 +4235,9 @@ elif [ "$1" = "--uninstall" ]; then
     fi
     if [ -f "$INSTALL_HOME/.local/bin/eazy-index.py" ]; then
         rm -f "$INSTALL_HOME/.local/bin/eazy-index.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy-index.py" && REMOVIDO=1
+    fi
+    if [ -f "$INSTALL_HOME/.local/bin/migrate_eazy_lists.py" ]; then
+        rm -f "$INSTALL_HOME/.local/bin/migrate_eazy_lists.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/migrate_eazy_lists.py" && REMOVIDO=1
     fi
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     [ -f "$DESKTOP_DIR/eazy.desktop" ] && rm -f "$DESKTOP_DIR/eazy.desktop" && echo -e "\033[1;32m✓\033[0m launcher local"
@@ -4092,7 +4278,7 @@ elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exibir_help_cli
     exit 0
 elif [ "$1" = "--version" ] || [ "$1" = "-V" ]; then
-    printf "\033[1;32m%s %s (%s)\033[0m\n" "$EAZY_NAME" "$EAZY_VERSION" "$EAZY_CODENAME"
+    printf "\033[1;32m%s %s rev.%s (%s)\033[0m\n" "$EAZY_NAME" "$EAZY_VERSION" "$EAZY_REVISION" "$EAZY_CODENAME"
     exit 0
 elif [ "$1" = "--shell-init" ]; then
     _eazy_bin="$(readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null || printf '%s\n' "${BASH_SOURCE[0]}")"
@@ -4321,6 +4507,7 @@ if [ "${EAZY_IGNORE:-0}" = "1" ]; then
     PLAYLIST_1="$_anon/playlist_1"
     PLAYLIST_2="$_anon/playlist_2"
     PLAYLIST_3="$_anon/playlist_3"
+    CUSTOM_LISTS_DIR="$_anon"
     DUP_LISTA="$_anon/temp_duplicados"
     : > "$PLAYLIST_1" ; : > "$PLAYLIST_2" ; : > "$PLAYLIST_3" ; : > "$DUP_LISTA"
     export HISTORY_FILE SESSION_FILE POSITIONS_FILE FILTER_POSITIONS_FILE
@@ -4367,13 +4554,88 @@ fi
 DUP_MANUAL_FILE="${EAZY_TMP_DIR}/fzf_dup_manual_$$"
 mkdir -p "$CONFIG_DIR" "$EAZY_TMP_DIR" 2>/dev/null || true
 : > "$TMP_FILE" 2>/dev/null || true
-# Migra fila legada e garante 3 filas
-[ -f "$PLAYLIST_PERSISTENTE" ] && [ ! -f "$PLAYLIST_1" ] && mv "$PLAYLIST_PERSISTENTE" "$PLAYLIST_1" 2>/dev/null || true
-touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3"
+# O banco é a fonte permanente das filas; arquivos antigos ficam intactos até o
+# script separado de migração ser executado pelo usuário. Estes arquivos sob tmp
+# são snapshots descartáveis para o código/players legados que ainda leem linhas.
+declare -gA EAZY_SQL_LIST_VIEW_TABLE=()
+EAZY_SQL_LISTS_READY=0
+EAZY_SQL_LISTS_ERROR=""
+EAZY_SQL_VIEW_DIR=""
+
+eazy_sql_list_indexer() {
+    "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" "$@"
+}
+
+eazy_sql_list_view_path() {
+    local table="$1" hash path
+    hash=$(printf '%s' "$table" | sha256sum | awk '{print $1}') || return 1
+    path="$EAZY_SQL_VIEW_DIR/list-${hash}.txt"
+    EAZY_SQL_LIST_VIEW_TABLE["$path"]="$table"
+    printf '%s\n' "$path"
+}
+
+eazy_sql_list_table_for_view() {
+    local wanted="$1" path
+    for path in "${!EAZY_SQL_LIST_VIEW_TABLE[@]}"; do
+        if [ "$path" = "$wanted" ]; then
+            printf '%s\n' "${EAZY_SQL_LIST_VIEW_TABLE[$path]}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+eazy_sql_list_refresh_view() {
+    local table="$1" view tmp
+    view=$(eazy_sql_list_view_path "$table") || return 1
+    tmp="${view}.tmp.$$"
+    if ! eazy_sql_list_indexer "--list-export=$table" > "$tmp"; then
+        rm -f -- "$tmp"
+        return 1
+    fi
+    mv -f -- "$tmp" "$view"
+}
+
+eazy_sql_list_append_args() {
+    local table="$1"; shift
+    [ "$#" -gt 0 ] || { printf '0\n'; return 0; }
+    printf '%s\0' "$@" | eazy_sql_list_indexer "--list-append0=$table"
+}
+
+if [ "${EAZY_IGNORE:-0}" != "1" ]; then
+    EAZY_SQL_VIEW_DIR="$EAZY_TMP_DIR/sql-list-views-$$"
+    mkdir -p "$EAZY_SQL_VIEW_DIR" 2>/dev/null || true
+    if EAZY_SQL_LISTS_ERROR=$(eazy_sql_list_indexer --list-init --legacy-dir "$CONFIG_DIR" 2>&1); then
+        EAZY_SQL_LISTS_READY=1
+        PLAYLIST_1=$(eazy_sql_list_view_path "temp_playlist_1")
+        PLAYLIST_2=$(eazy_sql_list_view_path "temp_playlist_2")
+        PLAYLIST_3=$(eazy_sql_list_view_path "temp_playlist_3")
+        for _sql_pair in "temp_playlist_1:$PLAYLIST_1" "temp_playlist_2:$PLAYLIST_2" "temp_playlist_3:$PLAYLIST_3"; do
+            _sql_table="${_sql_pair%%:*}"; _sql_view="${_sql_pair#*:}"
+            if ! eazy_sql_list_refresh_view "$_sql_table"; then
+                EAZY_SQL_LISTS_READY=0
+                EAZY_SQL_LISTS_ERROR="Falha ao ler a tabela SQLite $_sql_table."
+                : > "$_sql_view"
+            fi
+        done
+        # Registra no shell principal os caminhos efêmeros de TODAS as listas SQL.
+        # Atribuições feitas dentro de $(...) ocorrem em subshell e não persistem.
+        while IFS= read -r -d '' _sql_table && IFS= read -r -d '' _sql_count; do
+            _sql_hash=$(printf '%s' "$_sql_table" | sha256sum | awk '{print $1}') || continue
+            EAZY_SQL_LIST_VIEW_TABLE["$EAZY_SQL_VIEW_DIR/list-${_sql_hash}.txt"]="$_sql_table"
+        done < <(eazy_sql_list_indexer --list-menu0 2>/dev/null)
+    else
+        PLAYLIST_1=$(eazy_sql_list_view_path "temp_playlist_1")
+        PLAYLIST_2=$(eazy_sql_list_view_path "temp_playlist_2")
+        PLAYLIST_3=$(eazy_sql_list_view_path "temp_playlist_3")
+        : > "$PLAYLIST_1"; : > "$PLAYLIST_2"; : > "$PLAYLIST_3"
+    fi
+    export EAZY_SQL_LISTS_READY EAZY_SQL_VIEW_DIR PLAYLIST_1 PLAYLIST_2 PLAYLIST_3
+fi
 touch "$DUP_LISTA" 2>/dev/null || true
 FILA_ATUAL="${FILA_ATUAL:-1}"
 case "$FILA_ATUAL" in 1|2|3) ;; *) FILA_ATUAL=1 ;; esac
-PLAYLIST_FILE="$CONFIG_DIR/temp_playlist_${FILA_ATUAL}"
+PLAYLIST_FILE="$PLAYLIST_1"
 
 # Atualiza PLAYLIST_FILE conforme FILA_ATUAL
 atualizar_fila_atual() {
@@ -4397,10 +4659,18 @@ arquivo_playlist_ativo() {
 
 # Conta itens de uma fila (1/2/3)
 contar_fila() {
-    local n f
-    f="$CONFIG_DIR/temp_playlist_${1}"
-    n=$(grep -c '^' "$f" 2>/dev/null || echo 0)
-    echo "$n" | tr -cd '0-9'
+    local n table
+    case "${1:-1}" in 2) table="temp_playlist_2" ;; 3) table="temp_playlist_3" ;; *) table="temp_playlist_1" ;; esac
+    if [ "${EAZY_IGNORE:-0}" = "1" ] || [ "${EAZY_SQL_LISTS_READY:-0}" = "1" ]; then
+        case "$table" in
+            temp_playlist_2) n=$(grep -c '^' "$PLAYLIST_2" 2>/dev/null || echo 0) ;;
+            temp_playlist_3) n=$(grep -c '^' "$PLAYLIST_3" 2>/dev/null || echo 0) ;;
+            *) n=$(grep -c '^' "$PLAYLIST_1" 2>/dev/null || echo 0) ;;
+        esac
+    else
+        n=0
+    fi
+    printf '%s\n' "$n" | tr -cd '0-9'
 }
 
 MODO_PLAYLIST=0
@@ -5544,6 +5814,7 @@ eazy_aplicar_contexto_volta() {
     local kind="${EAZY_VOLTA_KIND:-}"
     local pth="${EAZY_VOLTA_PATH:-}"
     local item="${EAZY_VOLTA_ITEM:-}"
+    local sql_table=""
     [ -z "$kind" ] && return 1
     MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
     MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
@@ -5570,10 +5841,11 @@ eazy_aplicar_contexto_volta() {
             if [ -n "$pth" ] && [ -f "$pth" ]; then
                 MODO_PLAYLIST=1
                 ARQUIVO_PLAYLIST_ABERTO="$pth"
-                case "$pth" in
-                    *temp_playlist_1) FILA_ATUAL=1 ;;
-                    *temp_playlist_2) FILA_ATUAL=2 ;;
-                    *temp_playlist_3) FILA_ATUAL=3 ;;
+                sql_table=$(eazy_sql_list_table_for_view "$pth" 2>/dev/null || true)
+                case "$sql_table" in
+                    temp_playlist_1) FILA_ATUAL=1 ;;
+                    temp_playlist_2) FILA_ATUAL=2 ;;
+                    temp_playlist_3) FILA_ATUAL=3 ;;
                 esac
                 atualizar_fila_atual 2>/dev/null || true
                 carregar_posicao_dir "$pth"
@@ -5651,10 +5923,18 @@ eazy_pos_chave() {
     fi
 }
 
+eazy_sql_list_position_key() {
+    local table hash
+    table=$(eazy_sql_list_table_for_view "${1:-}") || return 1
+    hash=$(printf '%s' "$table" | sha256sum | awk '{print $1}') || return 1
+    printf 'sql-list:%s\n' "$hash"
+}
+
 salvar_posicao_dir() {
     [ "${EAZY_IGNORE:-0}" = "1" ] && return 0
     local dir="$1" pos="$2" item="${3:-}"
     [ -z "$dir" ] && return
+    dir=$(eazy_sql_list_position_key "$dir" 2>/dev/null || printf '%s' "$dir")
     dir=$(eazy_pos_chave "$dir")
     [ -z "$dir" ] && return
     pos=$(echo "${pos:-1}" | tr -cd '0-9'); pos=${pos:-1}
@@ -5675,6 +5955,7 @@ carregar_posicao_dir() {
     [ "${EAZY_IGNORE:-0}" = "1" ] && { TMP="${TMP:-1}"; return 0; }
     local dir="$1"
     [ -z "$dir" ] || [ ! -f "$POSITIONS_FILE" ] && { TMP="${TMP:-1}"; return; }
+    dir=$(eazy_sql_list_position_key "$dir" 2>/dev/null || printf '%s' "$dir")
     dir=$(eazy_pos_chave "$dir")
     local linha pos item
     linha=$(awk -F'|' -v d="$dir" '$1 == d {line=$0} END {print line}' "$POSITIONS_FILE" 2>/dev/null)
@@ -5699,7 +5980,7 @@ eazy_chave_lista_atual() {
     elif [ "${MODO_DUP:-0}" -eq 1 ]; then
         printf '%s\n' "dup"
     elif [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
-        printf '%s\n' "$ARQUIVO_PLAYLIST_ABERTO"
+        eazy_sql_list_position_key "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || printf '%s\n' "$ARQUIVO_PLAYLIST_ABERTO"
     elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         printf '%s\n' "busca"
     else
@@ -5825,8 +6106,8 @@ chave_cache_busca() {
     fi
 }
 
-# Restaura sessão anterior (cwd, filtro, preview, cursor)
-# Prioridade: argumento de caminho > sessão > DIR_PADRAO
+# Restaura preferências/sessão sem ignorar a pasta de trabalho de onde foi chamado.
+# Prioridade: argumento de caminho > cwd explícito > sessão > DIR_PADRAO.
 # Uso: eazy /mnt/videos   |   eazy ~/Downloads   |   eazy ./pasta   |   eazy filme.mp4
 ARG_CAMINHO=""
 ARG_ERRO=""
@@ -5851,6 +6132,16 @@ if [ -n "${1:-}" ] && [[ "$1" != --* ]]; then
         ARG_CAMINHO=$(readlink -f -- "$_arg" 2>/dev/null || echo "$_arg")
     else
         ARG_ERRO="$_arg"
+    fi
+fi
+
+# Quando chamado sem caminho a partir de uma pasta de trabalho, começa nela.
+# HOME/raiz continuam usando a sessão salva, como nos lançamentos genéricos.
+if [ -z "$ARG_CAMINHO" ] && [ -z "$ARG_ERRO" ]; then
+    _caller_cwd="${EAZY_CALLER_CWD:-$(pwd -P 2>/dev/null || pwd)}"
+    _home_cwd=$(cd -- "$HOME" 2>/dev/null && pwd -P || printf '%s' "$HOME")
+    if [ -d "$_caller_cwd" ] && [ "$_caller_cwd" != "/" ] && [ "$_caller_cwd" != "$_home_cwd" ]; then
+        ARG_CAMINHO=$(cd -- "$_caller_cwd" 2>/dev/null && pwd -P)
     fi
 fi
 
@@ -9792,6 +10083,24 @@ eazy_index_lookup_path() {
     printf '%s\0' "$p" | "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --lookup0 2>/dev/null | head -n 1
 }
 
+# Confere o resumo (quantidade/tamanho) e as assinaturas locais; sincroniza
+# somente os filhos imediatos da pasta quando entrar nela, nunca em cada tecla.
+eazy_index_sync_directory() {
+    local dir="$1" result tag changed removed revived files bytes
+    [ -f "${EAZY_INDEXER:-}" ] || return 0
+    command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1 || return 0
+    mkdir -p "${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}" 2>/dev/null || true
+    result=$("${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" \
+        --sync-dir "$dir" 2>>"${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}/index-dir-sync.log") || return 1
+    IFS=$'\t' read -r tag changed removed revived files bytes <<< "$result"
+    [ "$tag" = "SYNC" ] || return 1
+    changed=${changed:-0}; removed=${removed:-0}; revived=${revived:-0}
+    if [ "$changed" -gt 0 ] || [ "$removed" -gt 0 ] || [ "$revived" -gt 0 ]; then
+        eazy_lista_cache_invalidate
+    fi
+    return 0
+}
+
 # A tabela só é criada durante a migração; antes disso a primeira entrada é bloqueada.
 eazy_history_table_exists() {
     [ -f "${EAZY_INDEX_DB:-}" ] || return 1
@@ -9842,9 +10151,9 @@ con=sqlite3.connect(sys.argv[1]); print(con.execute('SELECT count(*) FROM histor
 PY
 }
 
-# Consulta rápida da pasta já indexada; o find permanece como fallback.
+# A navegação normal usa exclusivamente o índice SQLite. Só o modo anônimo usa find.
 eazy_lista_diretorio_fonte() {
-    local root extq qtmp
+    local root extq qtmp errtmp rc error_file
     root=$(pwd -P 2>/dev/null || pwd)
     extq="TODAS"
     case "${FILTRO_ATUAL:-ambos}" in
@@ -9855,17 +10164,32 @@ eazy_lista_diretorio_fonte() {
         ambos) extq="mp4 mkv avi mov webm wmv flv m4v mp3 m4a wav flac ogg opus jpg jpeg png gif webp bmp zip tar gz bz2 xz rar 7z m3u pls m3u8 txt" ;;
     esac
     qtmp="${EAZY_TMP_DIR}/eazy_dir_query_$$"
-    if [ -f "${EAZY_INDEXER:-}" ] && command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1 && [ -f "${EAZY_INDEX_DB:-}" ]; then
-        local -a qargs=(--db "$EAZY_INDEX_DB" --query --root "$root" --direct --include-dirs --ext "$extq")
-        [ "${SHOW_DELETED:-0}" = "1" ] && qargs+=(--show-deleted)
-        if "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" "${qargs[@]}" > "$qtmp" 2>/dev/null; then
-            cat "$qtmp"
-            rm -f "$qtmp"
-            return 0
-        fi
+    error_file="${EAZY_INDEX_QUERY_ERROR_FILE:-${EAZY_TMP_DIR}/index-query-error-$$}"
+    if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+        find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\t\n" 2>/dev/null
+        return $?
     fi
-    rm -f "$qtmp"
-    find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\t\n" 2>/dev/null
+    if [ ! -f "${EAZY_INDEXER:-}" ] || ! command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1 || [ ! -f "${EAZY_INDEX_DB:-}" ]; then
+        printf 'SQLite indisponível: indexador, Python ou banco ausente.\nRaiz: %s\nBanco: %s\nIndexador: %s\n' \
+            "$root" "${EAZY_INDEX_DB:-}" "${EAZY_INDEXER:-}" > "$error_file"
+        return 2
+    fi
+    local -a qargs=(--db "$EAZY_INDEX_DB" --query --root "$root" --direct --include-dirs --ext "$extq")
+    [ "${SHOW_DELETED:-0}" = "1" ] && qargs+=(--show-deleted)
+    errtmp="${qtmp}.err"
+    if "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" "${qargs[@]}" > "$qtmp" 2>"$errtmp"; then
+        cat "$qtmp"
+        rm -f "$qtmp" "$errtmp" "$error_file"
+        return 0
+    else
+        rc=$?
+    fi
+    {
+        printf 'Consulta SQLite falhou (código %s).\nRaiz: %s\nBanco: %s\n' "$rc" "$root" "$EAZY_INDEX_DB"
+        cat "$errtmp" 2>/dev/null || true
+    } > "$error_file"
+    rm -f "$qtmp" "$errtmp"
+    return "$rc"
 }
 
 eazy_index_mark_deleted() {
@@ -9936,8 +10260,9 @@ obter_lista_rapida() {
     fi
 
     if [ "$MODO_PLAYLIST" -eq 1 ] && [ -f "$ARQUIVO_PLAYLIST_ABERTO" ]; then
-        # Ficheiro da lista = cache. Só reindexa se mtime mudar. stat rápido por ficheiro (tamanho na lista).
-        local pl_mtime pl_key pl_cache pl_meta pl_dir
+        # Cache da apresentação; em listas SQL o conteúdo é reconsultado da tabela quando o cache é invalidado.
+        local pl_mtime pl_key pl_cache pl_meta pl_dir pl_sql_table lookup_paths lookup_meta lookup_item lookup_res
+        pl_sql_table=$(eazy_sql_list_table_for_view "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || true)
         pl_mtime=$(stat -c '%Y' -- "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
         pl_key="${ARQUIVO_PLAYLIST_ABERTO}|${pl_mtime}|${MODO_ATUAL:-tamanho}|sz4|history-db-513"
         [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ] && pl_key="${pl_key}|$(eazy_history_db_count 2>/dev/null || echo 0)"
@@ -9947,7 +10272,13 @@ obter_lista_rapida() {
             cat "$pl_cache"
             return
         fi
-        pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
+        if [ -n "$pl_sql_table" ]; then
+            # As listas SQL substituem arquivos legados que ficavam em CONFIG_DIR;
+            # caminhos relativos migrados continuam relativos a essa pasta, não ao snapshot tmp.
+            pl_dir="$CONFIG_DIR"
+        else
+            pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
+        fi
         {
             printf "000000000000000\t%b[D] %-40s%b\t%b[%-6s]%b\t..\n" \
                 "$C_DIR" "◀ Voltar aos Arquivos" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
@@ -9967,6 +10298,47 @@ obter_lista_rapida() {
                     EAZY_HIST_DUR["$_hp"]="$_hd"
                 done < "$hist_meta"
                 rm -f "$hist_meta"
+            elif [ -n "$pl_sql_table" ]; then
+                hist_source="${EAZY_TMP_DIR}/sql_playlist_paths_$$"
+                if ! eazy_sql_list_indexer "--list-export=$pl_sql_table" > "$hist_source" 2>/dev/null; then
+                    : > "$hist_source"
+                    eazy_term_log "Falha ao ler diretamente a tabela SQLite da lista $pl_sql_table" 2>/dev/null || true
+                fi
+            fi
+            if [ "$ARQUIVO_PLAYLIST_ABERTO" != "$HISTORY_FILE" ]; then
+                # Uma única chamada SQLite para todos os itens, em vez de iniciar
+                # Python/abrir o banco novamente para cada título da playlist.
+                declare -gA EAZY_PLAYLIST_SIZE EAZY_PLAYLIST_MT EAZY_PLAYLIST_KIND EAZY_PLAYLIST_DELETED
+                EAZY_PLAYLIST_SIZE=(); EAZY_PLAYLIST_MT=(); EAZY_PLAYLIST_KIND=(); EAZY_PLAYLIST_DELETED=()
+                lookup_paths="${EAZY_TMP_DIR}/playlist_lookup_paths_$$.nul"
+                lookup_meta="${EAZY_TMP_DIR}/playlist_lookup_meta_$$.tsv"
+                : > "$lookup_paths"
+                while IFS= read -r lookup_item || [ -n "$lookup_item" ]; do
+                    lookup_item="${lookup_item%$'\r'}"
+                    [ -n "$lookup_item" ] || continue
+                    [[ "$lookup_item" =~ ^[[:space:]]*# ]] && continue
+                    [[ "$lookup_item" =~ ^https?:// ]] && continue
+                    lookup_res="$lookup_item"
+                    [[ "$lookup_res" == /* ]] || lookup_res="$pl_dir/$lookup_res"
+                    lookup_res="${lookup_res//\/\.\//\/}"
+                    printf '%s\0' "$lookup_res" >> "$lookup_paths"
+                done < "$hist_source"
+                if [ -s "$lookup_paths" ] && [ -f "${EAZY_INDEX_DB:-}" ] && [ -f "${EAZY_INDEXER:-}" ]; then
+                    "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --lookup0 \
+                        < "$lookup_paths" > "$lookup_meta" 2>/dev/null || :
+                    while IFS=$'\t' read -r _lsz _lmt _lkind _lname _lpath _ldur _lext; do
+                        [ -n "$_lpath" ] || continue
+                        EAZY_PLAYLIST_SIZE["$_lpath"]="$_lsz"
+                        EAZY_PLAYLIST_MT["$_lpath"]="$_lmt"
+                        case "$_lkind" in
+                            d) EAZY_PLAYLIST_KIND["$_lpath"]="directory"; EAZY_PLAYLIST_DELETED["$_lpath"]=0 ;;
+                            X) EAZY_PLAYLIST_KIND["$_lpath"]="directory"; EAZY_PLAYLIST_DELETED["$_lpath"]=1 ;;
+                            x) EAZY_PLAYLIST_KIND["$_lpath"]="file"; EAZY_PLAYLIST_DELETED["$_lpath"]=1 ;;
+                            *) EAZY_PLAYLIST_KIND["$_lpath"]="file"; EAZY_PLAYLIST_DELETED["$_lpath"]=0 ;;
+                        esac
+                    done < "$lookup_meta"
+                fi
+                rm -f "$lookup_paths" "$lookup_meta"
             fi
             while IFS= read -r item || [ -n "$item" ]; do
                 [ -z "$item" ] && continue
@@ -9976,45 +10348,60 @@ obter_lista_rapida() {
                 [[ "$item" != /* ]] && item_res="$pl_dir/$item"
                 item_res="${item_res//\/\.\//\/}"
                 local nome_exib tipo_icone="[V]" tipo_cor="$C_VID" chave_ord=0 ext
-                nome_exib=$(basename -- "$item_res" 2>/dev/null || printf '%s' "$item_res")
+                nome_exib="${item_res%/}"
+                nome_exib="${nome_exib##*/}"
+                [ -n "$nome_exib" ] || nome_exib="/"
                 [ ${#nome_exib} -gt 38 ] && nome_exib="${nome_exib:0:38}.."
-                ext=$(printf '%s' "${item_res##*.}" | tr '[:upper:]' '[:lower:]')
+                ext="${item_res##*.}"
+                ext="${ext,,}"
                 case "$ext" in
                     mp3|m4a|wav|flac|ogg|opus) tipo_icone="[A]"; tipo_cor="$C_AUD" ;;
                     webp|jpg|jpeg|png|gif|bmp) tipo_icone="[I]"; tipo_cor="$C_IMG" ;;
                     zip|tar|gz|bz2|xz|rar|7z) tipo_icone="[Z]"; tipo_cor="$C_ZIP" ;;
                 esac
-                local _sz=0 _mb="?" _mt=0 _info=""
-                local _idx_row=""
+                local _sz=0 _mb="?" _mt=0 _info="" _db_found=0 _db_deleted=0 _db_kind="" _stat_row="" _tenths=0
                 if [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ] && [ -n "${EAZY_HIST_SIZE[$item_res]+yes}" ]; then
                     _sz="${EAZY_HIST_SIZE[$item_res]}"
                     _mt="${EAZY_HIST_MT[$item_res]}"
-                else
-                    _idx_row=$(eazy_index_lookup_path "$item_res" 2>/dev/null || true)
-                if [ -n "$_idx_row" ]; then
-                    IFS=$'\t' read -r _sz _mt _idx_kind _idx_name _idx_path _idx_duration _idx_ext <<< "$_idx_row"
-                    _sz=$(printf '%s' "$_sz" | tr -cd '0-9'); _sz=${_sz:-0}
-                    _mt=$(printf '%s' "$_mt" | tr -cd '0-9.'); _mt=${_mt:-0}
-                elif [ -e "$item_res" ]; then
-                    _sz=$(stat -c%s -- "$item_res" 2>/dev/null || echo 0)
-                    _sz=$(printf '%s' "$_sz" | tr -cd '0-9'); _sz=${_sz:-0}
-                    _mt=$(stat -c%Y -- "$item_res" 2>/dev/null || echo 0)
-                    _mt=$(printf '%s' "$_mt" | tr -cd '0-9'); _mt=${_mt:-0}
+                elif [ -n "${EAZY_PLAYLIST_SIZE[$item_res]+yes}" ]; then
+                    _sz="${EAZY_PLAYLIST_SIZE[$item_res]}"
+                    _mt="${EAZY_PLAYLIST_MT[$item_res]}"
+                    _db_kind="${EAZY_PLAYLIST_KIND[$item_res]}"
+                    _db_deleted="${EAZY_PLAYLIST_DELETED[$item_res]}"
+                    _db_found=1
                 fi
+                if [ "$_db_found" -eq 0 ] && [ "$_db_deleted" != "1" ]; then
+                    if [ -f "$item_res" ]; then
+                        if [ "$ARQUIVO_PLAYLIST_ABERTO" != "$HISTORY_FILE" ] || \
+                           [ -z "${EAZY_HIST_SIZE[$item_res]+yes}" ] || [ "${_sz:-0}" -eq 0 ]; then
+                            _stat_row=$(stat -c $'%s\t%Y' -- "$item_res" 2>/dev/null || printf '0\t0')
+                            IFS=$'\t' read -r _sz _mt <<< "$_stat_row"
+                        fi
+                        _db_found=1; _db_kind="file"
+                    elif [ -d "$item_res" ]; then
+                        _db_found=1; _db_kind="directory"
+                    fi
                 fi
-                if [ -f "$item_res" ]; then
+                if [ "$_db_deleted" = "1" ]; then
+                    _mb="miss"
+                    nome_exib="⚠ $nome_exib"
+                elif [ "$_db_found" -eq 1 ] && [ "$_db_kind" = "directory" ]; then
+                    _mb="dir"
+                    tipo_icone="[D]"; tipo_cor="$C_DIR"
+                elif [ "$_db_found" -eq 1 ]; then
+                    [[ "$_sz" =~ ^[0-9]+$ ]] || _sz=0
+                    [[ "$_mt" =~ ^[0-9]+$ ]] || _mt=0
                     if [ "$_sz" -ge 1073741824 ]; then
-                        _mb=$(awk -v b="$_sz" 'BEGIN{printf "%.1fGB", b/1073741824}')
+                        _tenths=$(( (_sz * 10 + 536870912) / 1073741824 ))
+                        _mb="$((_tenths / 10)).$((_tenths % 10))GB"
                     elif [ "$_sz" -ge 1048576 ]; then
-                        _mb=$(awk -v b="$_sz" 'BEGIN{printf "%.1fMB", b/1048576}')
+                        _tenths=$(( (_sz * 10 + 524288) / 1048576 ))
+                        _mb="$((_tenths / 10)).$((_tenths % 10))MB"
                     elif [ "$_sz" -ge 1024 ]; then
-                        _mb=$(awk -v b="$_sz" 'BEGIN{printf "%.0fKB", b/1024}')
+                        _mb="$(( (_sz + 512) / 1024 ))KB"
                     else
                         _mb="${_sz}B"
                     fi
-                elif [ -d "$item_res" ]; then
-                    _mb="dir"
-                    tipo_icone="[D]"; tipo_cor="$C_DIR"
                 else
                     _mb="miss"
                     nome_exib="⚠ $nome_exib"
@@ -10783,10 +11170,21 @@ eazy_gravar_memo_voz() {
 }
 
 # --- Ctrl-P: menu box de listas ---
+eazy_sql_lists_require() {
+    [ "${EAZY_IGNORE:-0}" = "1" ] && return 0
+    [ "${EAZY_SQL_LISTS_READY:-0}" = "1" ] && return 0
+    whiptail --title "Listas SQLite ainda não prontas" --msgbox \
+        "O Easy não encontrou as tabelas SQLite das listas.\n\nFeche o Easy, execute o migrador separado com --apply e abra novamente. Os arquivos antigos foram preservados.\n\n${EAZY_SQL_LISTS_ERROR:-Migração necessária.}" 14 74
+    return 1
+}
+
 eazy_menu_listas_ctrlp() {
-    local n1 n2 n3 nh nd escolha custom_arq custom_nome custom_count
+    local n1 n2 n3 nh nd escolha custom_nome custom_count sql_table sql_view
     local menu_args=()
-    touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
+    eazy_sql_lists_require || return 1
+    if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+        touch "$PLAYLIST_1" "$PLAYLIST_2" "$PLAYLIST_3" 2>/dev/null || true
+    fi
     touch "$DUP_LISTA" 2>/dev/null || true
     n1=$(contar_fila 1 2>/dev/null || echo 0); n1=$(printf '%s' "$n1" | tr -cd '0-9'); n1=${n1:-0}
     n2=$(contar_fila 2 2>/dev/null || echo 0); n2=$(printf '%s' "$n2" | tr -cd '0-9'); n2=${n2:-0}
@@ -10802,13 +11200,12 @@ eazy_menu_listas_ctrlp() {
         "hist" "Historico  ($nh itens)"
         "dup"  "Duplicados  ($nd itens)"
     )
-    while IFS= read -r custom_arq; do
-        [ -f "$custom_arq" ] || continue
-        custom_nome="${custom_arq##*temp_playlist_custom_}"
-        custom_count=$(grep -cve '^[[:space:]]*$' "$custom_arq" 2>/dev/null || echo 0)
-        custom_count=$(printf '%s' "$custom_count" | tr -cd '0-9'); custom_count=${custom_count:-0}
-        menu_args+=("c:$custom_nome" "$custom_nome  ($custom_count itens)")
-    done < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
+    if [ "${EAZY_IGNORE:-0}" != "1" ]; then
+        while IFS= read -r -d '' custom_nome && IFS= read -r -d '' custom_count; do
+            case "$custom_nome" in temp_playlist_1|temp_playlist_2|temp_playlist_3) continue ;; esac
+            menu_args+=("c:$custom_nome" "$custom_nome  ($custom_count itens)")
+        done < <(eazy_sql_list_indexer --list-menu0 2>/dev/null)
+    fi
     escolha=$(whiptail --title "Ctrl-P — Listas e filas" --menu \
         "Escolha a lista a abrir:" 22 78 12 "${menu_args[@]}" 3>&1 1>&2 2>&3) || return 1
     local posicao_origem; posicao_origem="$(pwd -P)"
@@ -10831,8 +11228,18 @@ eazy_menu_listas_ctrlp() {
             ;;
         1|2|3)
             MODO_DUP=0; FILA_ATUAL="$escolha"; atualizar_fila_atual 2>/dev/null || true
-            MODO_PLAYLIST=1; ARQUIVO_PLAYLIST_ABERTO="$CONFIG_DIR/temp_playlist_${escolha}"
-            touch "$ARQUIVO_PLAYLIST_ABERTO"; carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
+            MODO_PLAYLIST=1
+            if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+                ARQUIVO_PLAYLIST_ABERTO="$PLAYLIST_FILE"
+                touch "$ARQUIVO_PLAYLIST_ABERTO"
+            else
+                sql_table="temp_playlist_${escolha}"
+                sql_view=$(eazy_sql_list_view_path "$sql_table") || return 1
+                EAZY_SQL_LIST_VIEW_TABLE["$sql_view"]="$sql_table"
+                eazy_sql_list_refresh_view "$sql_table" || return 1
+                ARQUIVO_PLAYLIST_ABERTO="$sql_view"
+            fi
+            carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
             ;;
         hist)
             eazy_history_migrate_on_entry || return 1
@@ -10851,8 +11258,12 @@ eazy_menu_listas_ctrlp() {
         c:*)
             custom_nome="${escolha#c:}"
             MODO_DUP=0; MODO_PLAYLIST=1
-            ARQUIVO_PLAYLIST_ABERTO="$CONFIG_DIR/temp_playlist_custom_${custom_nome}"
-            [ -f "$ARQUIVO_PLAYLIST_ABERTO" ] || { whiptail --title "Lista" --msgbox "Nao encontrada." 8 40; return 1; }
+            [ "${EAZY_IGNORE:-0}" != "1" ] || return 1
+            sql_table="$custom_nome"
+            sql_view=$(eazy_sql_list_view_path "$sql_table") || return 1
+            EAZY_SQL_LIST_VIEW_TABLE["$sql_view"]="$sql_table"
+            eazy_sql_list_refresh_view "$sql_table" || { whiptail --title "Lista SQLite" --msgbox "Não foi possível ler a tabela $sql_table." 9 55; return 1; }
+            ARQUIVO_PLAYLIST_ABERTO="$sql_view"
             carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
             ;;
         *) return 1 ;;
@@ -11849,7 +12260,7 @@ salvar_playlist() {
 confirmar_e_excluir() {
     local selecao="$1"
     local modo_extra="${2:-}"   # "disco" = CTRL+DEL → apaga do HD também
-    local total_itens
+    local total_itens sql_table removed_sql
     total_itens=$(echo "$selecao" | grep -v '^[[:space:]]*$' | wc -l)
     total_itens=$(echo "$total_itens" | LC_ALL=C tr -cd '0-9')
     total_itens=${total_itens:-0}
@@ -11875,6 +12286,25 @@ confirmar_e_excluir() {
 
     # Playlist / fila temp: DEL = só da lista | CTRL+DEL = lista + disco
     if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$modo_extra" != "disco" ]; then
+        sql_table=$(eazy_sql_list_table_for_view "${ARQUIVO_PLAYLIST_ABERTO:-}" 2>/dev/null || true)
+        if [ -n "$sql_table" ]; then
+            echo -e "\n\033[1;33m--------------------------------------------------\033[0m"
+            echo -e "\033[1;33m⚠️ REMOVER DA LISTA SQLITE\033[0m"
+            echo -e "Os arquivos NÃO serão apagados do disco — só saem desta lista."
+            read -p "Confirma remover da lista? (s/N): " resp
+            if [[ "$resp" =~ ^[Ss]$ ]]; then
+                removed_sql=$(printf '%s\n' "$selecao" | awk -F '\t' 'NF {print $NF}' | while IFS= read -r p; do printf '%s\0' "$p"; done | eazy_sql_list_indexer "--list-remove0=$sql_table") || removed_sql="?"
+                if [ "$removed_sql" != "?" ]; then
+                    eazy_sql_list_refresh_view "$sql_table" || true
+                    eazy_playlist_cache_invalidate "$ARQUIVO_PLAYLIST_ABERTO"
+                    echo -e "\033[1;32mRemovidos da lista SQL: $removed_sql\033[0m"
+                else
+                    echo -e "\033[1;31mFalha ao atualizar a tabela SQL $sql_table.\033[0m"
+                fi
+                sleep 1
+            fi
+            return
+        fi
         echo -e "\n\033[1;33m--------------------------------------------------\033[0m"
         if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
             echo -e "\033[1;33m⚠️ REMOVER DA FILA TEMPORÁRIA\033[0m"
@@ -11969,6 +12399,20 @@ confirmar_e_excluir() {
         done < "$sel_tmp"
 
         # Remove da playlist também
+        sql_table=$(eazy_sql_list_table_for_view "${ARQUIVO_PLAYLIST_ABERTO:-}" 2>/dev/null || true)
+        if [ -n "$sql_table" ]; then
+            removed_sql=$(while IFS= read -r p; do printf '%s\0' "$p"; done < "$sel_tmp" | eazy_sql_list_indexer "--list-remove0=$sql_table") || removed_sql="?"
+            if [ "$removed_sql" != "?" ]; then
+                eazy_sql_list_refresh_view "$sql_table" || true
+                eazy_playlist_cache_invalidate "$ARQUIVO_PLAYLIST_ABERTO"
+                rm -f "$sel_tmp"
+                echo -e "\033[1;32mConcluído (disco + lista SQL).\033[0m"
+            else
+                echo -e "\033[1;31mArquivos removidos do disco, mas falhou a atualização da lista SQL.\033[0m"
+            fi
+            sleep 1
+            return
+        fi
         pl_dir=$(dirname "$ARQUIVO_PLAYLIST_ABERTO")
         tmp_pl="${ARQUIVO_PLAYLIST_ABERTO}.tmp"
         : > "$tmp_pl"
@@ -14344,18 +14788,32 @@ menu_acoes_selecao() {
         8) mover_arquivos "$selecao" ;;
         9)
             # INSERT
-            quantidade_adicionada=0
+            local quantidade_adicionada=0 table_queue
+            local -a paths_to_add=()
+            if [ "${EAZY_IGNORE:-0}" != "1" ]; then
+                eazy_sql_lists_require || return 1
+            fi
             while IFS= read -r linha; do
                 [ -z "$linha" ] && continue
                 item=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
                 [ -z "$item" ] || [[ "$item" =~ \.\.$ ]] && continue
                 item_abs=$(caminho_absoluto "$item")
-                if ! grep -Fxq -- "$item_abs" "$PLAYLIST_FILE" 2>/dev/null; then
-                    printf '%s\n' "$item_abs" >> "$PLAYLIST_FILE"
-                    quantidade_adicionada=$((quantidade_adicionada + 1))
-                fi
+                paths_to_add+=("$item_abs")
             done <<< "$selecao"
-            total_fila=$(grep -c '^' "$PLAYLIST_FILE" 2>/dev/null || echo 0)
+            if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+                for item_abs in "${paths_to_add[@]}"; do
+                    if ! grep -Fxq -- "$item_abs" "$PLAYLIST_FILE" 2>/dev/null; then
+                        printf '%s\n' "$item_abs" >> "$PLAYLIST_FILE"
+                        quantidade_adicionada=$((quantidade_adicionada + 1))
+                    fi
+                done
+                total_fila=$(grep -c '^' "$PLAYLIST_FILE" 2>/dev/null || echo 0)
+            else
+                table_queue="temp_playlist_${FILA_ATUAL:-1}"
+                quantidade_adicionada=$(eazy_sql_list_append_args "$table_queue" "${paths_to_add[@]}") || quantidade_adicionada=0
+                eazy_sql_list_refresh_view "$table_queue" || true
+                total_fila=$(contar_fila "${FILA_ATUAL:-1}")
+            fi
             whiptail --title "Fila" --msgbox "Adicionados: $quantidade_adicionada\nTotal na fila: $total_fila" 9 45
             ;;
     esac
@@ -14581,6 +15039,18 @@ while true; do
     eazy_ensure_selection
     PASTA_ATUAL=$(pwd -P 2>/dev/null || pwd)
 
+    if [ "${EAZY_IGNORE:-0}" != "1" ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && \
+       [ "${MODO_DOWNLOAD:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && \
+       [ "${MODO_BUSCA:-0}" -eq 0 ] && [ -d "$PASTA_ATUAL" ]; then
+        _eazy_sync_context="$PASTA_ATUAL|${MODO_PLAYLIST:-0}|${MODO_DOWNLOAD:-0}|${MODO_DUP:-0}|${MODO_BUSCA:-0}"
+        if [ "$_eazy_sync_context" != "${EAZY_LAST_DIR_SYNC_CONTEXT:-}" ]; then
+            EAZY_LAST_DIR_SYNC_CONTEXT="$_eazy_sync_context"
+            eazy_index_sync_directory "$PASTA_ATUAL" || true
+        fi
+    else
+        EAZY_LAST_DIR_SYNC_CONTEXT=""
+    fi
+
     if [ "${EAZY_FIRST_LOAD_DONE:-0}" -eq 0 ]; then
         if [ "${EAZY_VERBOSE:-0}" = "1" ]; then
             {
@@ -14613,10 +15083,17 @@ while true; do
     _ck_raw=$(eazy_lista_cache_key_raw)
     _ck=$(eazy_lista_cache_key)
     _cache_hit=0
+    _force_sql_refresh=0
+    EAZY_SQL_QUERY_ERROR=""
+    if [ "${EAZY_IGNORE:-0}" != "1" ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && \
+       [ "${MODO_DOWNLOAD:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && \
+       [ "${MODO_BUSCA:-0}" -eq 0 ]; then
+        _force_sql_refresh=1
+    fi
     lista_preparada=""
     # 1) lista já ordenada para este F1/F2/data?
     # Em MODO_BUSCA a lista só vem de obter_lista_rapida (filtro real) ou snapshot salvo
-    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+    if [ "$_force_sql_refresh" -eq 1 ] || [ "${MODO_BUSCA:-0}" -eq 1 ]; then
         _cache_hit=0
         lista_preparada=""
         dados_brutos=""
@@ -14634,7 +15111,16 @@ while true; do
     else
         # 2) RAW em cache? (nunca em pesquisa — filtro por extensão tem de correr)
         dados_brutos=""
-        if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        if [ "$_force_sql_refresh" -eq 1 ]; then
+            EAZY_INDEX_QUERY_ERROR_FILE="${EAZY_TMP_DIR}/index-query-error-$$"
+            rm -f "$EAZY_INDEX_QUERY_ERROR_FILE"
+            eazy_status_file "consultando SQLite" "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || true
+            dados_brutos=$(obter_lista_rapida)
+            dados_brutos=$(printf '%s\n' "$dados_brutos" | awk 'NF>0')
+            if [ -s "$EAZY_INDEX_QUERY_ERROR_FILE" ]; then
+                EAZY_SQL_QUERY_ERROR=$(tr '\n\r\t' '   ' < "$EAZY_INDEX_QUERY_ERROR_FILE" | cut -c1-140)
+            fi
+        elif [ "${MODO_BUSCA:-0}" -eq 1 ]; then
             eazy_status_file "pesquisa" "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || true
             dados_brutos=$(obter_lista_rapida)
             dados_brutos=$(printf '%s\n' "$dados_brutos" | awk 'NF>0')
@@ -14652,7 +15138,7 @@ while true; do
         fi
         eazy_status_file "a ordenar" "${MODO_ATUAL:-tamanho}" 2>/dev/null || true
         lista_preparada=$(eazy_lista_ordenar "$dados_brutos")
-        eazy_lista_cache_save "$_ck" "$lista_preparada"
+        [ "$_force_sql_refresh" -eq 1 ] || eazy_lista_cache_save "$_ck" "$lista_preparada"
         eazy_status_file "lista pronta" "ok" 2>/dev/null || true
     fi
 
@@ -14669,24 +15155,39 @@ while true; do
         TEXTO_PROMPT=" 📥 FILA DE DOWNLOADS ($TOTAL_DL itens) ❯ "
         EAZY_HEADER_HINT=" [ENTER]: Baixar | [CTRL-A/X/R]: Marcar | [CTRL-B]: Sair | [DEL]: Remover | [F10]: Ajuda "
     elif [ "${MODO_PLAYLIST:-0}" -eq 1 ]; then
-        if [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_custom_* ]]; then
-            TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
-            TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9'); TOTAL_FILA=${TOTAL_FILA:-0}
-            NOME_LISTA_CTRL_P="${ARQUIVO_PLAYLIST_ABERTO##*temp_playlist_custom_}"
-            TEXTO_PROMPT=" 📋 $NOME_LISTA_CTRL_P ($TOTAL_FILA itens)  [CTRL-P]: Próx. lista ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da lista | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. lista | [Q]: Sair "
-        elif [[ "$ARQUIVO_PLAYLIST_ABERTO" == *temp_playlist_* ]]; then
+        _active_sql_table=$(eazy_sql_list_table_for_view "${ARQUIVO_PLAYLIST_ABERTO:-}" 2>/dev/null || true)
+        if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+            case "$ARQUIVO_PLAYLIST_ABERTO" in
+                "$PLAYLIST_1") _active_sql_table="temp_playlist_1" ;;
+                "$PLAYLIST_2") _active_sql_table="temp_playlist_2" ;;
+                "$PLAYLIST_3") _active_sql_table="temp_playlist_3" ;;
+            esac
+        fi
+        if [ -n "$_active_sql_table" ]; then
             TOTAL_FILA=$(grep -c '^' "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
             TOTAL_FILA=$(echo "$TOTAL_FILA" | tr -cd '0-9')
             TOTAL_FILA=${TOTAL_FILA:-0}
-            # detecta número da fila pelo nome do arquivo
-            case "$ARQUIVO_PLAYLIST_ABERTO" in
-                *temp_playlist_2) FILA_ATUAL=2 ;;
-                *temp_playlist_3) FILA_ATUAL=3 ;;
-                *) FILA_ATUAL=1 ;;
+            case "$_active_sql_table" in
+                temp_playlist_1)
+                    FILA_ATUAL=1
+                    TEXTO_PROMPT=" 📋 FILA 1 ($TOTAL_FILA) [1:$TOTAL_FILA|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
+                    EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila SQL | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
+                    ;;
+                temp_playlist_2)
+                    FILA_ATUAL=2
+                    TEXTO_PROMPT=" 📋 FILA 2 ($TOTAL_FILA) [1:$(contar_fila 1)|2:$TOTAL_FILA|3:$(contar_fila 3)] ❯ "
+                    EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila SQL | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
+                    ;;
+                temp_playlist_3)
+                    FILA_ATUAL=3
+                    TEXTO_PROMPT=" 📋 FILA 3 ($TOTAL_FILA) [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$TOTAL_FILA] ❯ "
+                    EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila SQL | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
+                    ;;
+                *)
+                    TEXTO_PROMPT=" 📋 $_active_sql_table ($TOTAL_FILA itens) [CTRL-P]: Próx. lista ❯ "
+                    EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da lista SQL | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. lista | [Q]: Sair "
+                    ;;
             esac
-            TEXTO_PROMPT=" 📋 FILA $FILA_ATUAL ($TOTAL_FILA)  [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
-            EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
         elif [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
             TOTAL_HIST=$(eazy_history_db_count 2>/dev/null || echo 0)
             TOTAL_HIST=$(echo "$TOTAL_HIST" | tr -cd '0-9')
@@ -14720,6 +15221,13 @@ while true; do
     else
         TEXTO_PROMPT=" 📂 [$(eazy_filtro_label "$FILTRO_ATUAL")] $PASTA_ATUAL ❯ "
         EAZY_HEADER_HINT=" [TAB]: Marcar | [ENTER]: Tocar | [CTRL-K]: Acoes | [CTRL-L]: Pasta | [CTRL-/]: Preview | [INSERT]: Fila | [DEL]: HD | [F10]: Ajuda "
+    fi
+    if [ -n "${EAZY_SQL_QUERY_ERROR:-}" ]; then
+        EAZY_HEADER_HINT=" ⚠ FALHA SQLite: ${EAZY_SQL_QUERY_ERROR} "
+    elif [ "${EAZY_IGNORE:-0}" != "1" ] && [ "${MODO_PLAYLIST:-0}" -eq 0 ] && \
+         [ "${MODO_DOWNLOAD:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && \
+         [ "${MODO_BUSCA:-0}" -eq 0 ]; then
+        EAZY_HEADER_HINT=" [FONTE: SQLite direto] $EAZY_HEADER_HINT"
     fi
     export EAZY_HEADER_HINT
     TEXTO_HEADER=$(eazy_status_header)
@@ -15359,16 +15867,27 @@ Depois use:
                     n_sel=$(printf "%s" "$n_sel" | tr -cd "0-9"); n_sel=${n_sel:-0}
                     if [ "$n_sel" -eq 0 ]; then
                         whiptail --title "Listas" --msgbox "Seleção global vazia." 8 40
+                    elif [ "${EAZY_IGNORE:-0}" != "1" ] && ! eazy_sql_lists_require; then
+                        :
                     else
-                        touch "$PLAYLIST_1"
                         local addc=0 p
+                        local -a selected_paths=()
                         while IFS= read -r p; do
                             [ -z "$p" ] && continue
-                            if ! grep -Fxq -- "$p" "$PLAYLIST_1" 2>/dev/null; then
-                                printf "%s\n" "$p" >> "$PLAYLIST_1"
-                                addc=$((addc+1))
-                            fi
+                            selected_paths+=("$p")
                         done < "$SELECTED_FILE"
+                        if [ "${EAZY_IGNORE:-0}" = "1" ]; then
+                            touch "$PLAYLIST_1"
+                            for p in "${selected_paths[@]}"; do
+                                if ! grep -Fxq -- "$p" "$PLAYLIST_1" 2>/dev/null; then
+                                    printf '%s\n' "$p" >> "$PLAYLIST_1"
+                                    addc=$((addc+1))
+                                fi
+                            done
+                        else
+                            addc=$(eazy_sql_list_append_args temp_playlist_1 "${selected_paths[@]}") || addc=0
+                            eazy_sql_list_refresh_view temp_playlist_1 || true
+                        fi
                         whiptail --title "Listas" --msgbox "Adicionados $addc de $n_sel item(ns) à Fila 1." 9 55
                     fi
                     ;;
@@ -15579,60 +16098,100 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 --msgbox "Nenhum arquivo selecionado.\nUse TAB ou ESPAÇO para marcar." 8 50
             continue
         fi
-        # Pergunta em qual fila colocar ou cria uma lista temporária nova.
-        n1=$(contar_fila 1); n2=$(contar_fila 2); n3=$(contar_fila 3)
-        dest_fila=""; dest_file=""; dest_label=""
-        custom_menu_args=()
-        while IFS= read -r custom_arq; do
-            [ -f "$custom_arq" ] || continue
-            custom_nome="${custom_arq##*temp_playlist_custom_}"
-            custom_count=$(grep -c '^' "$custom_arq" 2>/dev/null || echo 0)
-            custom_count=$(printf '%s' "$custom_count" | tr -cd '0-9'); custom_count=${custom_count:-0}
-            custom_menu_args+=("$custom_nome" "$custom_count itens" OFF)
-        done < <(find "$CONFIG_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
-        dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
-            "Para qual lista enviar os itens?\n(Espaço marca, Enter confirma)" 16 65 4 \
-            "1" "Fila 1  ($n1 itens)" $( [ "$FILA_ATUAL" = "1" ] && echo ON || echo OFF ) \
-            "2" "Fila 2  ($n2 itens)" $( [ "$FILA_ATUAL" = "2" ] && echo ON || echo OFF ) \
-            "3" "Fila 3  ($n3 itens)" $( [ "$FILA_ATUAL" = "3" ] && echo ON || echo OFF ) \
-            "N" "Criar nova lista temporária..." OFF \
-            "${custom_menu_args[@]}" \
-            3>&1 1>&2 2>&3)
-        [ -z "$dest_fila" ] && continue
-        if [ -f "$CONFIG_DIR/temp_playlist_custom_$dest_fila" ]; then
-            nome_lista="$dest_fila"
-            dest_file="$CONFIG_DIR/temp_playlist_custom_$nome_lista"
-            dest_label="$nome_lista"
-        elif [ "$dest_fila" = "N" ]; then
-            nome_lista=$(whiptail --title "Nova lista temporária" --inputbox "Nome da nova lista:" 9 60 "lista-nova" 3>&1 1>&2 2>&3) || continue
-            [ -n "$nome_lista" ] || continue
-            nome_lista=$(printf '%s' "$nome_lista" | tr '/\\:*?"<>|' '_' | tr -s ' ' '_' | cut -c1-80)
-            mkdir -p "$CUSTOM_LISTS_DIR" 2>/dev/null || true
-            dest_file="$CUSTOM_LISTS_DIR/temp_playlist_custom_$nome_lista"
-            dest_label="$nome_lista"
-        else
-            dest_file="$CONFIG_DIR/temp_playlist_${dest_fila}"
-            dest_label="Fila $dest_fila"
-        fi
-        touch "$dest_file"
-        quantidade_adicionada=0
-        while IFS= read -r item; do
-            [ -z "$item" ] && continue
-            [[ "$item" =~ \.\.$ ]] && continue
-            item_abs=$(caminho_absoluto "$item")
-            if ! grep -Fxq -- "$item_abs" "$dest_file" 2>/dev/null; then
-                printf '%s\n' "$item_abs" >> "$dest_file"
-                quantidade_adicionada=$((quantidade_adicionada + 1))
+        if [ "${EAZY_IGNORE:-0}" != "1" ]; then
+            eazy_sql_lists_require || continue
+            n1=$(contar_fila 1); n2=$(contar_fila 2); n3=$(contar_fila 3)
+            custom_menu_args=()
+            while IFS= read -r -d '' custom_nome && IFS= read -r -d '' custom_count; do
+                case "$custom_nome" in temp_playlist_1|temp_playlist_2|temp_playlist_3) continue ;; esac
+                custom_menu_args+=("c:$custom_nome" "$custom_count itens" OFF)
+            done < <(eazy_sql_list_indexer --list-menu0 2>/dev/null)
+            dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
+                "Para qual lista SQL enviar os itens?\n(Espaço marca, Enter confirma)" 18 72 8 \
+                "1" "Fila 1  ($n1 itens)" $( [ "$FILA_ATUAL" = "1" ] && echo ON || echo OFF ) \
+                "2" "Fila 2  ($n2 itens)" $( [ "$FILA_ATUAL" = "2" ] && echo ON || echo OFF ) \
+                "3" "Fila 3  ($n3 itens)" $( [ "$FILA_ATUAL" = "3" ] && echo ON || echo OFF ) \
+                "N" "Criar nova lista SQL..." OFF \
+                "${custom_menu_args[@]}" 3>&1 1>&2 2>&3) || continue
+            [ -n "$dest_fila" ] || continue
+            if [ "$dest_fila" = "N" ]; then
+                nome_lista=$(whiptail --title "Nova lista temporária" --inputbox "Nome da nova lista SQL:" 9 60 "lista-nova" 3>&1 1>&2 2>&3) || continue
+                [ -n "$nome_lista" ] || continue
+                if ! sql_create_msg=$(eazy_sql_list_indexer "--list-create=$nome_lista" 2>&1); then
+                    whiptail --title "Não foi possível criar a lista" --msgbox "$sql_create_msg" 10 66
+                    continue
+                fi
+                sql_table="$nome_lista"
+                dest_label="$nome_lista"
+            elif [[ "$dest_fila" == c:* ]]; then
+                sql_table="${dest_fila#c:}"
+                dest_label="$sql_table"
+            else
+                sql_table="temp_playlist_${dest_fila}"
+                dest_label="Fila $dest_fila"
             fi
-        done <<< "$itens_para_fila"
-        total_fila=$(grep -c '^' "$dest_file" 2>/dev/null || echo 0)
-        total_fila=$(printf '%s' "$total_fila" | tr -cd '0-9'); total_fila=${total_fila:-0}
-        if [[ "$dest_fila" =~ ^[123]$ ]]; then
-            FILA_ATUAL="$dest_fila"
-            atualizar_fila_atual
+            paths_to_add=()
+            while IFS= read -r item; do
+                [ -z "$item" ] && continue
+                [[ "$item" =~ \.\.$ ]] && continue
+                paths_to_add+=("$(caminho_absoluto "$item")")
+            done <<< "$itens_para_fila"
+            quantidade_adicionada=$(eazy_sql_list_append_args "$sql_table" "${paths_to_add[@]}") || quantidade_adicionada=0
+            total_fila=$(eazy_sql_list_indexer "--list-count=$sql_table" 2>/dev/null || echo 0)
+            eazy_sql_list_refresh_view "$sql_table" || true
+            case "$sql_table" in
+                temp_playlist_1) FILA_ATUAL=1; atualizar_fila_atual ;;
+                temp_playlist_2) FILA_ATUAL=2; atualizar_fila_atual ;;
+                temp_playlist_3) FILA_ATUAL=3; atualizar_fila_atual ;;
+            esac
+        else
+            n1=$(contar_fila 1); n2=$(contar_fila 2); n3=$(contar_fila 3)
+            custom_menu_args=()
+            while IFS= read -r custom_arq; do
+                [ -f "$custom_arq" ] || continue
+                custom_nome="${custom_arq##*temp_playlist_custom_}"
+                custom_count=$(grep -c '^' "$custom_arq" 2>/dev/null || echo 0)
+                custom_menu_args+=("c:$custom_nome" "$custom_count itens" OFF)
+            done < <(find "$CUSTOM_LISTS_DIR" -maxdepth 1 -type f -name 'temp_playlist_custom_*' -print 2>/dev/null | sort)
+            dest_fila=$(whiptail --title "INSERT → Fila temporária" --radiolist \
+                "Para qual lista da sessão enviar os itens?" 18 72 8 \
+                "1" "Fila 1  ($n1 itens)" $( [ "$FILA_ATUAL" = "1" ] && echo ON || echo OFF ) \
+                "2" "Fila 2  ($n2 itens)" $( [ "$FILA_ATUAL" = "2" ] && echo ON || echo OFF ) \
+                "3" "Fila 3  ($n3 itens)" $( [ "$FILA_ATUAL" = "3" ] && echo ON || echo OFF ) \
+                "N" "Criar lista desta sessão..." OFF "${custom_menu_args[@]}" 3>&1 1>&2 2>&3) || continue
+            [ -n "$dest_fila" ] || continue
+            if [[ "$dest_fila" == c:* ]]; then
+                nome_lista="${dest_fila#c:}"
+                dest_file="$CUSTOM_LISTS_DIR/temp_playlist_custom_$nome_lista"
+                dest_label="$nome_lista"
+            elif [ "$dest_fila" = "N" ]; then
+                nome_lista=$(whiptail --title "Nova lista temporária" --inputbox "Nome da lista:" 9 60 "lista-nova" 3>&1 1>&2 2>&3) || continue
+                [ -n "$nome_lista" ] || continue
+                nome_lista=$(printf '%s' "$nome_lista" | tr '/\\:*?"<>|' '_' | tr -s ' ' '_' | cut -c1-80)
+                dest_file="$CUSTOM_LISTS_DIR/temp_playlist_custom_$nome_lista"
+                dest_label="$nome_lista"
+            else
+                dest_file="$PLAYLIST_FILE"
+                case "$dest_fila" in 2) dest_file="$PLAYLIST_2" ;; 3) dest_file="$PLAYLIST_3" ;; esac
+                dest_label="Fila $dest_fila"
+            fi
+            touch "$dest_file"
+            quantidade_adicionada=0
+            while IFS= read -r item; do
+                [ -z "$item" ] && continue
+                [[ "$item" =~ \.\.$ ]] && continue
+                item_abs=$(caminho_absoluto "$item")
+                if ! grep -Fxq -- "$item_abs" "$dest_file" 2>/dev/null; then
+                    printf '%s\n' "$item_abs" >> "$dest_file"
+                    quantidade_adicionada=$((quantidade_adicionada + 1))
+                fi
+            done <<< "$itens_para_fila"
+            total_fila=$(grep -c '^' "$dest_file" 2>/dev/null || echo 0)
+            if [[ "$dest_fila" =~ ^[123]$ ]]; then FILA_ATUAL="$dest_fila"; atualizar_fila_atual; fi
         fi
+        total_fila=$(printf '%s' "$total_fila" | tr -cd '0-9'); total_fila=${total_fila:-0}
         whiptail --title "✓ $dest_label" \
-            --msgbox "Adicionados: $quantidade_adicionada\nTotal em $dest_label: $total_fila" 10 50
+            --msgbox "Adicionados: $quantidade_adicionada\nTotal em $dest_label: $total_fila" 10 55
         continue
     elif [ "$tecla" = "ctrl-p" ]; then
         eazy_menu_listas_ctrlp || true
