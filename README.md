@@ -1,6 +1,10 @@
-# Easy Player 5.0.0
+# Easy Player 5.1.3
 
 Navegador e reprodutor multimídia no terminal, com seleção persistente, playlists, downloads, manutenção, IA, editor de notas, torrents e uma Central completa de streaming.
+
+## Executar a versão beta sem instalação
+
+Para abrir a cópia descompactada numa pasta, use `./run-beta.sh` (ou `./eazy`) com `eazy-index.py` ao lado do executável. Isso não instala nada no sistema.
 
 ## Instalação
 
@@ -11,10 +15,10 @@ curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/i
 Para instalar o pacote manualmente:
 
 ```bash
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.0.0/eazy_5.0.0_all.deb
-curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.0.0/eazy_5.0.0_all.deb.sha256
-sha256sum -c eazy_5.0.0_all.deb.sha256
-sudo apt install ./eazy_5.0.0_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.1.3/eazy_5.1.3_all.deb
+curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.1.3/eazy_5.1.3_all.deb.sha256
+sha256sum -c eazy_5.1.3_all.deb.sha256
+sudo apt install ./eazy_5.1.3_all.deb
 ```
 
 ## Streaming
@@ -23,9 +27,13 @@ A Central é aberta com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Ela
 
 Na tela `Filmes gratuitos`, a opção `Histórico — filmes selecionados com Enter` reabre os títulos escolhidos anteriormente. Os dados ficam em `~/.config/eazy/yt-stream/`, incluindo `searches.tsv`, `watch_history.tsv` e `favorites.tsv`. O pacote instala o componente em `/usr/bin/eazy-yt-stream` e `/usr/lib/eazy/eazy-yt-stream`.
 
+## Histórico de reprodução
+
+O histórico é guardado em `~/.config/eazy/history` e indexado em `~/.config/eazy/eazy-index.sqlite3`. Na primeira entrada no Histórico, pelo `Ctrl+G` ou pelo menu `Ctrl+P`, o Easy avisa, lê o arquivo original linha a linha, recria `history_items` no SQLite e mantém intacto o arquivo de origem. A primeira tentativa faz apenas a migração; entre novamente no Histórico. Depois disso, contagem, listagem e metadados são consultados no banco.
+
 ## Componentes
 
-A release inclui `eazy`, `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e help HTML/TXT. O instalador não usa caminhos de usuário fixos e não instala arquivos na raiz do projeto.
+A release inclui `eazy`, `eazy-index.py` (instalado em `/usr/lib/eazy`), `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e help HTML/TXT. O instalador não usa caminhos de usuário fixos e não instala arquivos na raiz do projeto.
 
 ## Desenvolvimento
 

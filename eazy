@@ -67,8 +67,8 @@ case "${1:-}" in
         ;;
 esac
 
-EAZY_VERSION="5.0.0"
-EAZY_CODENAME="help-html"
+EAZY_VERSION="5.1.3"
+EAZY_CODENAME="history-sqlite-only-direct-key"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
 
@@ -76,6 +76,11 @@ EAZY_AUTHOR="John B Kersting"
 # Usa o sino do terminal, sem exigir beep/paplay; erros também tentam o sino visual.
 eazy_beep() {
     printf '\a' > /dev/tty 2>/dev/null || printf '\a' >&2
+}
+# Beep só na troca de diretório (liga/desliga no F9)
+eazy_beep_dir() {
+    [ "${BEEP_DIR:-1}" = "1" ] || return 0
+    eazy_beep
 }
 whiptail() {
     local texto="$*" rc
@@ -93,10 +98,12 @@ EAZY_TMP_DIR="${CONFIG_DIR}/tmp"
 NOTES_DIR="$CONFIG_DIR/notas"
 LAST_NOTE_FILE="$NOTES_DIR/.ultima_nota"
 EAZY_INSTALL_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" 2>/dev/null && pwd -P)"
+EAZY_INDEX_DB="$CONFIG_DIR/eazy-index.sqlite3"
+EAZY_INDEXER="$EAZY_INSTALL_DIR/eazy-index.py"
+[ -f "$EAZY_INDEXER" ] || EAZY_INDEXER="/usr/lib/eazy/eazy-index.py"
 EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
 EAZY_AI_CLIENT="${EAZY_AI_CLIENT:-$EAZY_INSTALL_DIR/eazy-ai.py}"
-EAZY_STREAM_SCRIPT="${EAZY_STREAM_SCRIPT:-$EAZY_INSTALL_DIR/eazy-yt-stream}"
 [ -f "$EAZY_AI_CLIENT" ] || EAZY_AI_CLIENT="/usr/lib/eazy/eazy-ai.py"
 CONFIG_FILE="$CONFIG_DIR/config"
 KEYS_FILE="$CONFIG_DIR/keys"
@@ -107,6 +114,7 @@ LAST_DOWNLOAD_ENGINE_FILE="$CONFIG_DIR/last_download_engine"
 LAST_DOWNLOAD_TOR_FILE="$CONFIG_DIR/last_download_tor"
 TORRENT_QUEUE="$CONFIG_DIR/torrent_queue"
 STREAM_QUEUE="$CONFIG_DIR/stream_queue"
+DIR_FAVORITES_FILE="$CONFIG_DIR/dir_favorites"
 DOWNLOAD_PASSWORDS="$CONFIG_DIR/download_passwords"
 HISTORY_FILE="$CONFIG_DIR/history"
 PLAYLIST_PERSISTENTE="$CONFIG_DIR/temp_playlist"   # legado → migrado para _1
@@ -121,6 +129,7 @@ SESSION_FILE="$CONFIG_DIR/session"
 POSITIONS_FILE="$CONFIG_DIR/dir_positions"
 FILTER_POSITIONS_FILE="$CONFIG_DIR/filter_positions"
 MARK_DELETE_FILE="$CONFIG_DIR/marked_delete"
+SHOW_DELETED="${SHOW_DELETED:-0}"
 MPV_SCRIPT_DIR="$CONFIG_DIR/mpv_scripts"
 SCRIPTS_DIR="${CONFIG_DIR}/scripts"
 BACKUPS_DIR="${CONFIG_DIR}/backups"
@@ -399,6 +408,9 @@ eazy_normalize_tecla() {
 
 # Garante default se config antiga não tiver a chave
 PREVIEW_ATIVO="${PREVIEW_ATIVO:-0}"
+BUSCA_LIVE_STATUS="${BUSCA_LIVE_STATUS:-1}"
+DIR_FAVORITES_MENU="${DIR_FAVORITES_MENU:-1}"
+BEEP_DIR="${BEEP_DIR:-1}"   # 1=beep ao trocar de pasta | 0=silêncio
 SEM_AUDIO="${SEM_AUDIO:-0}"
 DRY_RUN="${DRY_RUN:-0}"
 # OP = seleção global opcional (0=desligada em memória efêmera | 1=persistente em arquivo)
@@ -1134,6 +1146,79 @@ configurar_diretorios_eazy() {
     done
 }
 
+eazy_atualizar_banco_dados() {
+    local raiz log total progresso pid feitos percentual atual rc
+    raiz=$(whiptail --title "Banco de dados do eazy" --inputbox \
+        "Digite a pasta do HD a indexar.\n\nA varredura inclui subpastas e atualiza somente arquivos novos ou alterados.\n\nBanco: $EAZY_INDEX_DB" 14 78 "${EAZY_INDEX_ROOT:-$(pwd -P)}" 3>&1 1>&2 2>&3) || return 0
+    [ -n "$raiz" ] || return 0
+    raiz="${raiz/#\~/$HOME}"
+    if [ ! -d "$raiz" ]; then
+        whiptail --title "Banco de dados" --msgbox "Pasta não encontrada:\n$raiz" 9 64
+        return 1
+    fi
+    raiz=$(cd -- "$raiz" && pwd -P) || return 1
+    EAZY_INDEX_ROOT="$raiz"
+    eazy_config_set EAZY_INDEX_ROOT "$raiz"
+    if ! whiptail --title "Confirmar atualização do banco" --yesno \
+        "Esse procedimento pode durar vários minutos, dependendo da quantidade de arquivos.\n\nPonto inicial:\n$raiz\n\nArquivos já indexados serão reaproveitados quando não tiverem mudado.\n\nDeseja continuar?" 14 76; then
+        return 0
+    fi
+    mkdir -p "$EAZY_TMP_DIR" "$(dirname -- "$EAZY_INDEX_DB")" 2>/dev/null || true
+    log="$EAZY_TMP_DIR/index-update.log"
+    progresso="$EAZY_TMP_DIR/index-progress-$$.tsv"
+    : > "$log"
+    total=$(find "$raiz" -xdev \( -type d -o -type f \) -printf 'x\n' 2>/dev/null | wc -l | tr -cd '0-9')
+    total=${total:-0}
+    : > "$progresso"
+    find "$raiz" -xdev \( -type d -o -type f \) -print0 2>/dev/null | \
+        "$PYTHON_CMD" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --scan0 >"$progresso" 2>"$log" &
+    pid=$!
+    (
+        while kill -0 "$pid" 2>/dev/null; do
+            feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
+            if [ "${total:-0}" -gt 0 ]; then
+                percentual=$((feitos * 100 / total))
+                [ "$percentual" -gt 99 ] && percentual=99
+            else
+                percentual=0
+            fi
+            atual=$(tail -n 1 "$progresso" 2>/dev/null | awk -F '\t' '{print $5}')
+            [ -n "$atual" ] || atual="preparando..."
+            printf 'XXX\n%s\nArquivos processados: %s de %s\nArquivo atual: %s\nArquivos sem alteração estão sendo reaproveitados.\nXXX\n' \
+                "$percentual" "$feitos" "$total" "$atual"
+            sleep 1
+        done
+        feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
+        printf 'XXX\n100\nArquivos processados: %s de %s\nIndexação concluída.\nXXX\n' "$feitos" "$total"
+    ) | whiptail --title "Atualizando banco de dados" --gauge \
+        "Ponto inicial:\n$raiz" 14 78 0
+    if wait "$pid"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    feitos=$(wc -l < "$progresso" 2>/dev/null | tr -cd '0-9'); feitos=${feitos:-0}
+    rm -f "$progresso"
+    if [ "$rc" -ne 0 ]; then
+        whiptail --title "Banco de dados" --msgbox "A atualização encontrou um erro.\n\n$(tail -n 8 "$log" 2>/dev/null)" 12 72
+        return "$rc"
+    fi
+    total=$("$PYTHON_CMD" - "$EAZY_INDEX_DB" "$raiz" <<'PYDB'
+import sqlite3, sys
+try:
+    db = sqlite3.connect(sys.argv[1])
+    root = sys.argv[2].rstrip('/')
+    n = db.execute("SELECT count(*) FROM files WHERE path=? OR path LIKE ?", (root, root + '/%')).fetchone()[0]
+    print(n)
+except Exception:
+    print('?')
+PYDB
+)
+    whiptail --title "Banco de dados atualizado" --msgbox \
+        "Ponto indexado:\n$raiz\n\nRegistros disponíveis nesse ponto: $total\n\nBanco:\n$EAZY_INDEX_DB\n\nAs playlists .m3u, .m3u8 e .pls continuam fora desse índice." 14 76
+    return 0
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -1162,6 +1247,11 @@ configurar_defaults() {
         "export_notas" "Exportar notas → Documentos/Easy-Notes" \
         "ia" "IA ativa: $ia_lab" \
         "ia_chat" "Abrir chat com IA" \
+        "busca_live" "Busca ao vivo na barra / cache progressivo" \
+        "indexdb" "Atualizar/Gerar banco de dados" \
+        "deleted" "Mostrar arquivos deletados: $([ "${SHOW_DELETED:-0}" = "1" ] && echo ON || echo OFF)" \
+        "dir_fav" "Ctrl+L menu pastas favoritas" \
+        "beep_dir" "Beep ao trocar de pasta: $([ "${BEEP_DIR:-1}" = "1" ] && echo ON || echo OFF)" \
         "cancel" "Voltar" \
         3>&1 1>&2 2>&3)
     case "$f9_acao" in
@@ -1194,8 +1284,58 @@ configurar_defaults() {
             ;;
         ia_chat)
             eazy_ia_chat
+            return ;;
+        indexdb)
+            eazy_atualizar_banco_dados
+            return ;;
+        deleted)
+            if [ "${SHOW_DELETED:-0}" = "1" ]; then SHOW_DELETED=0; else SHOW_DELETED=1; fi
+            if [ -f "$CONFIG_FILE" ]; then
+                if grep -q '^SHOW_DELETED=' "$CONFIG_FILE" 2>/dev/null; then
+                    sed -i "s|^SHOW_DELETED=.*|SHOW_DELETED=\"$SHOW_DELETED\"|" "$CONFIG_FILE"
+                else
+                    printf 'SHOW_DELETED="%s"\n' "$SHOW_DELETED" >> "$CONFIG_FILE"
+                fi
+            fi
+            whiptail --title "Arquivos deletados" --msgbox "Mostrar arquivos marcados como deletados: $([ "$SHOW_DELETED" = "1" ] && echo SIM || echo NÃO).\n\nA alteração vale para novas consultas e listas." 10 60
+            return ;;
+        busca_live)
+            if [ "${BUSCA_LIVE_STATUS:-1}" = "1" ]; then BUSCA_LIVE_STATUS=0; else BUSCA_LIVE_STATUS=1; fi
+            if [ -f "$CONFIG_FILE" ]; then
+                if grep -q "^BUSCA_LIVE_STATUS=" "$CONFIG_FILE" 2>/dev/null; then
+                    sed -i "s|^BUSCA_LIVE_STATUS=.*|BUSCA_LIVE_STATUS=\"$BUSCA_LIVE_STATUS\"|" "$CONFIG_FILE"
+                else
+                    echo "BUSCA_LIVE_STATUS=\"$BUSCA_LIVE_STATUS\"" >> "$CONFIG_FILE"
+                fi
+            fi
+            whiptail --title "Busca ao vivo" --msgbox "Barra + cache progressivo: $([ "$BUSCA_LIVE_STATUS" = "1" ] && echo LIGADO || echo DESLIGADO)\n\nCom LIGADO: ao achar ficheiros grava o cache e mostra o nome em baixo." 12 65
+            return ;;
+        dir_fav)
+            if [ "${DIR_FAVORITES_MENU:-1}" = "1" ]; then DIR_FAVORITES_MENU=0; else DIR_FAVORITES_MENU=1; fi
+            if [ -f "$CONFIG_FILE" ]; then
+                if grep -q "^DIR_FAVORITES_MENU=" "$CONFIG_FILE" 2>/dev/null; then
+                    sed -i "s|^DIR_FAVORITES_MENU=.*|DIR_FAVORITES_MENU=\"$DIR_FAVORITES_MENU\"|" "$CONFIG_FILE"
+                else
+                    echo "DIR_FAVORITES_MENU=\"$DIR_FAVORITES_MENU\"" >> "$CONFIG_FILE"
+                fi
+            fi
+            whiptail --title "Favoritos Ctrl+L" --msgbox "Menu de pastas favoritas: $([ "$DIR_FAVORITES_MENU" = "1" ] && echo LIGADO || echo DESLIGADO)\n\nCtrl++ adiciona a pasta atual.\nLista: ~/.config/eazy/dir_favorites" 12 65
+
             return
             ;;
+        beep_dir)
+            if [ "${BEEP_DIR:-1}" = "1" ]; then BEEP_DIR=0; else BEEP_DIR=1; fi
+            if [ -f "$CONFIG_FILE" ]; then
+                if grep -q "^BEEP_DIR=" "$CONFIG_FILE" 2>/dev/null; then
+                    sed -i "s|^BEEP_DIR=.*|BEEP_DIR="$BEEP_DIR"|" "$CONFIG_FILE"
+                else
+                    echo "BEEP_DIR="$BEEP_DIR"" >> "$CONFIG_FILE"
+                fi
+            fi
+            whiptail --title "Beep na troca de pasta" --msgbox "Beep ao entrar/sair de pastas: $([ "$BEEP_DIR" = "1" ] && echo LIGADO || echo DESLIGADO)\n\nNão afeta o beep de mensagens de erro." 11 60
+            return
+            ;;
+
         config) : ;;
         *) return 0 ;;
     esac
@@ -1333,9 +1473,9 @@ Opções:
   --unselect         Limpa seleção global e local (selected_paths) e continua
   --install          Instala dependências, comando global e scripts auxiliares
   --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
-  --stream           Abre a Central completa de streaming/filmes
   --uninstall        Remove os destinos eazy instalados e o launcher .desktop
   --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
+  --stream           Abre o menu interativo do eazy-yt-stream
   --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
   --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
   -m, --maintenance  Manutenção + backup/restaurar (escolhe o que salvar)
@@ -1355,7 +1495,7 @@ Atalhos principais (dentro do eazy):
   Ctrl-P             Alternar: dir → filas 1-3 → listas tmp → histórico → dup → dir
   Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
   Ctrl-D             Duplicados
-  Ctrl-B             Downloads, fila de streams e Central eazy-yt-stream
+  Ctrl-B             Downloads (inclui magnets/.torrent e destino padrão: $HOME/Downloads)
   Ctrl-O             Abrir playlist .m3u / .pls
   Ctrl-G             Histórico
   Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
@@ -1591,7 +1731,7 @@ S
         dl) cat <<'S'
 DOWNLOADS, TOR E TORRENTS
 ─────────────────────────
-  Ctrl-B             Gerenciador de downloads e fila de streams
+  Ctrl-B             Gerenciador de downloads (fila)
   Enter na fila      SEMPRE pergunta app + Tor (sugere o último usado)
   eazy-tor           Downloader de magnet/.torrent (incluso no .deb)
   Tor                Opção por item + torsocks (socks5://127.0.0.1:9050)
@@ -1673,7 +1813,6 @@ LINHA DE COMANDO
   eazy --unselect         Limpa seleção global/local e abre o eazy
   eazy --install          Instala deps + eazy + tor + IA + editor
   eazy --update-all       Atualiza todas as dependências do sistema
-  eazy --stream            Abre a Central completa de streaming/filmes
   eazy --shell-init       Função bash para cd ao sair
   eazy --torrent …        Encaminha ao eazy-tor
   eazy --update-ytdlp     Atualiza yt-dlp (binário oficial)
@@ -2120,13 +2259,14 @@ remover_dirs_vazios_fzf() { limpar_vazios "$@"; }
 limpar_vazios() {
     local pasta="${1:-.}"
     local tmp selected n dir ok=0 falha=0 dry_status
+    local tmp_dirs tmp_files n_dirs n_files
 
     [ -d "$pasta" ] || {
         whiptail --title "Erro" --msgbox "Pasta inválida:\n$pasta" 8 50 2>/dev/null || echo "Pasta inválida: $pasta"
         return 1
     }
     if ! command -v fzf >/dev/null 2>&1; then
-        whiptail --title "Erro" --msgbox "fzf obrigatório para listar pastas antes de apagar." 8 55
+        whiptail --title "Erro" --msgbox "fzf obrigatório para listar itens antes de apagar." 8 55
         return 1
     fi
 
@@ -2134,21 +2274,35 @@ limpar_vazios() {
     [ "${DRY_RUN:-0}" = "1" ] && dry_status="LIGADO (só simula)"
 
     tmp=$(mktemp "${EAZY_TMP_DIR}/eazy-empty.XXXXXX") || return 1
-    listar_dirs_sem_arquivos "$pasta" > "$tmp"
-    n=$(wc -l < "$tmp" 2>/dev/null | tr -cd '0-9')
-    n=${n:-0}
+    tmp_dirs=$(mktemp "${EAZY_TMP_DIR}/eazy-empty-dirs.XXXXXX") || return 1
+    tmp_files=$(mktemp "${EAZY_TMP_DIR}/eazy-empty-files.XXXXXX") || return 1
+
+    listar_dirs_sem_arquivos "$pasta" > "$tmp_dirs"
+    # Ficheiros 0 bytes SEM extensão (nome sem ponto) sob a pasta atual (recursivo)
+    find "$pasta" -type f -size 0 ! -name '*.*' -print 2>/dev/null | LC_ALL=C sort > "$tmp_files"
+
+    n_dirs=$(wc -l < "$tmp_dirs" 2>/dev/null | tr -cd '0-9'); n_dirs=${n_dirs:-0}
+    n_files=$(wc -l < "$tmp_files" 2>/dev/null | tr -cd '0-9'); n_files=${n_files:-0}
+
+    {
+        [ "$n_dirs" -gt 0 ] && sed 's|^|[DIR] |' "$tmp_dirs"
+        [ "$n_files" -gt 0 ] && sed 's|^|[FILE 0B] |' "$tmp_files"
+    } > "$tmp"
+
+    n=$(wc -l < "$tmp" 2>/dev/null | tr -cd '0-9'); n=${n:-0}
+    rm -f "$tmp_dirs" "$tmp_files"
 
     if [ "$n" -eq 0 ]; then
-        whiptail --title "Diretórios Vazios" --msgbox "Nenhum diretório vazio em:\n$pasta" 9 55
+        whiptail --title "Vazios" --msgbox "Nada encontrado em:\n$pasta\n\n· diretórios vazios\n· ficheiros 0 bytes sem extensão" 12 55
         rm -f "$tmp"
         return 0
     fi
 
-    echo -e "\n${CYAN}Pastas vazias: $n | DRY RUN: $dry_status${NC}"
+    echo -e "\n${CYAN}Vazios: $n_dirs pasta(s) + $n_files ficheiro(s) 0B s/ext | DRY: $dry_status${NC}"
     selected=$(cat "$tmp" | fzf -m --reverse --border \
-        --prompt="Selecionar diretórios vazios ❯ " \
-        --header="[TAB/ESPAÇO] marcar | [ENTER] confirmar seleção | [ESC] cancelar | DRY:$dry_status" \
-        --preview='echo {}; echo; ls -la {} 2>/dev/null | head -15' \
+        --prompt="Selecionar vazios ❯ " \
+        --header="[TAB] marcar | [ENTER] confirmar | [ESC] cancelar | DIR=pastas | FILE 0B=ficheiros vazios s/ext | DRY:$dry_status" \
+        --preview='p={}; p="${p#\[DIR\] }"; p="${p#\[FILE 0B\] }"; echo "$p"; echo; ls -la "$p" 2>/dev/null | head -15' \
         --preview-window=down:35%:wrap \
         --height=80%) || true
     rm -f "$tmp"
@@ -2176,7 +2330,7 @@ limpar_vazios() {
     if command -v whiptail >/dev/null 2>&1; then
         whiptail --title "Revisão — $n pasta(s)" --textbox "$tmp" 22 78 --scrolltext
         if ! whiptail --title "Confirmar" --yesno \
-            "Remover $n diretório(s) vazio(s)?\n\nDRY RUN: $dry_status\nSó rmdir — sem rm -rf." 12 58; then
+            "Remover $n item(ns) vazio(s)?\n\nPastas vazias → rmdir\nFicheiros 0B s/ext → rm\n\nDRY RUN: $dry_status" 13 58; then
             rm -f "$tmp"
             echo -e "${YELLOW}Cancelado.${NC}"
             return 0
@@ -2192,9 +2346,26 @@ limpar_vazios() {
         echo ""
         while IFS= read -r dir; do
             [ -z "$dir" ] && continue
+            # remove prefixos da lista fzf
+            dir="${dir#[DIR] }"
+            dir="${dir#[FILE 0B] }"
             if [ "${DRY_RUN:-0}" = "1" ]; then
-                echo "[DRY RUN] rmdir -- $dir"
+                if [ -f "$dir" ]; then
+                    echo "[DRY RUN] rm -- $dir"
+                else
+                    echo "[DRY RUN] rmdir -- $dir"
+                fi
                 ok=$((ok + 1))
+                continue
+            fi
+            if [ -f "$dir" ]; then
+                if rm -f -- "$dir" 2>/dev/null; then
+                    echo "✓ ficheiro $dir"
+                    ok=$((ok + 1))
+                else
+                    echo "✗ (permissão) $dir"
+                    falha=$((falha + 1))
+                fi
                 continue
             fi
             if [ ! -d "$dir" ]; then
@@ -2203,7 +2374,7 @@ limpar_vazios() {
                 continue
             fi
             if rmdir -- "$dir" 2>/dev/null; then
-                echo "✓ $dir"
+                echo "✓ pasta $dir"
                 ok=$((ok + 1))
             else
                 echo "✗ (não vazia/permissão) $dir"
@@ -3368,15 +3539,19 @@ eazy_abrir_manutencao_completa() {
 menu_manutencao_eazy() {
     local opcao
     opcao=$(whiptail --title "🧰 Manutenção do próprio eazy" --menu \
-        "Operações sem sudo:" 14 78 4 \
+        "Operações sem sudo:" 16 78 6 \
         "1" "🧹 Limpeza seletiva de dados" \
         "2" "🔎 Validar playlists, listas e pesquisas" \
+        "3" "🗃️ Atualizar/Gerar banco de dados" \
+        "4" "💾 Backup (escolher o que salvar)" \
+        "5" "📦 Restaurar backup (.tar.gz)" \
         "0" "Voltar" 3>&1 1>&2 2>&3) || return
     case "$opcao" in
         1) manutencao_dados_eazy ;;
         2) validar_dados_eazy ;;
-        3) eazy_backup_menu ;;
-        4) eazy_restore_backup_menu ;;
+        3) eazy_atualizar_banco_dados ;;
+        4) eazy_backup_menu ;;
+        5) eazy_restore_backup_menu ;;
         0|*) return ;;
     esac
 }
@@ -3483,20 +3658,6 @@ if [ -f "$PASTA_PROTEGIDA_CONFIG" ] 2>/dev/null; then
         fi
     done < "$PASTA_PROTEGIDA_CONFIG"
 fi
-
-eazy_stream_open_advanced() {
-    local stream="${EAZY_STREAM_SCRIPT:-${EAZY_INSTALL_DIR:-$HOME/.local/lib/eazy}/eazy-yt-stream}"
-    [ -x "$stream" ] || stream="/usr/lib/eazy/eazy-yt-stream"
-    if [ ! -x "$stream" ]; then
-        whiptail --title "eazy-yt-stream" --msgbox "Central de streaming não instalada.
-
-Reinstale com:
-eazy --install" 10 65 2>/dev/null || printf '%s\n' "Central de streaming não instalada: eazy --install"
-        return 1
-    fi
-    EAZY_YT_OUT="${DOWNLOAD_DIR:-$HOME/Downloads}" EAZY_YT_DATA="${CONFIG_DIR:-$HOME/.config/eazy}/yt-stream" bash "$stream"
-}
-
 
 if [ "$1" = "--install" ]; then
     echo -e "\033[1;36m=== ${EAZY_NAME} ${EAZY_VERSION} — instalador ===\033[0m"
@@ -3624,8 +3785,9 @@ if [ "$1" = "--install" ]; then
     [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
     AI_SRC="$SCRIPT_DIR/eazy-ai.py"
     [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
-    STREAM_SRC="$SCRIPT_DIR/eazy-yt-stream"
-    [ -f "$STREAM_SRC" ] || STREAM_SRC="/usr/lib/eazy/eazy-yt-stream"
+    INDEXER_SRC="$SCRIPT_DIR/eazy-index.py"
+    [ -f "$INDEXER_SRC" ] || INDEXER_SRC="/usr/lib/eazy/eazy-index.py"
+    [ -f "$INDEXER_SRC" ] || { echo "Indexador SQLite não encontrado: eazy-index.py" >&2; exit 1; }
     TOR_SRC="$SCRIPT_DIR/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="/usr/lib/eazy/eazy-tor"
     [ -f "$TOR_SRC" ] || TOR_SRC="$(command -v eazy-tor 2>/dev/null || true)"
@@ -3641,7 +3803,9 @@ if [ "$1" = "--install" ]; then
     sudo ln -sfn "$DEST_USR_BIN" "$DEST_USR_LOCAL"
     mkdir -p "$(dirname -- "$DEST_USER_LOCAL")"
     install -Dm755 "$SCRIPT_ATUAL" "$DEST_USER_LOCAL"
-    printf '%s\n' "  ✓ $DEST_USR_BIN" "  ✓ $DEST_USR_LIB" "  ✓ $DEST_USR_LOCAL -> $DEST_USR_BIN" "  ✓ $DEST_USER_LOCAL"
+    sudo install -Dm644 "$INDEXER_SRC" /usr/lib/eazy/eazy-index.py
+    install -Dm644 "$INDEXER_SRC" "$(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
+    printf '%s\n' "  ✓ $DEST_USR_BIN" "  ✓ $DEST_USR_LIB" "  ✓ $DEST_USR_LOCAL -> $DEST_USR_BIN" "  ✓ $DEST_USER_LOCAL" "  ✓ /usr/lib/eazy/eazy-index.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
     if [ -f "$EDITOR_SRC" ]; then
         if sudo install -Dm755 "$EDITOR_SRC" /usr/lib/eazy/eazy-notes-editor \
             && sudo install -Dm755 "$EDITOR_SRC" /usr/bin/eazy-notes-editor; then
@@ -3663,17 +3827,6 @@ if [ "$1" = "--install" ]; then
         fi
     else
         echo -e "\033[1;33m!\033[0m Cliente de IA não encontrado (eazy-ai.py)"
-    fi
-    if [ -f "$STREAM_SRC" ]; then
-        if sudo install -Dm755 "$STREAM_SRC" /usr/lib/eazy/eazy-yt-stream \
-            && sudo install -Dm755 "$STREAM_SRC" /usr/bin/eazy-yt-stream; then
-            echo -e "\033[1;32m✓\033[0m Central de streaming: /usr/lib/eazy/eazy-yt-stream (+ /usr/bin)"
-        else
-            echo -e "\033[1;31m✗\033[0m Falha ao instalar eazy-yt-stream" >&2
-            exit 1
-        fi
-    else
-        echo -e "\033[1;33m!\033[0m eazy-yt-stream não encontrado ao lado do script"
     fi
     if [ -n "$TOR_SRC" ] && [ -f "$TOR_SRC" ]; then
         if sudo install -Dm755 "$TOR_SRC" /usr/lib/eazy/eazy-tor \
@@ -3706,7 +3859,7 @@ if [ "$1" = "--install" ]; then
     # Man page embutida (não depende de eazy.1 ao lado do script)
     MAN_TMP=$(mktemp "${EAZY_TMP_DIR:-${CONFIG_DIR:-$HOME/.config/eazy}/tmp}/eazy-man.XXXXXX")
     cat > "$MAN_TMP" <<'EAZY_MAN_EOF'
-.TH EAZY 1 "September 2026" "eazy 5.0.0" "User Commands"
+.TH EAZY 1 "November 2026" "eazy 5.1.3" "User Commands"
 .SH NAME
 eazy \- terminal media browser, player and download manager
 .SH SYNOPSIS
@@ -3725,6 +3878,7 @@ and players such as
 .BR mpv (1).
 It browses folders, playlists, temporary queues, history, finds duplicates,
 exports HTML, and manages downloads (optional Tor) via companions
+.BR eazy\-index.py ,
 .BR eazy\-tor ,
 .BR eazy\-ai.py
 and
@@ -3743,7 +3897,7 @@ torsocks, python3, \.\.\.), install
 .B eazy
 and companions to
 .IR /usr/bin ,
-desktop launcher and this man page.
+desktop launcher, eazy-index.py in /usr/lib/eazy and this man page.
 .TP
 .B \-\-shell\-init
 Print a bash function so quitting eazy can
@@ -3788,13 +3942,13 @@ Duplicates.
 Recursive search.
 .TP
 .B Ctrl\-G
-Play history.
+Play history. On first entry, eazy announces migration, rebuilds history_items directly from ~/.config/eazy/history, leaves that source untouched, and asks you to enter History again.
 .TP
 .B Ctrl\-H
 Export HTML (selection or current screen).
 .TP
 .B Ctrl\-P
-Cycle: dir → queues 1–3 → temp lists → history → duplicates → dir.
+Cycle: dir → queues 1–3 → temp lists → history → duplicates → dir. Selecting History uses the same first-entry migration guard as Ctrl-G.
 .TP
 .B Q / Ctrl\-Q
 Save session and quit.
@@ -3806,6 +3960,9 @@ Config, queues, session, selection.
 .I ~/.config/eazy/tmp/
 Temporary files (not system /tmp).
 .TP
+.I ~/.config/eazy/eazy-index.sqlite3
+File index and playback history; the legacy ~/.config/eazy/history file remains intact during migration.
+.TP
 .I ~/.config/eazy/last_download_engine
 Last download app (suggestion only).
 .TP
@@ -3815,6 +3972,9 @@ Last Tor yes/no (suggestion only).
 .I /usr/share/man/man1/eazy.1.gz
 This manual page.
 .SH COMPANIONS
+.TP
+.B eazy\-index.py
+File index and SQLite playback-history helper.
 .TP
 .B eazy\-tor
 Magnet and \.torrent (optional \-\-tor).
@@ -3847,13 +4007,14 @@ EAZY_MAN_EOF
     rm -f "$MAN_TMP"
 
     echo -e "\n\033[1;36m--- verificação ---\033[0m"
-    for _b in eazy eazy-tor eazy-ai.py eazy-notes-editor eazy-yt-stream fzf mpv aria2c tor torsocks python3; do
+    for _b in eazy eazy-tor eazy-ai.py eazy-notes-editor fzf mpv aria2c tor torsocks python3; do
         if command -v "$_b" &>/dev/null; then
             echo -e "  \033[1;32m✓\033[0m $_b → $(command -v "$_b")"
         else
             echo -e "  \033[1;33m!\033[0m $_b ausente"
         fi
     done
+    [ -f /usr/lib/eazy/eazy-index.py ] && echo -e "  \033[1;32m✓\033[0m indexador SQLite → /usr/lib/eazy/eazy-index.py" || { echo "Indexador SQLite ausente após instalação." >&2; exit 1; }
     echo -e "\n\033[1;32m${EAZY_NAME} ${EAZY_VERSION} (${EAZY_CODENAME}) instalado.\033[0m"
     echo -e "  man eazy                 # manual"
     echo -e "  ${EAZY_NAME} --help"
@@ -3880,17 +4041,17 @@ elif [ "$1" = "--uninstall" ]; then
     if [ -f /usr/lib/eazy/eazy-ai.py ]; then
         sudo rm -f /usr/lib/eazy/eazy-ai.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-ai.py" && REMOVIDO=1
     fi
-    if [ -f /usr/lib/eazy/eazy-yt-stream ]; then
-        sudo rm -f /usr/lib/eazy/eazy-yt-stream && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-yt-stream" && REMOVIDO=1
-    fi
-    if [ -f /usr/bin/eazy-yt-stream ]; then
-        sudo rm -f /usr/bin/eazy-yt-stream && echo -e "\033[1;32m✓\033[0m /usr/bin/eazy-yt-stream" && REMOVIDO=1
+    if [ -f /usr/lib/eazy/eazy-index.py ]; then
+        sudo rm -f /usr/lib/eazy/eazy-index.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-index.py" && REMOVIDO=1
     fi
     INSTALL_USER="${SUDO_USER:-${USER:-$(id -un)}}"
     INSTALL_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6)"
     [ -n "$INSTALL_HOME" ] || INSTALL_HOME="$HOME"
     if [ -f "$INSTALL_HOME/.local/bin/eazy" ] || [ -L "$INSTALL_HOME/.local/bin/eazy" ]; then
         rm -f "$INSTALL_HOME/.local/bin/eazy" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy" && REMOVIDO=1
+    fi
+    if [ -f "$INSTALL_HOME/.local/bin/eazy-index.py" ]; then
+        rm -f "$INSTALL_HOME/.local/bin/eazy-index.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy-index.py" && REMOVIDO=1
     fi
     DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
     [ -f "$DESKTOP_DIR/eazy.desktop" ] && rm -f "$DESKTOP_DIR/eazy.desktop" && echo -e "\033[1;32m✓\033[0m launcher local"
@@ -3913,6 +4074,20 @@ elif [ "$1" = "--uninstall" ]; then
     echo -e "\033[0;90mConfig em ~/.config/eazy/ preservada (remova manualmente se quiser).\033[0m"
     [ "$REMOVIDO" -eq 0 ] && echo -e "Nada encontrado em /usr/local/bin ou /usr/bin."
     exit 0
+elif [ "$1" = "--stream" ]; then
+    shift
+    STREAM_BIN="${EAZY_YT_STREAM_BIN:-}"
+    for _candidate in "$STREAM_BIN" "${EAZY_INSTALL_DIR:-}/eazy-yt-stream" /usr/lib/eazy/eazy-yt-stream /usr/bin/eazy-yt-stream "$HOME/.local/bin/eazy-yt-stream" "$HOME/bin/eazy-yt-stream"; do
+        if [ -n "$_candidate" ] && [ -x "$_candidate" ]; then
+            STREAM_BIN="$_candidate"
+            break
+        fi
+    done
+    if [ -z "$STREAM_BIN" ] || [ ! -x "$STREAM_BIN" ]; then
+        echo "eazy-yt-stream não encontrado. Mantenha-o ao lado de eazy ou instale-o em /usr/lib/eazy/." >&2
+        exit 1
+    fi
+    exec "$STREAM_BIN" "$@"
 elif [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
     exibir_help_cli
     exit 0
@@ -3952,9 +4127,6 @@ elif [ "$1" = "--restore-keys" ]; then
 elif [ "$1" = "--config" ]; then
     configurar_defaults
     exit 0
-elif [ "$1" = "--stream" ]; then
-    eazy_stream_open_advanced
-    exit $?
 elif [ "$1" = "--ai" ]; then
     eazy_ia_chat
     exit $?
@@ -4897,6 +5069,26 @@ exportar_lista_html() {
     display: flex; flex-wrap: wrap; gap: 10px 18px; justify-content: space-between;
   }
   .foot a { color: var(--accent2); }
+  .sort-sep { color: var(--muted); font-size: .85rem; margin-left: 8px; align-self: center; }
+  .sort-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    margin: 0 0 14px; padding: 12px 14px;
+    background: rgba(18,21,28,.92);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+  }
+  .sticky-bar {
+    position: sticky; top: 8px; z-index: 20;
+    backdrop-filter: blur(8px);
+  }
+
+  .sort-btn.active {
+    background: rgba(108,182,255,.22);
+    border-color: rgba(108,182,255,.45);
+    color: #dff0ff;
+  }
+
   @media (max-width: 720px) {
     .hide-sm { display: none; }
     thead th:nth-child(1), tbody td:nth-child(1) { display: none; }
@@ -4938,6 +5130,17 @@ EOF
         fi
 
         cat <<EOF
+  <div class="toolbar view-tabs sort-bar sticky-bar">
+    <button type="button" class="btn active" id="btn-table" onclick="showView('table')">Tabela</button>
+    <button type="button" class="btn" id="btn-tree" onclick="showView('tree')">Árvore</button>
+    <span class="sort-sep">Ordenar:</span>
+    <button type="button" class="btn sort-btn" id="sort-name" onclick="sortTable('name')">Nome</button>
+    <button type="button" class="btn sort-btn" id="sort-size" onclick="sortTable('size')">Tamanho</button>
+    <button type="button" class="btn sort-btn" id="sort-date" onclick="sortTable('date')">Data</button>
+    <button type="button" class="btn" onclick="expandAllTree()">Expand tree</button>
+    <button type="button" class="btn" onclick="collapseAllTree()">Collapse</button>
+  </div>
+
   <div class="card">
   <div id="view-table">
   <table>
@@ -5040,12 +5243,6 @@ EOF
         cat <<EOF
     </div></div>
   </div>
-  <div class="toolbar view-tabs">
-    <button type="button" class="btn active" id="btn-table" onclick="showView('table')">Tabela</button>
-    <button type="button" class="btn" id="btn-tree" onclick="showView('tree')">Árvore (tree)</button>
-    <button type="button" class="btn" onclick="expandAllTree()">Expand all tree</button>
-    <button type="button" class="btn" onclick="collapseAllTree()">Collapse all</button>
-  </div>
   <div class="foot">
     <span>$total itens · $(eazy_html_escape "$total_label")</span>
     <span>Gerado pelo <a href="https://github.com/vapesmadcat-blip/Easy_Player">eazy</a></span>
@@ -5079,6 +5276,58 @@ EOF
   window.collapseAllTree = function () {
     document.querySelectorAll("#tree-root details").forEach(function (d) { d.open = false; });
     showView("tree");
+  };
+
+  var sortState = { key: null, asc: true };
+  window.sortTable = function (key) {
+    showView("table");
+    var tbody = document.querySelector("#view-table tbody");
+    if (!tbody) return;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+    if (sortState.key === key) {
+      sortState.asc = !sortState.asc;
+    } else {
+      sortState.key = key;
+      // tamanho e data: maior/mais recente primeiro por defeito
+      sortState.asc = (key === "name");
+    }
+    var mult = sortState.asc ? 1 : -1;
+    rows.sort(function (a, b) {
+      var va, vb;
+      if (key === "name") {
+        va = (a.getAttribute("data-name") || "").toLowerCase();
+        vb = (b.getAttribute("data-name") || "").toLowerCase();
+        if (va < vb) return -1 * mult;
+        if (va > vb) return 1 * mult;
+        return 0;
+      }
+      if (key === "size") {
+        va = parseInt(a.getAttribute("data-bytes") || "0", 10) || 0;
+        vb = parseInt(b.getAttribute("data-bytes") || "0", 10) || 0;
+        return (va - vb) * mult;
+      }
+      // date
+      va = parseInt(a.getAttribute("data-mtime") || "0", 10) || 0;
+      vb = parseInt(b.getAttribute("data-mtime") || "0", 10) || 0;
+      return (va - vb) * mult;
+    });
+    rows.forEach(function (r, i) {
+      var idx = r.querySelector(".idx");
+      if (idx) idx.textContent = String(i + 1);
+      tbody.appendChild(r);
+    });
+    ["name", "size", "date"].forEach(function (k) {
+      var b = el("sort-" + k);
+      if (!b) return;
+      if (k === key) {
+        b.classList.add("active");
+        var arrow = sortState.asc ? " ↑" : " ↓";
+        b.textContent = (k === "name" ? "Nome" : k === "size" ? "Tamanho" : "Data") + arrow;
+      } else {
+        b.classList.remove("active");
+        b.textContent = (k === "name" ? "Nome" : k === "size" ? "Tamanho" : "Data");
+      }
+    });
   };
 })();
 </script>
@@ -6579,6 +6828,12 @@ abrir_html_ou_link() {
     fi
     [ -f "$abs" ] || return 1
 
+    # Mesmo menu de browser da criacao HTML (Ctrl-H)
+    if type eazy_abrir_html_browser >/dev/null 2>&1; then
+        eazy_abrir_html_browser "$abs"
+        return $?
+    fi
+
     eazy_spawn_open "$abs" && return 0
     eazy_spawn_open "file://$abs" && return 0
     [ "$abs" != "$alvo" ] && eazy_spawn_open "$alvo" && return 0
@@ -7283,31 +7538,131 @@ barra_progresso() {
 
 # ── Barra inferior: ficheiro em leitura/gravação (sabe se está a processar ou travado)
 
-# Cache da lista do navegador — evita refazer find/pesquisa a cada tecla inútil
-eazy_lista_cache_key() {
-    # v2: paths absolutos na lista
-    local pl=""
+# Cache em 2 níveis: RAW (find) e SORTED (lista pronta por ordenação)
+# Mudar F1/F2/data → só reordena o RAW em memória; não refaz find.
+eazy_lista_cache_dir() {
+    local d="${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}/dir_lista_cache"
+    mkdir -p "$d" 2>/dev/null || true
+    printf '%s\n' "$d"
+}
+
+# Key do conteúdo do disco (sem ordenação)
+eazy_lista_cache_key_raw() {
+    # Inclui critérios de busca — senão vídeo e “tudo” partilham o mesmo cache
+    local cwd mt pl=""
+    cwd=$(pwd -P 2>/dev/null || pwd)
+    mt=$(stat -c '%Y' -- "$cwd" 2>/dev/null || echo 0)
     if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ -n "${ARQUIVO_PLAYLIST_ABERTO:-}" ]; then
         pl=$(stat -c '%Y' -- "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
         pl="${ARQUIVO_PLAYLIST_ABERTO}|$pl"
     fi
-    printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|abspath1' \
-        "$(pwd -P 2>/dev/null || pwd)" \
+    printf 'raw|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|v7' \
+        "$cwd" "$mt" \
         "${MODO_ATUAL:-tamanho}" \
         "${FILTRO_ATUAL:-ambos}" \
         "${MODO_PLAYLIST:-0}" \
         "${MODO_DOWNLOAD:-0}" \
         "${MODO_DUP:-0}" \
         "${MODO_BUSCA:-0}" \
+        "${EXT_BUSCA:-}" \
+        "${BUSCA_TAM_MIN:-}|${BUSCA_TAM_MAX:-}" \
+        "${BUSCA_CONTEUDO:-}" \
         "${BUSCA_SNAPSHOT_FILE:-}|${BUSCA_REMAKE:-0}" \
         "$pl"
 }
 
-eazy_lista_cache_invalidate() {
-    EAZY_LISTA_CACHE_KEY=""
-    rm -f "${EAZY_LISTA_CACHE_FILE:-}" 2>/dev/null || true
+# Key da lista já ordenada (inclui F1/F2/data)
+eazy_lista_cache_key() {
+    printf 'sorted|%s|%s' "$(eazy_lista_cache_key_raw)" "${MODO_ATUAL:-tamanho}"
 }
 
+eazy_lista_cache_file_for_key() {
+    local key="${1:-}" h d
+    d=$(eazy_lista_cache_dir)
+    h=$(printf '%s' "$key" | md5sum 2>/dev/null | awk '{print $1}')
+    [ -n "$h" ] || h=$(printf '%s' "$key" | cksum | awk '{print $1}')
+    printf '%s/%s.lst\n' "$d" "$h"
+}
+
+eazy_lista_cache_save() {
+    local key="$1" lista="$2" f
+    [ -n "$key" ] || return 0
+    f=$(eazy_lista_cache_file_for_key "$key")
+    printf '%s\n' "$lista" > "${f}.tmp" 2>/dev/null && mv -f "${f}.tmp" "$f" 2>/dev/null || printf '%s\n' "$lista" > "$f"
+    printf '%s\n' "$key" > "${f}.meta" 2>/dev/null || true
+}
+
+eazy_lista_cache_load() {
+    local key="$1" f meta
+    f=$(eazy_lista_cache_file_for_key "$key")
+    meta="${f}.meta"
+    [ -s "$f" ] || return 1
+    if [ -f "$meta" ]; then
+        [ "$(cat "$meta" 2>/dev/null)" = "$key" ] || return 1
+    fi
+    cat "$f"
+    return 0
+}
+
+eazy_lista_cache_invalidate() {
+    local all="${1:-0}" cwd d meta
+    if [ "$all" = "1" ] || [ "$all" = "all" ]; then
+        rm -rf "$(eazy_lista_cache_dir)" 2>/dev/null || true
+        mkdir -p "$(eazy_lista_cache_dir)" 2>/dev/null || true
+        return 0
+    fi
+    cwd=$(pwd -P 2>/dev/null || pwd)
+    d=$(eazy_lista_cache_dir)
+    # apaga RAW + todos os SORTED desta pasta
+    if [ -d "$d" ]; then
+        for meta in "$d"/*.meta; do
+            [ -f "$meta" ] || continue
+            if head -n1 "$meta" 2>/dev/null | grep -Fq -- "$cwd"; then
+                rm -f "$meta" "${meta%.meta}.lst" 2>/dev/null || true
+            fi
+        done
+    fi
+    rm -f "${EAZY_LISTA_CACHE_FILE:-}" "${EAZY_LISTA_CACHE_FILE:-}.meta" 2>/dev/null || true
+}
+
+# Ordena dados_brutos → lista_preparada (sem find)
+eazy_lista_ordenar() {
+    local dados="$1"
+    local linha_voltar restante_itens itens_ordenados
+    linha_voltar=$(printf '%s\n' "$dados" | awk -F '\t' '$NF==".." || $2 ~ /◀ Voltar/')
+    restante_itens=$(printf '%s\n' "$dados" | awk -F '\t' '$NF!=".." && $2 !~ /◀ Voltar/')
+
+    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
+        if [ "${MODO_ATUAL:-}" = "nome" ]; then
+            itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k4,4f)
+            ORDEM_TEXTO="NOME"
+        else
+            itens_ordenados="$restante_itens"
+            ORDEM_TEXTO="FILA"
+        fi
+    else
+        case "${MODO_ATUAL:-tamanho}" in
+            nome)
+                # Caminho (campo 4), sem ANSI do rótulo
+                itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k4,4f)
+                ORDEM_TEXTO="NOME"
+                ;;
+            data)
+                itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k1,1rn)
+                ORDEM_TEXTO="DATA"
+                ;;
+            *)
+                itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k1,1rn)
+                ORDEM_TEXTO="TAMANHO"
+                ;;
+        esac
+    fi
+    if [ -n "$linha_voltar" ]; then
+        printf '%s\n%s\n' "$linha_voltar" "$itens_ordenados"
+    else
+        printf '%s\n' "$itens_ordenados"
+    fi
+}
 
 eazy_sel_progress() {
     local n="${1:-0}" total="${2:-0}" bytes="${3:-0}" arq="${4:-}" rotulo="${5:-sel}"
@@ -7388,20 +7743,73 @@ eazy_status_file_clear() {
 
 eazy_busca_progresso() {
     local pct="$1" letra="$2" hits="$3" total="$4" status="${5:-}"
+    local atual="${6:-}"
+    local lista_file="${7:-}"
+    # Mantém o último nome visível (evita piscar / linha preta)
+    if [ -n "$atual" ]; then
+        EAZY_BUSCA_NOME_ATUAL="$atual"
+    else
+        atual="${EAZY_BUSCA_NOME_ATUAL:-}"
+    fi
     local c_t=$'\033[1;33m'
     local c_w=$'\033[1;37m'
     local c_g=$'\033[1;32m'
+    local c_c=$'\033[1;36m'
     local c_d=$'\033[0;90m'
     local c_r=$'\033[0m'
-    local out
-    out=$(printf "\r\033[K%s  %sletra %s%-6s%s  %s+%s%s  %stotal: %s%s  %s%s%s" \
-        "$(barra_progresso "$pct")" \
-        "$c_t" "$c_w" "$letra" "$c_r" \
+    local cols bar line1 line2 i n nome _up
+    local -a hits_lines=()
+    cols=$( { tput cols 2>/dev/null || echo 100; } | tr -cd '0-9' ); cols=${cols:-100}
+    [ "$cols" -lt 50 ] && cols=50
+
+    bar=$(barra_progresso "$pct")
+    line1=$(printf "%s  %sletra %s%-4s%s  %s+%s%s  %stotal:%s%s  %s%s%s" \
+        "$bar" "$c_t" "$c_w" "$letra" "$c_r" \
         "$c_g" "$hits" "$c_r" \
         "$c_d" "$total" "$c_r" \
         "$c_d" "$status" "$c_r")
-    # Preferir /dev/tty; se falhar, stderr (nunca stdout — polui a lista)
-    { printf "%s" "$out" > /dev/tty; } 2>/dev/null || printf "%s" "$out" >&2
+
+    if [ -n "$atual" ]; then
+        if [ ${#atual} -gt $((cols - 12)) ] && [ $((cols - 12)) -gt 8 ]; then
+            atual="…${atual: -$((cols - 14))}"
+        fi
+        line2=$(printf "%satual:%s %s%s%s" "$c_d" "$c_r" "$c_c" "$atual" "$c_r")
+    else
+        line2=$(printf "%satual:%s %s—%s" "$c_d" "$c_r" "$c_d" "$c_r")
+    fi
+
+    n=0
+    if [ -n "$lista_file" ] && [ -s "$lista_file" ]; then
+        n=$(wc -l < "$lista_file" 2>/dev/null | tr -cd '0-9')
+        n=${n:-0}
+        while IFS= read -r nome; do
+            [ -z "$nome" ] && continue
+            hits_lines+=("$nome")
+        done < <(awk -F '\t' '{print $4}' "$lista_file" 2>/dev/null | tail -n 8)
+    fi
+
+    {
+        printf '\r\033[K%s\n' "$line1"
+        printf '\033[K%s\n' "$line2"
+        printf '\033[K%sEsc%s = parar e usar o que já encontrou\n' "$c_d" "$c_r"
+        printf '\033[K%sencontrados (%s):%s\n' "$c_g" "$n" "$c_r"
+        i=0
+        if [ ${#hits_lines[@]} -gt 0 ]; then
+            for nome in "${hits_lines[@]}"; do
+                i=$((i + 1))
+                if [ ${#nome} -gt $((cols - 8)) ] && [ $((cols - 8)) -gt 8 ]; then
+                    nome="…${nome: -$((cols - 10))}"
+                fi
+                printf '\033[K  %s%2d%s %s\n' "$c_d" "$i" "$c_r" "$nome"
+            done
+        else
+            i=1
+            printf '\033[K  %s(ainda nenhum)%s\n' "$c_d" "$c_r"
+        fi
+        printf '\033[K\n'
+        _up=$((4 + i + 1))
+        printf '\033[%dA' "$_up"
+    } > /dev/tty 2>/dev/null || printf '\r\033[K%s | %s | total:%s\n' "$line1" "$atual" "$total" >&2
 }
 
 # Helper: mensagem de busca só no tty/stderr
@@ -7437,13 +7845,39 @@ eazy_busca_cancelar_parar() {
     pid=$(cat "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true)
     if [ -n "$pid" ]; then
         kill -TERM "$pid" 2>/dev/null || true
-        # Não usar wait aqui: o monitor pode estar bloqueado na leitura do tty
-        # e prender a entrega dos resultados até o usuário pressionar Esc.
-        sleep 0.12
+        kill -KILL "$pid" 2>/dev/null || true
+        # Não usar wait: o monitor pode estar bloqueado na leitura do tty.
+        sleep 0.05
     fi
-    rm -f "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
-    # O trap do monitor restaura o terminal; esta chamada apenas garante o modo normal.
+    rm -f "${EAZY_BUSCA_CANCEL_PID_FILE:-}" "${EAZY_BUSCA_CANCEL_FILE:-}" 2>/dev/null || true
+    # Restaura terminal de forma agressiva (whiptail/F9 e monitor de Esc bagunçam stty)
     stty sane < /dev/tty 2>/dev/null || true
+    stty echo icanon < /dev/tty 2>/dev/null || true
+    tput cnorm > /dev/tty 2>/dev/null || true
+}
+
+# Limpa o bloco de progresso da busca no tty (não fica "preso" à espera de tecla)
+eazy_busca_limpar_tela_progresso() {
+    {
+        # sobe e apaga ~14 linhas do bloco de progresso
+        printf '\r'
+        local i
+        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14; do
+            printf '\033[1A\033[2K'
+        done
+        printf '\r\033[0m'
+    } > /dev/tty 2>/dev/null || true
+}
+
+# Espera Enter só para o utilizador ler o status final da busca (não usa no cache)
+eazy_busca_aguardar_enter() {
+    {
+        printf '\n\033[1;36mPressione Enter para ver os resultados...\033[0m'
+    } > /dev/tty 2>/dev/null || printf '\nPressione Enter para ver os resultados...\n' >&2
+    stty sane < /dev/tty 2>/dev/null || true
+    IFS= read -r _ < /dev/tty 2>/dev/null || IFS= read -r _ || true
+    # não mexe na posição do bloco — só desce um pouco para o fzf
+    printf '\n' > /dev/tty 2>/dev/null || true
 }
 
 eazy_busca_cancelada() {
@@ -7451,16 +7885,43 @@ eazy_busca_cancelada() {
 }
 
 eazy_busca_esperar_pid() {
-    local pid="$1"
+    # $1=pid  $2=letra  $3=pct  $4=tmp_busca  $5=seg_tmp  $6=arquivo_atual_file
+    # Lê o NOME DO FICHEIRO que está a ser processado (não o padrão 0*).
+    local pid="$1" letra="${2:-}" pct="${3:-0}" tmp_all="${4:-}" seg="${5:-}" atual_f="${6:-}"
+    local n_seg=0 n_tot=0 _ult=""
     while kill -0 "$pid" 2>/dev/null; do
         if eazy_busca_cancelada; then
             kill "$pid" 2>/dev/null || true
+            # mata o pipeline inteiro
+            pkill -P "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
             return 130
         fi
-        sleep 0.08
+        n_seg=0
+        if [ -n "$seg" ] && [ -f "$seg" ]; then
+            n_seg=$(wc -l < "$seg" 2>/dev/null | tr -cd '0-9')
+            n_seg=${n_seg:-0}
+        fi
+        if [ -n "$tmp_all" ] && [ -f "$tmp_all" ]; then
+            n_tot=$(wc -l < "$tmp_all" 2>/dev/null | tr -cd '0-9')
+            n_tot=${n_tot:-0}
+            n_tot=$((n_tot + n_seg))
+        else
+            n_tot=$n_seg
+        fi
+        # Prioridade: ficheiro em processamento → último hit → (não usar letra*)
+        _ult=""
+        if [ -n "$atual_f" ] && [ -s "$atual_f" ]; then
+            _ult=$(tail -n1 "$atual_f" 2>/dev/null)
+        fi
+        if [ -z "$_ult" ] && [ -n "$seg" ] && [ -s "$seg" ]; then
+            _ult=$(tail -n1 "$seg" 2>/dev/null | awk -F '\t' '{print $4}')
+        fi
+        eazy_busca_progresso "${pct:-0}" "${letra:-…}" "$n_seg" "$n_tot" "scan..." "${_ult}" "${tmp_all:-$seg}" 2>/dev/null || true
+        sleep 0.15
     done
     wait "$pid" 2>/dev/null
+    return 0
 }
 
 # Linha de status: HD livre/total + seleção (para header do fzf)
@@ -7900,6 +8361,110 @@ eazy_stream_delete_item() {
     whiptail --title "Streams" --msgbox "Removido." 7 30
 }
 
+
+# --- TV Aberta (Ctrl+B → T) via YouTube ---
+eazy_tv_aberta() {
+    local bin="" op url ytdlp player
+    for c in \
+        "$(command -v eazy-yt-stream 2>/dev/null)" \
+        "${EAZY_INSTALL_DIR:-}/eazy-yt-stream" \
+        "/usr/lib/eazy/eazy-yt-stream" \
+        "/usr/bin/eazy-yt-stream" \
+        "$HOME/.local/bin/eazy-yt-stream" \
+        "$HOME/bin/eazy-yt-stream"
+    do
+        [ -n "$c" ] && [ -x "$c" ] && { bin="$c"; break; }
+    done
+    if [ -n "$bin" ]; then
+        "$bin" --tv || true
+        return 0
+    fi
+    op=$(whiptail --title "TV Aberta · YouTube" --menu \
+"Canais / lives públicos:" 18 70 9 \
+        "tvbrasil" "TV Brasil" \
+        "cultura"  "TV Cultura" \
+        "camara"   "TV Câmara" \
+        "senado"   "TV Senado" \
+        "cnn"      "CNN Brasil" \
+        "jp"       "Jovem Pan News" \
+        "busca"    "Pesquisar ao vivo..." \
+        "voltar"   "Voltar" \
+        3>&1 1>&2 2>&3) || return 0
+    case "$op" in
+        tvbrasil) url="https://www.youtube.com/@tvbrasil/live" ;;
+        cultura)  url="https://www.youtube.com/@tvcultura/live" ;;
+        camara)   url="https://www.youtube.com/@camara/live" ;;
+        senado)   url="https://www.youtube.com/@TVSenadoBrasil/live" ;;
+        cnn)      url="https://www.youtube.com/@CNNBrasil/live" ;;
+        jp)       url="https://www.youtube.com/@JovemPanNews/live" ;;
+        busca)
+            local q
+            q=$(whiptail --title "TV Aberta" --inputbox "Termo (ex.: SBT News ao vivo):" 10 70 3>&1 1>&2 2>&3) || return 0
+            [ -z "$q" ] && return 0
+            if type eazy_yt_stream >/dev/null 2>&1; then
+                eazy_yt_stream "ytsearch1:${q}" 0 ""
+            else
+                ytdlp=$(command -v yt-dlp 2>/dev/null || true)
+                player="${PLAYER_PADRAO:-mpv}"
+                [ -n "$ytdlp" ] && "$player" --ytdl "ytsearch1:${q}" || \
+                whiptail --title "TV Aberta" --msgbox "yt-dlp / player em falta." 8 45
+            fi
+            return 0
+            ;;
+        *) return 0 ;;
+    esac
+    if type eazy_yt_stream >/dev/null 2>&1; then
+        eazy_yt_stream "$url" 0 ""
+    else
+        player="${PLAYER_PADRAO:-mpv}"
+        "$player" --ytdl --ytdl-format="best[height<=720]/best" -- "$url" 2>/dev/null || \
+        whiptail --title "TV Aberta" --msgbox "Falha ao abrir:\n$url" 9 55
+    fi
+}
+
+eazy_stream_mudar_player() {
+    local novo
+    novo=$(whiptail --title "Streams — player" --radiolist \
+"Player para stream (salva no config):" 14 60 4 \
+        "mpv" "mpv (recomendado)" $( [ "${PLAYER_PADRAO:-mpv}" = "mpv" ] && echo ON || echo OFF ) \
+        "mplayer" "mplayer" $( [ "${PLAYER_PADRAO:-}" = "mplayer" ] && echo ON || echo OFF ) \
+        "cvlc" "VLC CLI" $( [ "${PLAYER_PADRAO:-}" = "cvlc" ] && echo ON || echo OFF ) \
+        "ffplay" "ffplay" $( [ "${PLAYER_PADRAO:-}" = "ffplay" ] && echo ON || echo OFF ) \
+        3>&1 1>&2 2>&3) || return 0
+    [ -z "$novo" ] && return 0
+    PLAYER_PADRAO="$novo"
+    if [ -f "${CONFIG_FILE:-}" ]; then
+        if grep -q "^PLAYER_PADRAO=" "$CONFIG_FILE" 2>/dev/null; then
+            sed -i "s|^PLAYER_PADRAO=.*|PLAYER_PADRAO=\"$PLAYER_PADRAO\"|" "$CONFIG_FILE"
+        else
+            echo "PLAYER_PADRAO=\"$PLAYER_PADRAO\"" >> "$CONFIG_FILE"
+        fi
+    fi
+    whiptail --title "Streams" --msgbox "Player de stream: $PLAYER_PADRAO" 8 45
+}
+
+eazy_stream_mudar_resolucao() {
+    local line num url quality title novo_q
+    line=$(eazy_stream_escolher_item "Resolução do item ❯ ") || return 0
+    num=$(awk -F'|' -v u="$(printf '%s' "$line" | cut -d'|' -f1)" '$1==u {print NR; exit}' "$STREAM_QUEUE")
+    url=$(printf '%s' "$line" | cut -d'|' -f1)
+    quality=$(printf '%s' "$line" | cut -d'|' -f2)
+    title=$(printf '%s' "$line" | cut -d'|' -f3)
+    novo_q=$(whiptail --title "Resolução" --radiolist "Qualidade para este link:" 14 55 5 \
+        "auto" "Padrão" $( [ -z "$quality" ] && echo ON || echo OFF ) \
+        "480" "480p" $( [ "$quality" = 480 ] && echo ON || echo OFF ) \
+        "720" "720p" $( [ "$quality" = 720 ] && echo ON || echo OFF ) \
+        "1080" "1080p" $( [ "$quality" = 1080 ] && echo ON || echo OFF ) \
+        "audio" "Só áudio" $( [ "$quality" = audio ] && echo ON || echo OFF ) \
+        3>&1 1>&2 2>&3) || return 0
+    [ "$novo_q" = "auto" ] && novo_q=""
+    awk -F'|' -v n="$num" -v u="$url" -v q="$novo_q" -v t="$title" 'BEGIN{OFS="|"}
+        NR==n { print u,q,t,$4; next }
+        { print }
+    ' "$STREAM_QUEUE" > "${STREAM_QUEUE}.tmp" && mv -f "${STREAM_QUEUE}.tmp" "$STREAM_QUEUE"
+    whiptail --title "Streams" --msgbox "Resolução atualizada (#$num)." 8 42
+}
+
 eazy_menu_streams() {
     local op n_st line tmp url quality
     while true; do
@@ -7907,18 +8472,18 @@ eazy_menu_streams() {
         n_st=$(printf '%s' "$n_st" | tr -cd '0-9'); n_st=${n_st:-0}
         op=$(whiptail --title "Streams · Ctrl+B" --menu \
 "Fila de links para stream (play direto).
-Itens: $n_st" 18 68 7 \
-            "advanced" "🎬 Central completa — pesquisa, filmes e favoritos" \
+Itens: $n_st · Player: ${PLAYER_PADRAO:-mpv}" 20 72 10 \
             "play"     "▶ PLAY — tocar da fila" \
             "add"      "＋ Adicionar link" \
-            "incluir"  "▶ Incluir + PLAY" \
-            "edit"     "✎ Editar" \
+            "incluir"  "▶ Incluir + PLAY (já toca)" \
+            "player"   "🎬 Mudar player (mpv/mplayer/…)" \
+            "res"      "📐 Resolução de um item" \
+            "edit"     "✎ Editar URL / qualidade" \
             "del"      "🗑 Apagar" \
             "list"     "📋 Ver fila" \
             "voltar"   "Voltar" \
             3>&1 1>&2 2>&3) || return 0
         case "$op" in
-            advanced) eazy_stream_open_advanced ;;
             play)
                 line=$(eazy_stream_escolher_item "PLAY stream ❯ ") || continue
                 url=$(printf '%s' "$line" | cut -d'|' -f1)
@@ -7927,6 +8492,8 @@ Itens: $n_st" 18 68 7 \
                 ;;
             add) eazy_stream_add_dialog 0 ;;
             incluir) eazy_stream_add_dialog 1 ;;
+            player) eazy_stream_mudar_player ;;
+            res) eazy_stream_mudar_resolucao ;;
             edit) eazy_stream_edit_item ;;
             del) eazy_stream_delete_item ;;
             list)
@@ -7945,6 +8512,8 @@ Itens: $n_st" 18 68 7 \
         esac
     done
 }
+
+
 
 
 adicionar_download() {
@@ -9211,24 +9780,127 @@ remover_dirs_vazios_fzf() {
 
 registrar_status() {
     eazy_ensure_tmp
-    [ -n "${TMP_FILE:-}" ] || TMP_FILE="${EAZY_TMP_DIR}/fzf_tmp_$$"
+    [ -n "${TMP_FILE:-}" ] || TMP_FILE="${EAZY_TMP_DIR:-$HOME/.config/eazy/tmp}/fzf_tmp_$$"
     printf "%s|%s|%s|%s|%s\n" "${TMP:-1}" "${ALVO:-}" "${ULTIMO_ARQUIVO:-}" "${ULTIMO_DIR:-}" "${MODO_PLAYLIST:-0}" > "$TMP_FILE"
+}
+
+# Consulta metadados de um item de lista no índice, sem ler o conteúdo.
+# Saída: tamanho, mtime, tipo, nome, caminho, duração, extensão.
+eazy_index_lookup_path() {
+    local p="$1"
+    [ -f "${EAZY_INDEXER:-}" ] && [ -f "${EAZY_INDEX_DB:-}" ] || return 1
+    printf '%s\0' "$p" | "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --lookup0 2>/dev/null | head -n 1
+}
+
+# A tabela só é criada durante a migração; antes disso a primeira entrada é bloqueada.
+eazy_history_table_exists() {
+    [ -f "${EAZY_INDEX_DB:-}" ] || return 1
+    "${PYTHON_CMD:-python3}" - "$EAZY_INDEX_DB" <<'PY' >/dev/null 2>&1
+import sqlite3,sys
+con=sqlite3.connect(sys.argv[1],timeout=2)
+ok=con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='history_state'").fetchone()
+con.close()
+raise SystemExit(0 if ok else 1)
+PY
+}
+
+# Migra uma única vez. O arquivo legado é preservado e não é truncado.
+eazy_history_migrate_on_entry() {
+    eazy_history_table_exists && return 0
+    mkdir -p "$CONFIG_DIR" "${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}" 2>/dev/null || true
+    if command -v whiptail >/dev/null 2>&1; then
+        whiptail --title "Histórico — migração necessária" --msgbox \
+            "O histórico ainda não foi migrado para o banco SQLite.\\n\\nO Easy vai recriar history_items lendo cada linha do arquivo original:\\n$HISTORY_FILE\\n\\nO arquivo será mantido intacto; não haverá conversão nem substituição de caracteres.\\n\\nA primeira entrada apenas migra. Quando terminar, entre novamente em Histórico." 14 76 || true
+    else
+        printf '%s\\n' "Histórico ainda não migrado. Migrando para o SQLite..." >&2
+    fi
+    [ -f "${HISTORY_FILE:-}" ] || : > "$HISTORY_FILE"
+    if ! "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --history-sync-file "$HISTORY_FILE" >/dev/null 2>&1; then
+        if command -v whiptail >/dev/null 2>&1; then
+            whiptail --title "Falha na migração do histórico" --msgbox "Não foi possível recriar history_items. O arquivo original continua preservado. Verifique Python 3, permissões e eazy-index.py; depois tente Ctrl+G novamente." 11 74 || true
+        else
+            echo "Falha ao importar o histórico; arquivo original preservado." >&2
+        fi
+        return 1
+    fi
+    return 1
+}
+
+# Depois da migração, todos os caminhos vêm da tabela, nunca do arquivo legado.
+eazy_history_bulk_lookup() {
+    local out="$1"
+    : > "$out"
+    eazy_history_table_exists || return 0
+    "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --history-lookup > "$out" 2>/dev/null || :
+}
+
+eazy_history_db_count() {
+    eazy_history_table_exists || { printf '0'; return 0; }
+    "${PYTHON_CMD:-python3}" - "$EAZY_INDEX_DB" <<'PY' 2>/dev/null || printf '0'
+import sqlite3,sys
+con=sqlite3.connect(sys.argv[1]); print(con.execute('SELECT count(*) FROM history_items').fetchone()[0]); con.close()
+PY
+}
+
+# Consulta rápida da pasta já indexada; o find permanece como fallback.
+eazy_lista_diretorio_fonte() {
+    local root extq qtmp
+    root=$(pwd -P 2>/dev/null || pwd)
+    extq="TODAS"
+    case "${FILTRO_ATUAL:-ambos}" in
+        videos) extq="mp4 mkv avi mov webm wmv flv m4v mpg mpeg ts" ;;
+        audios) extq="mp3 m4a wav flac ogg opus aac wma" ;;
+        imgs) extq="jpg jpeg png gif webp bmp tif tiff svg" ;;
+        compactados) extq="zip tar gz bz2 xz rar 7z" ;;
+        ambos) extq="mp4 mkv avi mov webm wmv flv m4v mp3 m4a wav flac ogg opus jpg jpeg png gif webp bmp zip tar gz bz2 xz rar 7z m3u pls m3u8 txt" ;;
+    esac
+    qtmp="${EAZY_TMP_DIR}/eazy_dir_query_$$"
+    if [ -f "${EAZY_INDEXER:-}" ] && command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1 && [ -f "${EAZY_INDEX_DB:-}" ]; then
+        local -a qargs=(--db "$EAZY_INDEX_DB" --query --root "$root" --direct --include-dirs --ext "$extq")
+        [ "${SHOW_DELETED:-0}" = "1" ] && qargs+=(--show-deleted)
+        if "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" "${qargs[@]}" > "$qtmp" 2>/dev/null; then
+            cat "$qtmp"
+            rm -f "$qtmp"
+            return 0
+        fi
+    fi
+    rm -f "$qtmp"
+    find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\t\n" 2>/dev/null
+}
+
+eazy_index_mark_deleted() {
+    local p="$1"
+    [ -n "$p" ] && [ -f "${EAZY_INDEX_DB:-}" ] && [ -f "${EAZY_INDEXER:-}" ] || return 0
+    "${PYTHON_CMD:-python3}" - "$EAZY_INDEX_DB" "$p" <<'PY' 2>/dev/null || true
+import sqlite3, sys, time
+db, path = sys.argv[1], sys.argv[2]
+con = sqlite3.connect(db, timeout=10)
+con.execute("UPDATE files SET deleted=1, deleted_at=? WHERE path=?", (int(time.time()), path))
+con.commit()
+con.close()
+PY
 }
 
 # Sincroniza a posição real do fzf, inclusive Page Down/Page Up/Home/End.
 # {n} é o índice zero-based do item atualmente focado; {2} é a linha inteira.
 eazy_sync_cursor() {
+    # Leve: só grava índice/item no TMP_FILE (chamado no focus do fzf)
     local idx="${1:-}" linha="${2:-}" item=""
-    eazy_ensure_tmp
-    [ -n "${TMP_FILE:-}" ] || TMP_FILE="${EAZY_TMP_DIR}/fzf_tmp_$$"
-    idx=$(printf '%s' "$idx" | LC_ALL=C tr -cd '0-9')
+    [ -n "${TMP_FILE:-}" ] || TMP_FILE="${EAZY_TMP_DIR:-/tmp}/fzf_tmp_$$"
+    idx="${idx//[^0-9]/}"
     [ -n "$idx" ] || return 0
     TMP=$((idx + 1))
-    if ! eazy_eh_navegacao "$linha"; then
-        item=$(printf '%s\n' "$linha" | awk -F '\t' '{print $NF}')
+    # campo path é o último tab; evita awk se possível
+    if [ -n "$linha" ]; then
+        item="${linha##*$'\t'}"
+        case "$item" in
+            ..|*"◀ Voltar"*) item="" ;;
+        esac
     fi
-    IFS='|' read -r _old_tmp _old_alvo _old_item _old_dir _old_modo < "$TMP_FILE" 2>/dev/null || true
-    printf "%s|%s|%s|%s|%s\n" "$TMP" "${_old_alvo:-$ALVO}" "$item" "${_old_dir:-$ULTIMO_DIR}" "${_old_modo:-${MODO_PLAYLIST:-0}}" > "$TMP_FILE"
+    # lê só o que precisa manter; uma escrita
+    local _old_alvo _old_dir _old_modo
+    IFS='|' read -r _ _old_alvo _ _old_dir _old_modo < "$TMP_FILE" 2>/dev/null || true
+    printf "%s|%s|%s|%s|%s\n" "$TMP" "${_old_alvo:-${ALVO:-}}" "$item" "${_old_dir:-${ULTIMO_DIR:-}}" "${_old_modo:-${MODO_PLAYLIST:-0}}" > "$TMP_FILE"
 }
 
 obter_lista_rapida() {
@@ -9267,7 +9939,8 @@ obter_lista_rapida() {
         # Ficheiro da lista = cache. Só reindexa se mtime mudar. stat rápido por ficheiro (tamanho na lista).
         local pl_mtime pl_key pl_cache pl_meta pl_dir
         pl_mtime=$(stat -c '%Y' -- "$ARQUIVO_PLAYLIST_ABERTO" 2>/dev/null || echo 0)
-        pl_key="${ARQUIVO_PLAYLIST_ABERTO}|${pl_mtime}|${MODO_ATUAL:-tamanho}|sz4"
+        pl_key="${ARQUIVO_PLAYLIST_ABERTO}|${pl_mtime}|${MODO_ATUAL:-tamanho}|sz4|history-db-513"
+        [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ] && pl_key="${pl_key}|$(eazy_history_db_count 2>/dev/null || echo 0)"
         pl_cache="${EAZY_TMP_DIR}/pl_view_$(printf '%s' "$ARQUIVO_PLAYLIST_ABERTO" | md5sum 2>/dev/null | awk '{print $1}').cache"
         pl_meta="${pl_cache}.meta"
         if [ -s "$pl_cache" ] && [ -f "$pl_meta" ] && [ "$(cat "$pl_meta" 2>/dev/null)" = "$pl_key" ]; then
@@ -9278,6 +9951,23 @@ obter_lista_rapida() {
         {
             printf "000000000000000\t%b[D] %-40s%b\t%b[%-6s]%b\t..\n" \
                 "$C_DIR" "◀ Voltar aos Arquivos" "$C_RESET" "$C_SIZE" "-- MB" "$C_RESET"
+            local hist_meta="" hist_source="$ARQUIVO_PLAYLIST_ABERTO"
+            declare -gA EAZY_HIST_SIZE EAZY_HIST_MT EAZY_HIST_KIND EAZY_HIST_DUR
+            EAZY_HIST_SIZE=(); EAZY_HIST_MT=(); EAZY_HIST_KIND=(); EAZY_HIST_DUR=()
+            if [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
+                hist_source="${EAZY_TMP_DIR}/history_paths_$$"
+                "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --history-list > "$hist_source" 2>/dev/null || :
+                hist_meta="${EAZY_TMP_DIR}/history_meta_$$"
+                eazy_history_bulk_lookup "$hist_meta"
+                while IFS=$'\t' read -r _hs _hm _hk _hn _hp _hd _he _hx; do
+                    [ -n "$_hp" ] || continue
+                    EAZY_HIST_SIZE["$_hp"]="$_hs"
+                    EAZY_HIST_MT["$_hp"]="$_hm"
+                    EAZY_HIST_KIND["$_hp"]="$_hk"
+                    EAZY_HIST_DUR["$_hp"]="$_hd"
+                done < "$hist_meta"
+                rm -f "$hist_meta"
+            fi
             while IFS= read -r item || [ -n "$item" ]; do
                 [ -z "$item" ] && continue
                 [[ "$item" =~ ^# ]] && continue
@@ -9295,11 +9985,22 @@ obter_lista_rapida() {
                     zip|tar|gz|bz2|xz|rar|7z) tipo_icone="[Z]"; tipo_cor="$C_ZIP" ;;
                 esac
                 local _sz=0 _mb="?" _mt=0 _info=""
-                if [ -e "$item_res" ]; then
+                local _idx_row=""
+                if [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ] && [ -n "${EAZY_HIST_SIZE[$item_res]+yes}" ]; then
+                    _sz="${EAZY_HIST_SIZE[$item_res]}"
+                    _mt="${EAZY_HIST_MT[$item_res]}"
+                else
+                    _idx_row=$(eazy_index_lookup_path "$item_res" 2>/dev/null || true)
+                if [ -n "$_idx_row" ]; then
+                    IFS=$'\t' read -r _sz _mt _idx_kind _idx_name _idx_path _idx_duration _idx_ext <<< "$_idx_row"
+                    _sz=$(printf '%s' "$_sz" | tr -cd '0-9'); _sz=${_sz:-0}
+                    _mt=$(printf '%s' "$_mt" | tr -cd '0-9.'); _mt=${_mt:-0}
+                elif [ -e "$item_res" ]; then
                     _sz=$(stat -c%s -- "$item_res" 2>/dev/null || echo 0)
                     _sz=$(printf '%s' "$_sz" | tr -cd '0-9'); _sz=${_sz:-0}
                     _mt=$(stat -c%Y -- "$item_res" 2>/dev/null || echo 0)
                     _mt=$(printf '%s' "$_mt" | tr -cd '0-9'); _mt=${_mt:-0}
+                fi
                 fi
                 if [ -f "$item_res" ]; then
                     if [ "$_sz" -ge 1073741824 ]; then
@@ -9344,7 +10045,8 @@ obter_lista_rapida() {
                 printf "%015d\t%b%s %-40s%b\t%b[%s]%b\t%s\n" \
                     "$chave_ord" "$tipo_cor" "$tipo_icone" "$nome_exib" "$C_RESET" \
                     "$C_SIZE" "$_info" "$C_RESET" "$item_res"
-            done < "$ARQUIVO_PLAYLIST_ABERTO"
+            done < "$hist_source"
+            [ "$hist_source" = "$ARQUIVO_PLAYLIST_ABERTO" ] || rm -f "$hist_source"
         } > "$pl_cache"
         printf '%s\n' "$pl_key" > "$pl_meta"
         cat "$pl_cache"
@@ -9435,6 +10137,15 @@ obter_lista_rapida() {
         cache_file="${BUSCA_CACHE_DIR}/${cache_key}.tsv"
         tmp_busca="$EAZY_TMP_DIR/eazy_busca_raw_$$"
 
+        # Remake: apaga cache de sessão e snapshot para forçar scan novo
+        if [ "${BUSCA_REMAKE:-0}" = "1" ]; then
+            rm -f "$cache_file" "${cache_file}.meta" 2>/dev/null || true
+            BUSCA_SNAPSHOT_FILE=""
+            rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+            EAZY_BUSCA_NOME_ATUAL=""
+            eazy_lista_cache_invalidate 2>/dev/null || true
+        fi
+
         # Pesquisa salva: usa o resultado congelado até o usuário pedir remake.
         if [ -n "${BUSCA_SNAPSHOT_FILE:-}" ] && [ "${BUSCA_REMAKE:-0}" -ne 1 ] && [ -f "$BUSCA_SNAPSHOT_FILE" ]; then
             local n_snapshot
@@ -9445,66 +10156,281 @@ obter_lista_rapida() {
             eazy_busca_msg ""
             cp -f "$BUSCA_SNAPSHOT_FILE" "$tmp_busca" 2>/dev/null || cat "$BUSCA_SNAPSHOT_FILE" > "$tmp_busca"
         # Buffer de busca: reutiliza resultado enquanto o eazy estiver aberto
+        # (só refaz quando BUSCA_REMAKE=1 — Alt+R ou Nova pesquisa)
         elif [ -s "$cache_file" ] && [ "${BUSCA_REMAKE:-0}" -ne 1 ]; then
-            local n_cache
-            n_cache=$(wc -l < "$cache_file" 2>/dev/null | tr -cd '0-9')
-            n_cache=${n_cache:-0}
-            eazy_busca_msg ""
-            eazy_busca_msg $'\033[1;32m'"⚡ Cache de busca — $n_cache arquivo(s) (instantâneo)"$'\033[0m'
-            eazy_busca_msg ""
+            # Só relê cache — NÃO refaz scan (F9, marcar, ordenar, etc.)
+            BUSCA_REMAKE=0
             cp -f "$cache_file" "$tmp_busca" 2>/dev/null || cat "$cache_file" > "$tmp_busca"
+            # silencioso: sem mensagem, sem espera, sem monitor de Esc
         else
             : > "$tmp_busca"
             BUSCA_REMAKE=0
 
-            # Segmentos: 0-9, A-Z, outros — barra atualiza ANTES e DEPOIS de cada um
-            local letras=({0..9} {A..Z})
-            local total_seg=$((${#letras[@]} + 1))
-            local idx=0 total_achados=0
-            local let seg_tmp n_seg pct
             local size_args=()
             [ -n "${BUSCA_TAM_MIN:-}" ] && size_args+=("-size" "+${BUSCA_TAM_MIN}c")
             [ -n "${BUSCA_TAM_MAX:-}" ] && size_args+=("-size" "-${BUSCA_TAM_MAX}c")
+
+            # Raiz da busca = pasta onde o usuário está (NUNCA / nem disco inteiro)
+            local busca_raiz
+            busca_raiz="${BUSCA_ORIGEM:-}"
+            if [ -z "$busca_raiz" ] || [ ! -d "$busca_raiz" ]; then
+                busca_raiz=$(pwd -P 2>/dev/null || pwd)
+            fi
+            BUSCA_ORIGEM="$busca_raiz"
+
+            # Caminho rápido: consultas simples usam o índice SQLite já gerado.
+            # Busca por conteúdo continua no fluxo tradicional, pois precisa ler os arquivos.
+            local indice_usado=0
+            if [ -z "${BUSCA_CONTEUDO:-}" ] && [ -f "${EAZY_INDEXER:-}" ] && [ -f "${EAZY_INDEX_DB:-}" ] && command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1; then
+                local idx_query="$EAZY_TMP_DIR/eazy_busca_index_$$"
+                if "${PYTHON_CMD:-python3}" "$EAZY_INDEXER" --db "$EAZY_INDEX_DB" --query --root "$busca_raiz" --ext "${EXT_BUSCA:-TODAS}" --min-size "${BUSCA_TAM_MIN:-0}" --max-size "${BUSCA_TAM_MAX:-0}" > "$idx_query" 2>/dev/null; then
+                    cp -f "$idx_query" "$tmp_busca" 2>/dev/null || cat "$idx_query" > "$tmp_busca"
+                    rm -f "$idx_query"
+                    total_achados=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9'); total_achados=${total_achados:-0}
+                    indice_usado=1
+                    eazy_busca_msg "✓ Pesquisa respondida pelo banco SQLite — $total_achados arquivo(s)"
+                else
+                    rm -f "$idx_query"
+                fi
+            fi
+
+            # Alerta se a raiz for demasiado ampla (/, /mnt/c, etc.)
+            case "$busca_raiz" in
+                /|/mnt|/mnt/c|/mnt/c/|/mnt/d|/mnt/d/|/mnt/e|/mnt/e/)
+                    local _msg_amp
+                    _msg_amp="A busca vai começar em:\n\n  $busca_raiz\n\nIsto pode demorar vários minutos (ou muito mais),\ndependendo da quantidade de dados neste ponto.\n\nDeseja realmente continuar?"
+                    if command -v whiptail >/dev/null 2>&1; then
+                        if ! whiptail --title "⚠ Busca ampla" --yesno "$_msg_amp" 16 62; then
+                            eazy_busca_msg $'\033[0;90m'"Busca cancelada — raiz ampla."$'[0m'
+                            return 0
+                        fi
+                    else
+                        printf '%s\n' "⚠ Busca ampla: $busca_raiz"
+                        printf '%s\n' "Pode demorar vários minutos conforme a quantidade de dados."
+                        printf '%s' "Deseja realmente continuar? [s/N] "
+                        local _r=""
+                        IFS= read -r _r || true
+                        case "$_r" in
+                            s|S|y|Y|sim|Sim) ;;
+                            *) eazy_busca_msg $'\033[0;90m'"Busca cancelada."$'[0m'; return 0 ;;
+                        esac
+                    fi
+                    ;;
+            esac
+
+            if [ "$indice_usado" -eq 0 ]; then
+            # Sempre segmentado (0-9/A-Z/outros): progresso + Esc.
+            local busca_parcial=0 total_achados=0 _ult=""
+
+            # Segmentos: 0-9, A-Z, outros — UI ao vivo + Esc confirma resultados parciais
+            local letras=({0..9} {A..Z})
+            local total_seg=$((${#letras[@]} + 1))
+            local idx=0 total_achados=0
+            local let seg_tmp n_seg pct _ult busca_parcial=0
 
             local titulo="🔍 Busca segmentada [${EXT_BUSCA:-todas}]"
             [ -n "${BUSCA_TAM_LABEL:-}" ] && titulo="$titulo  tam:$BUSCA_TAM_LABEL"
             [ -n "${BUSCA_CONTEUDO:-}" ] && titulo="$titulo  txt:«${BUSCA_CONTEUDO:0:16}»"
             eazy_busca_msg ""
             eazy_busca_msg $'\033[1;36m'"$titulo"$'\033[0m'
-            eazy_busca_msg $'\033[0;90m'"   segmentos: 0-9 → A-Z → outros"$'\033[0m'
+            eazy_busca_msg $'\033[0;90m'"   em: $busca_raiz"$'[0m'
+            eazy_busca_msg $'\033[0;90m'"   segmentos: 0-9 → A-Z → outros  ·  Esc = parar e usar achados"$'\033[0m'
+            eazy_busca_msg ""
+
+            eazy_busca_cancelar_iniciar 2>/dev/null || true
 
             for let in "${letras[@]}"; do
+                if eazy_busca_cancelada; then
+                    busca_parcial=1
+                    break
+                fi
                 pct=$((idx * 100 / total_seg))
-                eazy_status_file "busca" "$(pwd -P)/$let*" "[seg $let]" 2>/dev/null || true
-                eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..."
+                eazy_status_file "busca" "$busca_raiz/$let*" "[seg $let]" 2>/dev/null || true
+                eazy_busca_progresso "$pct" "$let" "..." "$total_achados" "scan..." "${EAZY_BUSCA_NOME_ATUAL:-}" "$tmp_busca"
                 seg_tmp="$EAZY_TMP_DIR/eazy_busca_seg_$$"
-                find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
-                    -iname "${let}*" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
+                atual_tmp="$EAZY_TMP_DIR/eazy_busca_atual_$$"
+                : > "$seg_tmp"
+                : > "$atual_tmp"
+                # Stream ficheiro a ficheiro: "atual:" = nome real, não o padrão da letra.
+                if [ "${#ext_arr_busca[@]}" -lt 1 ]; then
+                    _find_pid=""
+                else
+                    (
+                        find "$busca_raiz" -type f -iname "${let}*" 2>/dev/null | while IFS= read -r _fp || [ -n "${_fp:-}" ]; do
+                            [ -z "${_fp:-}" ] && continue
+                            _bn="${_fp##*/}"
+                            printf '%s\n' "$_bn" > "$atual_tmp"
+                            # extensão do ficheiro
+                            case "$_bn" in
+                                *.*) _ext="${_bn##*.}" ;;
+                                *) continue ;;  # sem extensão: mostra em atual, não é hit de mídia
+                            esac
+                            _ext_l=$(printf '%s' "$_ext" | tr '[:upper:]' '[:lower:]')
+                            # pertence a EXT_BUSCA?
+                            _ok=0
+                            case " ${EXT_BUSCA:-} " in
+                                *" TODAS "*|*" todas "*) _ok=1 ;;
+                                *" ${_ext_l} "*) _ok=1 ;;
+                            esac
+                            [ "$_ok" -eq 1 ] || continue
+                            _sz=$(stat -c%s -- "$_fp" 2>/dev/null || echo 0)
+                            _mt=$(stat -c%Y -- "$_fp" 2>/dev/null || echo 0)
+                            if [ -n "${BUSCA_TAM_MIN:-}" ] && [ "$_sz" -le "${BUSCA_TAM_MIN}" ] 2>/dev/null; then
+                                continue
+                            fi
+                            if [ -n "${BUSCA_TAM_MAX:-}" ] && [ "$_sz" -ge "${BUSCA_TAM_MAX}" ] 2>/dev/null; then
+                                continue
+                            fi
+                            printf '%s\t%s\t%s\t%s\t%s\n' "$_sz" "$_mt" "f" "$_bn" "$_fp" >> "$seg_tmp"
+                        done
+                    ) &
+                    _find_pid=$!
+                fi
+                if [ -n "$_find_pid" ] && ! eazy_busca_esperar_pid "$_find_pid" "$let" "$pct" "$tmp_busca" "$seg_tmp" "$atual_tmp"; then
+                    # cancelado a meio
+                    [ -s "$seg_tmp" ] && cat "$seg_tmp" >> "$tmp_busca"
+                    n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9'); n_seg=${n_seg:-0}
+                    total_achados=$((total_achados + n_seg))
+                    rm -f "$seg_tmp"
+                    busca_parcial=1
+                    break
+                fi
                 n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
                 n_seg=${n_seg:-0}
                 cat "$seg_tmp" >> "$tmp_busca"
+                _ult=$(tail -n1 "$seg_tmp" 2>/dev/null | awk -F '\t' '{print $4}')
+                if [ "${BUSCA_LIVE_STATUS:-1}" = "1" ]; then
+                    mkdir -p "$BUSCA_CACHE_DIR" 2>/dev/null || true
+                    cp -f "$tmp_busca" "$cache_file" 2>/dev/null || true
+                fi
                 rm -f "$seg_tmp"
                 total_achados=$((total_achados + n_seg))
                 idx=$((idx + 1))
                 pct=$((idx * 100 / total_seg))
-                eazy_busca_progresso "$pct" "$let" "$n_seg" "$total_achados" "ok"
+                eazy_busca_progresso "$pct" "$let" "$n_seg" "$total_achados" "ok" "${_ult:-}" "$tmp_busca"
             done
 
-            pct=$((idx * 100 / total_seg))
-            eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..."
-            seg_tmp="$EAZY_TMP_DIR/eazy_busca_seg_$$"
-            find "$(pwd -P)" -type f \( "${ext_arr_busca[@]}" \) "${size_args[@]}" \
-                ! -iname "[0-9]*" ! -iname "[A-Za-z]*" \
-                -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null > "$seg_tmp"
-            n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
-            n_seg=${n_seg:-0}
-            cat "$seg_tmp" >> "$tmp_busca"
-            rm -f "$seg_tmp"
-            total_achados=$((total_achados + n_seg))
-            eazy_busca_progresso 100 "outros" "$n_seg" "$total_achados" "ok"
-            eazy_busca_msg ""
-            eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
-            eazy_busca_msg ""
+            if [ "$busca_parcial" -ne 1 ]; then
+                if eazy_busca_cancelada; then
+                    busca_parcial=1
+                else
+                    pct=$((idx * 100 / total_seg))
+                    eazy_busca_progresso "$pct" "outros" "..." "$total_achados" "scan..." "${EAZY_BUSCA_NOME_ATUAL:-}" "$tmp_busca"
+                    seg_tmp="$EAZY_TMP_DIR/eazy_busca_seg_$$"
+                    atual_tmp="$EAZY_TMP_DIR/eazy_busca_atual_$$"
+                    : > "$seg_tmp"
+                    : > "$atual_tmp"
+                    (
+                        find "$busca_raiz" -type f ! -iname "[0-9]*" ! -iname "[A-Za-z]*" 2>/dev/null | while IFS= read -r _fp || [ -n "${_fp:-}" ]; do
+                            [ -z "${_fp:-}" ] && continue
+                            _bn="${_fp##*/}"
+                            printf '%s\n' "$_bn" > "$atual_tmp"
+                            case "$_bn" in
+                                *.*) _ext="${_bn##*.}" ;;
+                                *) continue ;;
+                            esac
+                            _ext_l=$(printf '%s' "$_ext" | tr '[:upper:]' '[:lower:]')
+                            _ok=0
+                            case " ${EXT_BUSCA:-} " in
+                                *" TODAS "*|*" todas "*) _ok=1 ;;
+                                *" ${_ext_l} "*) _ok=1 ;;
+                            esac
+                            [ "$_ok" -eq 1 ] || continue
+                            _sz=$(stat -c%s -- "$_fp" 2>/dev/null || echo 0)
+                            _mt=$(stat -c%Y -- "$_fp" 2>/dev/null || echo 0)
+                            if [ -n "${BUSCA_TAM_MIN:-}" ] && [ "$_sz" -le "${BUSCA_TAM_MIN}" ] 2>/dev/null; then continue; fi
+                            if [ -n "${BUSCA_TAM_MAX:-}" ] && [ "$_sz" -ge "${BUSCA_TAM_MAX}" ] 2>/dev/null; then continue; fi
+                            printf '%s\t%s\t%s\t%s\t%s\n' "$_sz" "$_mt" "f" "$_bn" "$_fp" >> "$seg_tmp"
+                        done
+                    ) &
+                    _find_pid=$!
+                    if ! eazy_busca_esperar_pid "$_find_pid" "outros" "$pct" "$tmp_busca" "$seg_tmp" "$atual_tmp"; then
+                        [ -s "$seg_tmp" ] && cat "$seg_tmp" >> "$tmp_busca"
+                        n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9'); n_seg=${n_seg:-0}
+                        total_achados=$((total_achados + n_seg))
+                        rm -f "$seg_tmp"
+                        busca_parcial=1
+                    else
+                        n_seg=$(wc -l < "$seg_tmp" 2>/dev/null | tr -cd '0-9')
+                        n_seg=${n_seg:-0}
+                        cat "$seg_tmp" >> "$tmp_busca"
+                        _ult=$(tail -n1 "$seg_tmp" 2>/dev/null | awk -F '\t' '{print $4}')
+                        rm -f "$seg_tmp"
+                        total_achados=$((total_achados + n_seg))
+                        eazy_busca_progresso 100 "outros" "$n_seg" "$total_achados" "ok" "${_ult:-}" "$tmp_busca"
+                    fi
+                fi
+            fi
+
+            eazy_busca_cancelar_parar 2>/dev/null || true
+
+            if [ "$busca_parcial" -eq 1 ]; then
+                eazy_busca_msg ""
+                eazy_busca_msg $'\033[1;33m'"⏸ Esc — busca interrompida. Já encontrados: $total_achados"$'\033[0m'
+                if [ "$total_achados" -gt 0 ]; then
+                    if command -v whiptail >/dev/null 2>&1; then
+                        whiptail --title "Busca interrompida" --yesno \
+"Encontrados até agora: $total_achados arquivo(s).
+
+SIM = mostrar na lista
+NÃO = descartar
+
+(Esc no diálogo também MANTÉM os resultados)" 13 60
+                        _brc=$?
+                        rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+                        # 0=Sim, 255=Esc → manter; só 1=Não descarta
+                        if [ "$_brc" -eq 1 ]; then
+                            eazy_busca_msg $'\033[1;33m'"Busca cancelada — sem resultados."$'\033[0m'
+                            rm -f "$tmp_busca"
+                            return 130
+                        fi
+                        eazy_busca_msg $'\033[1;32m'"✓ A mostrar resultados parciais."$'\033[0m'
+                    else
+                        eazy_busca_msg "Usar os $total_achados achados? [S/n]"
+                        read -r -n1 _r < /dev/tty 2>/dev/null || read -r -n1 _r
+                        eazy_busca_msg ""
+                        case "${_r:-S}" in
+                            n|N) rm -f "$tmp_busca"; return 130 ;;
+                            *) rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+                               eazy_busca_msg $'\033[1;32m'"✓ Resultados parciais."$'\033[0m' ;;
+                        esac
+                    fi
+                else
+                    eazy_busca_msg $'\033[1;33m'"Nenhum arquivo encontrado antes do Esc."$'\033[0m'
+                    rm -f "$tmp_busca"
+                    return 130
+                fi
+            else
+                eazy_busca_msg ""
+                eazy_busca_msg $'\033[1;32m'"✓ Busca concluída — $total_achados arquivo(s)"$'\033[0m'
+                eazy_busca_msg ""
+                eazy_busca_aguardar_enter
+            fi
+
+            # Remove linhas vazias/incompletas (típico de Esc a meio do find)
+            if [ -s "$tmp_busca" ]; then
+                awk -F '\t' 'NF >= 5 && $5 != "" && $5 != "." && $5 != ".." {
+                    gsub(/\r/, "", $5)
+                    if (length($5) > 0) print $0
+                }' "$tmp_busca" > "${tmp_busca}.ok" 2>/dev/null                     && mv -f "${tmp_busca}.ok" "$tmp_busca"                     || true
+                total_achados=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
+                total_achados=${total_achados:-0}
+            fi
+
+
+            # Segurança: só manter ficheiros cuja extensão está em EXT_BUSCA
+            if [ -s "$tmp_busca" ] && [ -n "${EXT_BUSCA:-}" ]; then
+                case " ${EXT_BUSCA} " in
+                    *" TODAS "*|*" todas "*) ;;
+                    *)
+                        _ext_re=$(printf '%s' "$EXT_BUSCA" | tr ' ' '|' | tr '[:upper:]' '[:lower:]')
+                        awk -F '\t' -v re="\\.($_ext_re)$" 'BEGIN{IGNORECASE=1} tolower($5) ~ re {print}' "$tmp_busca" > "${tmp_busca}.f" 2>/dev/null \
+                            && mv -f "${tmp_busca}.f" "$tmp_busca" || true
+                        total_achados=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
+                        total_achados=${total_achados:-0}
+                        ;;
+                esac
+            fi
 
             # Filtro por conteúdo (grep) com barra própria
             if [ -n "${BUSCA_CONTEUDO:-}" ]; then
@@ -9546,29 +10472,45 @@ obter_lista_rapida() {
             fi
 
             if eazy_busca_cancelada; then
-                eazy_busca_msg ""
-                eazy_busca_msg $'\033[1;33mBusca cancelada por Esc.\033[0m'
-                return 130
+                # Se ainda há flag mas já temos ficheiros, usa-os (não lista vazia)
+                n_keep=$(wc -l < "$tmp_busca" 2>/dev/null | tr -cd '0-9')
+                n_keep=${n_keep:-0}
+                rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+                if [ "$n_keep" -lt 1 ]; then
+                    eazy_busca_msg ""
+                    eazy_busca_msg $'\033[1;33mBusca cancelada por Esc.\033[0m'
+                    return 130
+                fi
+                eazy_busca_msg $'\033[1;33m'"Esc — a usar $n_keep resultado(s) já encontrados."$'\033[0m'
             fi
 
             # Grava no buffer da sessão
             mkdir -p "$BUSCA_CACHE_DIR" 2>/dev/null || true
             cp -f "$tmp_busca" "$cache_file" 2>/dev/null || cat "$tmp_busca" > "$cache_file"
+            # Importante: limpa Esc residual para não esvaziar a lista no passo seguinte
+            rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+            BUSCA_REMAKE=0
+            fi
         fi
 
         awk -F'\t' \
             -v c_vid="$C_VID" -v c_aud="$C_AUD" -v c_img="$C_IMG" -v c_zip="$C_ZIP" \
             -v c_size="$C_SIZE" -v c_reset="$C_RESET" -v modo="$MODO_ATUAL" \
-            -v tmin="${BUSCA_TAM_MIN:-0}" -v tmax="${BUSCA_TAM_MAX:-0}" '
+            -v tmin="${BUSCA_TAM_MIN:-0}" -v tmax="${BUSCA_TAM_MAX:-0}" \
+            -v c_dir=$'\033[1;34m' '
         {
             bytes = $1 + 0
             if (tmin > 0 && bytes <= tmin) next
             if (tmax > 0 && bytes >= tmax) next
 
             mtime = $2
+            tipo = $3
             nome = $4
             caminho = $5
             sub(/^\.\//, "", caminho)
+
+            # Busca só deve listar ficheiros (-type f). Se vier dir, ignora.
+            if (tipo == "d") next
 
             nome_exib = caminho
             if (length(nome_exib) > 45) {
@@ -9583,24 +10525,29 @@ obter_lista_rapida() {
                 chave = bytes + 0
             }
             n = split(nome, ext_arr, ".")
-            ext = (n > 1) ? tolower(ext_arr[n]) : "?"
-            info = sprintf("%s · %sMB · .%s", dt, mb, ext)
+            # sem ponto no nome → sem extensão (NÃO é vídeo por omissão)
+            ext = (n > 1 && length(ext_arr[n]) > 0 && length(ext_arr[n]) <= 8) ? tolower(ext_arr[n]) : ""
+            info = (ext == "") ? sprintf("%s · %sMB · (sem ext)", dt, mb) : sprintf("%s · %sMB · .%s", dt, mb, ext)
 
-            if (ext ~ /^(m3u|pls)$/) {
+            if (ext ~ /^(m3u|pls|m3u8)$/) {
                 printf "%015d\t%s📜 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
-            } else if (ext ~ /^(mp3|m4a|wav|flac|ogg)$/) {
+            } else if (ext ~ /^(mp3|m4a|wav|flac|ogg|opus)$/) {
                 printf "%015d\t%s🎵 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_aud, nome_exib, c_reset, c_size, info, c_reset, caminho
-            } else if (ext ~ /^(webp|jpg|jpeg|png|gif)$/) {
+            } else if (ext ~ /^(webp|jpg|jpeg|png|gif|bmp)$/) {
                 printf "%015d\t%s🖼️ %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_img, nome_exib, c_reset, c_size, info, c_reset, caminho
             } else if (ext ~ /^(zip|tar|gz|bz2|xz|rar|7z)$/) {
                 printf "%015d\t%s📦 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_zip, nome_exib, c_reset, c_size, info, c_reset, caminho
-            } else {
+            } else if (ext ~ /^(mp4|mkv|avi|mov|webm|wmv|flv|m4v|mpg|mpeg|ts)$/) {
                 printf "%015d\t%s🎬 %-42s%s\t%s[%s]%s\t%s\n",
                     chave, c_vid, nome_exib, c_reset, c_size, info, c_reset, caminho
+            } else {
+                # ficheiro genérico (vazio, sem extensão, .bin, etc.) — NUNCA trata como dir/vídeo
+                printf "%015d\t%s📄 %-42s%s\t%s[%s]%s\t%s\n",
+                    chave, c_size, nome_exib, c_reset, c_size, info, c_reset, caminho
             }
         }' "$tmp_busca"
         rm -f "$tmp_busca"
@@ -9658,18 +10605,24 @@ obter_lista_rapida() {
     local _lista_raw="${EAZY_TMP_DIR:-${CONFIG_DIR}/tmp}/eazy_lista_raw_$$"
     local _n_itens=0
     : > "$_lista_raw"
-    while IFS=$'\t' read -r _bytes _mtime _tipo _nome _caminho || [ -n "${_caminho:-}" ]; do
+    while IFS=$'\t' read -r _bytes _mtime _tipo _nome _caminho _duracao || [ -n "${_caminho:-}" ]; do
         [ -z "${_caminho:-}" ] && [ -z "${_nome:-}" ] && continue
         _n_itens=$((_n_itens + 1))
-        eazy_status_file "lendo" "${_caminho:-$_nome}" "[$_n_itens]" 2>/dev/null || true
+        # status a cada 25 itens — em /mnt/c update por ficheiro é lento
+        if [ $((_n_itens % 25)) -eq 1 ] || [ "$_n_itens" -le 3 ]; then
+            eazy_status_file "lendo" "${_caminho:-$_nome}" "[$_n_itens]" 2>/dev/null || true
+        fi
         case "${_caminho:-}" in
             /*) ;;
             ./*) _caminho="$(pwd -P)/${_caminho#./}" ;;
             "") ;;
             *) _caminho="$(pwd -P)/${_caminho}" ;;
         esac
+        # Confia no %y do find (f/d). NÃO fazer [ -d ]/[ -f ] por item:
+        # em /mnt/c (WSL/drvfs) cada teste trava a listagem.
+        # A busca já filtra -type f; Enter em modo busca nunca faz cd.
         printf '%s\t%s\t%s\t%s\t%s\n' "$_bytes" "$_mtime" "$_tipo" "$_nome" "$_caminho" >> "$_lista_raw"
-    done < <(find "${find_args[@]}" -printf "%s\t%T@\t%y\t%f\t%p\n" 2>/dev/null)
+    done < <(eazy_lista_diretorio_fonte)
     eazy_status_file "formatando lista" "$(pwd -P)" "[$_n_itens itens]" 2>/dev/null || true
     if [ -s "$_lista_raw" ]; then
         awk -F$'\t' \
@@ -9682,11 +10635,26 @@ obter_lista_rapida() {
         tipo = $3
         nome = $4
         caminho = $5
+        duracao = $6
+
+        if (tipo == "x" || tipo == "X") {
+            nome = "[DELETADO] " nome
+            tipo = (tipo == "X") ? "d" : "f"
+        }
 
         sub(/^\.\//, "", caminho)
         nome_exib = (length(nome) > 34) ? substr(nome, 1, 34) ".." : nome
         mb = sprintf("%.1f", bytes / 1048576)
         dt = strftime("%d/%m/%y %H:%M", int(mtime))
+        dur_txt = ""
+        if (duracao != "" && duracao > 0) {
+            ds = int((duracao + 0) / 1000)
+            dh = int(ds / 3600)
+            dm = int((ds % 3600) / 60)
+            dsec = ds % 60
+            if (dh > 0) dur_txt = sprintf("%d:%02d:%02d", dh, dm, dsec)
+            else dur_txt = sprintf("%d:%02d", dm, dsec)
+        }
 
         # data → mtime (epoch s); tamanho → bytes; nome → bytes (desempate, sort real é -k2)
         if (modo == "data") {
@@ -9725,6 +10693,8 @@ obter_lista_rapida() {
         # info: TAM · data · tipo/ext (tamanho primeiro para leitura rápida)
         if (tipo == "d") {
             info = sprintf("-- MB · %s · %s", dt, tipo_lab)
+        } else if (dur_txt != "") {
+            info = sprintf("%sMB · %s · %s · %s", mb, dt, dur_txt, tipo_lab)
         } else {
             info = sprintf("%sMB · %s · .%s", mb, dt, tipo_lab)
         }
@@ -9821,7 +10791,7 @@ eazy_menu_listas_ctrlp() {
     n1=$(contar_fila 1 2>/dev/null || echo 0); n1=$(printf '%s' "$n1" | tr -cd '0-9'); n1=${n1:-0}
     n2=$(contar_fila 2 2>/dev/null || echo 0); n2=$(printf '%s' "$n2" | tr -cd '0-9'); n2=${n2:-0}
     n3=$(contar_fila 3 2>/dev/null || echo 0); n3=$(printf '%s' "$n3" | tr -cd '0-9'); n3=${n3:-0}
-    nh=$(grep -cve '^[[:space:]]*$' "${HISTORY_FILE:-/dev/null}" 2>/dev/null || echo 0)
+    nh=$(eazy_history_db_count 2>/dev/null || echo 0)
     nh=$(printf '%s' "$nh" | tr -cd '0-9'); nh=${nh:-0}
     nd=$(contar_dup_lista 2>/dev/null || echo 0); nd=$(printf '%s' "$nd" | tr -cd '0-9'); nd=${nd:-0}
     menu_args+=(
@@ -9865,7 +10835,8 @@ eazy_menu_listas_ctrlp() {
             touch "$ARQUIVO_PLAYLIST_ABERTO"; carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
             ;;
         hist)
-            if [ ! -s "$HISTORY_FILE" ]; then
+            eazy_history_migrate_on_entry || return 1
+            if [ "$(eazy_history_db_count 2>/dev/null || echo 0)" -eq 0 ] 2>/dev/null; then
                 whiptail --title "Historico" --msgbox "Historico vazio." 8 40; return 1
             fi
             MODO_DUP=0; MODO_PLAYLIST=1; ARQUIVO_PLAYLIST_ABERTO="$HISTORY_FILE"
@@ -9894,13 +10865,114 @@ eazy_menu_listas_ctrlp() {
 }
 
 # --- Ctrl-L: item ou escrever caminho ---
+
+# --- Pastas favoritas (Ctrl+L lista / Ctrl++ adiciona) ---
+eazy_dir_fav_file() {
+    printf '%s\n' "${DIR_FAVORITES_FILE:-$CONFIG_DIR/dir_favorites}"
+}
+
+eazy_dir_fav_ensure() {
+    local f
+    f=$(eazy_dir_fav_file)
+    mkdir -p "$(dirname -- "$f")" 2>/dev/null || true
+    if [ ! -s "$f" ]; then
+        {
+            printf '%s\n' "$HOME"
+            [ -d /etc ] && printf '%s\n' /etc
+            [ -d /mnt ] && printf '%s\n' /mnt
+            [ -d /mnt/c ] && printf '%s\n' /mnt/c
+            [ -d /media ] && printf '%s\n' /media
+            printf '%s\n' "${DOWNLOAD_DIR:-$HOME/Downloads}"
+        } > "$f" 2>/dev/null || true
+    fi
+}
+
+eazy_dir_fav_add() {
+    local d="${1:-$(pwd -P 2>/dev/null || pwd)}" f
+    d=$(readlink -f -- "$d" 2>/dev/null || printf '%s' "$d")
+    [ -d "$d" ] || { whiptail --title "Favoritos" --msgbox "Não é pasta:\n$d" 9 55; return 1; }
+    eazy_dir_fav_ensure
+    f=$(eazy_dir_fav_file)
+    if grep -Fxq -- "$d" "$f" 2>/dev/null; then
+        whiptail --title "Favoritos" --msgbox "Já está na lista:\n$d" 9 60
+        return 0
+    fi
+    printf '%s\n' "$d" >> "$f"
+    whiptail --title "Favoritos · Ctrl++" --msgbox "Pasta adicionada:\n$d\n\nCtrl+L mostra a lista." 10 60
+}
+
+eazy_dir_fav_pick() {
+    local f selected n=0
+    local -a paths=() menu=()
+    eazy_dir_fav_ensure
+    f=$(eazy_dir_fav_file)
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        paths+=("$line")
+        n=$((n+1))
+        if [ -d "$line" ]; then
+            menu+=("$n" "$line")
+        else
+            menu+=("$n" "$line  (ausente)")
+        fi
+    done < "$f"
+    if [ "$n" -eq 0 ]; then
+        whiptail --title "Favoritos" --msgbox "Lista vazia.\n\nCtrl++ adiciona a pasta atual." 9 55
+        return 1
+    fi
+    selected=$(whiptail --title "Ctrl+L — Pastas favoritas" --menu \
+"Pastas frequentes.\nCtrl++ = adicionar pasta atual\nF9 liga/desliga este menu" 22 78 12 \
+        "${menu[@]}" \
+        "add" "＋ Adicionar pasta atual" \
+        "edit" "✏️  Editar lista (texto)" \
+        3>&1 1>&2 2>&3) || return 1
+    case "$selected" in
+        add) eazy_dir_fav_add "$(pwd -P)"; return 1 ;;
+        edit)
+            local editor="${EDITOR:-nano}"
+            command -v "$editor" >/dev/null 2>&1 || editor=vi
+            "$editor" "$f"
+            return 1
+            ;;
+        *)
+            if [[ "$selected" =~ ^[0-9]+$ ]] && [ "$selected" -ge 1 ] && [ "$selected" -le "${#paths[@]}" ]; then
+                printf '%s\n' "${paths[$((selected-1))]}"
+                return 0
+            fi
+            return 1
+            ;;
+    esac
+}
+
 eazy_ir_para_pasta() {
     local modo alvo_l dest_dir dest_item caminho dir_atual_antes origem_posicao
-    modo=$(whiptail --title "Ctrl-L — Ir para pasta" --menu "Como navegar?" 13 68 3 \
-        "item" "Pasta do item sob o cursor" \
-        "escrever" "Escrever caminho do diretorio" \
-        "cancel" "Cancelar" 3>&1 1>&2 2>&3) || return 1
+    if [ "${DIR_FAVORITES_MENU:-1}" = "1" ]; then
+        modo=$(whiptail --title "Ctrl-L — Ir para pasta" --menu "Como navegar?" 16 72 6 \
+            "fav" "★ Pastas favoritas (Ctrl++ adiciona atual)" \
+            "item" "Pasta do item sob o cursor" \
+            "escrever" "Escrever caminho do diretorio" \
+            "add" "＋ Adicionar pasta atual aos favoritos" \
+            "cancel" "Cancelar" 3>&1 1>&2 2>&3) || return 1
+    else
+        modo=$(whiptail --title "Ctrl-L — Ir para pasta" --menu "Como navegar?" 13 68 3 \
+            "item" "Pasta do item sob o cursor" \
+            "escrever" "Escrever caminho do diretorio" \
+            "cancel" "Cancelar" 3>&1 1>&2 2>&3) || return 1
+    fi
     case "$modo" in
+        fav)
+            caminho=$(eazy_dir_fav_pick) || return 1
+            [ -z "$caminho" ] && return 1
+            if [ ! -d "$caminho" ]; then
+                whiptail --title "Ir" --msgbox "Diretório não existe:\n$caminho" 9 55; return 1
+            fi
+            dest_dir=$(readlink -f -- "$caminho" 2>/dev/null || printf '%s' "$caminho")
+            dest_item=""
+            ;;
+        add)
+            eazy_dir_fav_add "$(pwd -P)"
+            return 0
+            ;;
         item)
             alvo_l=$(printf '%s\n' "${1:-}" | head -n1 | awk -F '\t' '{print $NF}')
             [ -z "$alvo_l" ] && { whiptail --title "Ir" --msgbox "Nenhum item sob o cursor." 8 40; return 1; }
@@ -10162,11 +11234,11 @@ menu_arquivo_html() {
     local arq="$1" opcao abs
     [ ! -f "$arq" ] && return 1
     abs=$(readlink -f -- "$arq" 2>/dev/null || printf '%s' "$arq")
-    opcao=$(whiptail --title "HTML — $(basename -- "$arq")" --menu \
+    opcao=$(whiptail --title "HTML — $(basename -- "$abs")" --menu \
         "Escolha uma operação:" 15 78 5 \
         "1" "Abrir no browser (escolher Brave/Chrome/Edge...)" \
-        "2" "📄 Ver código-fonte" \
-        "3" "✏️  Editar" \
+        "2" "Ver codigo-fonte" \
+        "3" "Editar" \
         "0" "Voltar" \
         3>&1 1>&2 2>&3) || return 0
     case "$opcao" in
@@ -10507,23 +11579,30 @@ montar_param_player() {
     esac
 }
 
+# Registra diretamente na tabela SQLite. O arquivo legado não é lido nem reescrito.
+eazy_history_record_db() {
+    local p="$1"
+    eazy_history_table_exists || return 0
+    "${PYTHON_CMD:-python3}" - "$EAZY_INDEX_DB" "$p" <<'PY' >/dev/null 2>&1
+import sqlite3,sys,time
+con=sqlite3.connect(sys.argv[1],timeout=10)
+with con:
+    con.execute("UPDATE history_items SET position=position+1")
+    con.execute("DELETE FROM history_items WHERE path=?",(sys.argv[2],))
+    con.execute("INSERT INTO history_items(path,position,played_at) VALUES(?,?,?)",(sys.argv[2],0,int(time.time())))
+    con.execute("DELETE FROM history_items WHERE position>=200")
+con.close()
+PY
+}
+
 # Registra arquivo no histórico (máx. 200 entradas, mais recente no topo)
 registrar_historico() {
     [ "${EAZY_IGNORE:-0}" = "1" ] && return 0
-    local arq="$1"
-    [ -z "$arq" ] || [ ! -e "$arq" ] && return
-    local abs
+    local arq="$1" abs
+    [ -n "$arq" ] || return 0
+    [ -e "$arq" ] || return 0
     abs=$(caminho_absoluto "$arq")
-    mkdir -p "$CONFIG_DIR" "${EAZY_TMP_DIR:-$CONFIG_DIR/tmp}" 2>/dev/null || true
-    touch "$HISTORY_FILE"
-    # Remove duplicata anterior e coloca no topo
-    grep -vxF -- "$abs" "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" 2>/dev/null || true
-    { printf '%s\n' "$abs"; cat "${HISTORY_FILE}.tmp" 2>/dev/null; } > "$HISTORY_FILE"
-    rm -f "${HISTORY_FILE}.tmp"
-    # Limita a 200
-    if [ "$(wc -l < "$HISTORY_FILE" 2>/dev/null | tr -cd '0-9')" -gt 200 ] 2>/dev/null; then
-        head -n 200 "$HISTORY_FILE" > "${HISTORY_FILE}.tmp" && mv "${HISTORY_FILE}.tmp" "$HISTORY_FILE"
-    fi
+    eazy_history_record_db "$abs"
 }
 
 eh_playlist_m3u() {
@@ -10555,6 +11634,27 @@ abrir_playlist_no_navegador() {
 tocar_arquivo() {
     local arq="$1"
     [ -z "$arq" ] && return 1
+    # Ficheiro vazio / sem extensão de mídia: não manda pro player (trava/mpv pendura)
+    if [ -f "$arq" ] && [ ! -s "$arq" ]; then
+        local _bn _ext
+        _bn=$(basename -- "$arq")
+        _ext=""
+        case "$_bn" in
+            *.*) _ext="${_bn##*.}"; _ext=$(printf '%s' "$_ext" | tr '[:upper:]' '[:lower:]') ;;
+        esac
+        case "$_ext" in
+            mp4|mkv|avi|mov|webm|wmv|flv|m4v|mp3|m4a|wav|flac|ogg|opus|m3u|m3u8|pls) ;;
+            *)
+                if command -v whiptail >/dev/null 2>&1; then
+                    whiptail --title "Arquivo vazio" --msgbox "Este ficheiro está vazio (0 bytes)\n e não é mídia reconhecida:\n\n$_bn\n\nNão será aberto no player." 12 60
+                else
+                    printf '%s\n' "Arquivo vazio (não mídia): $arq" >&2
+                    sleep 1
+                fi
+                return 0
+                ;;
+        esac
+    fi
     # HTML/URL nunca vão para o player de mídia
     if [[ "$arq" =~ ^https?:// ]]; then
         if type eh_url_video_online >/dev/null 2>&1 && eh_url_video_online "$arq"; then
@@ -11039,6 +12139,7 @@ confirmar_e_excluir() {
         [ -z "$item" ] && continue
         if rm -rf -- "$item" 2>/dev/null; then
             echo -e "  \033[1;32m✓\033[0m $item"
+            eazy_index_mark_deleted "$(readlink -f -- "$item" 2>/dev/null || printf '%s' "$item")"
             remover_selecao_global "$item" 2>/dev/null || true
             remover_selecao_local "$item" 2>/dev/null || true
             if [ -f "${SELECTED_DIRS_FILE:-}" ]; then
@@ -11055,6 +12156,7 @@ confirmar_e_excluir() {
     done < "$alvos_tmp"
     eazy_prune_selecao_global 2>/dev/null || true
     eazy_refresh_sel_bytes 2>/dev/null || true
+    eazy_lista_cache_invalidate 2>/dev/null || true
     echo -e "\033[1;32mConcluído.\033[0m"
     sleep 0.8
     rm -f "$alvos_tmp"
@@ -11460,10 +12562,8 @@ converter_imagem_pdf() {
 }
 
 converter_pdf_imagem() {
-    local pdf
-    pdf=$(selecionar_arquivo_conversao 'Selecione o PDF' pdf) || return
-    [ -f "$pdf" ] || return
-    pdf_para_imagens "$pdf"
+    # Um ou vários PDFs → PNG numa pasta
+    converter_pdf_lote png
 }
 
 # --- Leitor e conversor de PDF ---
@@ -11486,43 +12586,231 @@ pdf_exigir_ferramenta() {
     fi
 }
 
+# Recolhe PDFs: seleção global do eazy (se houver) ou fzf multi na pasta
+pdf_recolher_lista() {
+    local -a candidatos=()
+    local p abs
+    # 1) Seleção global / local do eazy
+    eazy_ensure_selection 2>/dev/null || true
+    for f in "${SELECTED_FILE:-}" "${SELECTED_LOCAL_FILE:-}"; do
+        [ -n "$f" ] && [ -s "$f" ] || continue
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            abs=$(caminho_absoluto "$p" 2>/dev/null || printf '%s' "$p")
+            eh_arquivo_pdf "$abs" 2>/dev/null && candidatos+=("$abs")
+        done < "$f"
+    done
+    # 2) Se nada na seleção, fzf multi na pasta atual
+    if [ "${#candidatos[@]}" -eq 0 ]; then
+        mapfile -t candidatos < <(selecionar_arquivo_conversao 'Selecione PDF(s) — TAB marca vários' pdf 1)
+    fi
+    # dedupe
+    local -A seen=()
+    local -a out=()
+    for p in "${candidatos[@]}"; do
+        [ -f "$p" ] || continue
+        [ -n "${seen[$p]:-}" ] && continue
+        seen[$p]=1
+        out+=("$p")
+    done
+    if [ "${#out[@]}" -eq 0 ]; then
+        whiptail --title "PDF" --msgbox "Nenhum PDF selecionado.\n\nMarque ficheiros com TAB/Espaço no eazy\nou escolha na lista fzf." 11 60
+        return 1
+    fi
+    printf '%s\n' "${out[@]}"
+}
+
+pdf_pedir_pasta_saida() {
+    local sugestao="${1:-$(pwd)/pdf_convertido}"
+    local outdir
+    outdir=$(whiptail --title "Pasta de saída" --inputbox \
+"Todos os ficheiros convertidos vão para esta pasta:\n(criada se não existir)" 12 72 "$sugestao" 3>&1 1>&2 2>&3) || return 1
+    [ -n "$outdir" ] || return 1
+    mkdir -p -- "$outdir" || {
+        whiptail --title "PDF" --msgbox "Não foi possível criar a pasta:\n$outdir" 9 60
+        return 1
+    }
+    printf '%s\n' "$outdir"
+}
+
 pdf_ler_texto() {
     local pdf="$1" out
     pdf_exigir_ferramenta pdftotext poppler-utils || return 1
     out="${pdf%.*}.txt"
     if pdftotext -layout -- "$pdf" "$out" 2>/dev/null; then
-        mostrar_texto "$out"
+        if command -v mostrar_texto >/dev/null 2>&1; then
+            mostrar_texto "$out"
+        else
+            whiptail --title "PDF → TXT" --textbox "$out" 24 80 --scrolltext 2>/dev/null || \
+            whiptail --title "PDF → TXT" --msgbox "Texto gravado em:\n$out" 9 70
+        fi
     else
         whiptail --title "PDF" --msgbox "Não foi possível extrair texto de:\n$pdf" 9 70
     fi
 }
 
+# Converte 1 PDF → TXT (sem abrir viewer); retorna 0/1
+pdf_para_txt_silent() {
+    local pdf="$1" outdir="$2" base out
+    base=$(basename -- "$pdf")
+    base="${base%.*}"
+    out="$outdir/${base}.txt"
+    pdftotext -layout -- "$pdf" "$out" 2>/dev/null
+}
+
 pdf_para_html() {
-    local pdf="$1" outdir base
+    local pdf="$1" outdir="${2:-}" base dest
     pdf_exigir_ferramenta pdftohtml poppler-utils || return 1
     base="${pdf%.*}"
-    outdir=$(whiptail --inputbox "Pasta de saída do HTML:" 10 70 "${base}_html" 3>&1 1>&2 2>&3) || return
-    [ -n "$outdir" ] || return
+    if [ -z "$outdir" ]; then
+        outdir=$(whiptail --inputbox "Pasta de saída do HTML:" 10 70 "${base}_html" 3>&1 1>&2 2>&3) || return
+        [ -n "$outdir" ] || return
+    fi
     mkdir -p -- "$outdir"
-    if pdftohtml -s -noframes -- "$pdf" "$outdir/$(basename "$base").html" >/dev/null 2>&1; then
-        whiptail --title "PDF → HTML" --msgbox "HTML criado em:\n$outdir" 9 70
+    dest="$outdir/$(basename "$base").html"
+    if pdftohtml -s -noframes -- "$pdf" "$dest" >/dev/null 2>&1; then
+        [ -n "${PDF_LOTE_SILENT:-}" ] || whiptail --title "PDF → HTML" --msgbox "HTML criado em:\n$outdir" 9 70
+        return 0
     else
-        whiptail --title "PDF → HTML" --msgbox "Falha ao converter o PDF para HTML." 9 70
+        [ -n "${PDF_LOTE_SILENT:-}" ] || whiptail --title "PDF → HTML" --msgbox "Falha ao converter o PDF para HTML." 9 70
+        return 1
     fi
 }
 
 pdf_para_imagens() {
-    local pdf="$1" outdir base
+    local pdf="$1" outdir="${2:-}" base sub
     pdf_exigir_ferramenta pdftoppm poppler-utils || return 1
-    base="${pdf%.*}"
-    outdir=$(whiptail --inputbox "Pasta de saída das imagens:" 10 70 "${base}_img" 3>&1 1>&2 2>&3) || return
-    [ -n "$outdir" ] || return
-    mkdir -p -- "$outdir"
-    if pdftoppm -png -- "$pdf" "$outdir/pagina" >/dev/null 2>&1; then
-        whiptail --title "PDF → Imagens" --msgbox "Imagens PNG criadas em:\n$outdir" 9 70
-    else
-        whiptail --title "PDF → Imagens" --msgbox "Falha ao converter o PDF para imagens." 9 70
+    base=$(basename -- "${pdf%.*}")
+    if [ -z "$outdir" ]; then
+        outdir=$(whiptail --inputbox "Pasta de saída das imagens:" 10 70 "${pdf%.*}_img" 3>&1 1>&2 2>&3) || return
+        [ -n "$outdir" ] || return
     fi
+    # Cada PDF numa subpasta para não misturar páginas
+    sub="$outdir/$base"
+    mkdir -p -- "$sub"
+    if pdftoppm -png -- "$pdf" "$sub/pagina" >/dev/null 2>&1; then
+        [ -n "${PDF_LOTE_SILENT:-}" ] || whiptail --title "PDF → Imagens" --msgbox "Imagens PNG criadas em:\n$sub" 9 70
+        return 0
+    else
+        [ -n "${PDF_LOTE_SILENT:-}" ] || whiptail --title "PDF → Imagens" --msgbox "Falha ao converter o PDF para imagens." 9 70
+        return 1
+    fi
+}
+
+# Lote: formato = txt | html | png | all
+converter_pdf_lote() {
+    local formato="${1:-}"
+    local -a pdfs=()
+    local outdir ok=0 fail=0 p base log
+
+    case "$formato" in
+        txt)  pdf_exigir_ferramenta pdftotext poppler-utils || return 1 ;;
+        html) pdf_exigir_ferramenta pdftohtml poppler-utils || return 1 ;;
+        png)  pdf_exigir_ferramenta pdftoppm poppler-utils || return 1 ;;
+        all)
+            pdf_exigir_ferramenta pdftotext poppler-utils || return 1
+            pdf_exigir_ferramenta pdftohtml poppler-utils || return 1
+            pdf_exigir_ferramenta pdftoppm poppler-utils || return 1
+            ;;
+        *)
+            formato=$(whiptail --title "PDF em lote" --menu \
+"Formato de saída para TODOS os PDFs selecionados:" 16 70 6 \
+                "txt"  "PDF → TXT (texto)" \
+                "html" "PDF → HTML" \
+                "png"  "PDF → Imagens PNG" \
+                "all"  "TXT + HTML + PNG (tudo)" \
+                3>&1 1>&2 2>&3) || return
+            converter_pdf_lote "$formato"
+            return $?
+            ;;
+    esac
+
+    mapfile -t pdfs < <(pdf_recolher_lista) || return 1
+    [ "${#pdfs[@]}" -gt 0 ] || return 1
+
+    outdir=$(pdf_pedir_pasta_saida "$(pwd)/pdf_${formato}_$(date +%Y%m%d_%H%M%S)") || return 1
+
+    if ! whiptail --title "Confirmar lote" --yesno \
+"Converter ${#pdfs[@]} PDF(s) → ${formato}\n\nPasta de saída:\n$outdir\n\nContinuar?" 14 70; then
+        return 0
+    fi
+
+    log="$outdir/conversao.log"
+    {
+        echo "=== Conversão PDF lote — $(date) ==="
+        echo "Formato: $formato"
+        echo "Pasta: $outdir"
+        echo "Ficheiros: ${#pdfs[@]}"
+        echo
+    } > "$log"
+
+    PDF_LOTE_SILENT=1
+    clear 2>/dev/null || true
+    printf '\n\033[1;36m▶ Convertendo %d PDF(s) → %s\033[0m\n\n' "${#pdfs[@]}" "$formato"
+
+    for p in "${pdfs[@]}"; do
+        base=$(basename -- "$p")
+        printf '  • %s ... ' "$base"
+        case "$formato" in
+            txt)
+                if pdf_para_txt_silent "$p" "$outdir"; then
+                    echo "OK → ${base%.*}.txt"
+                    echo "OK txt  $p" >> "$log"
+                    ok=$((ok+1))
+                else
+                    echo "FALHOU"
+                    echo "FAIL txt $p" >> "$log"
+                    fail=$((fail+1))
+                fi
+                ;;
+            html)
+                if pdf_para_html "$p" "$outdir"; then
+                    echo "OK → HTML"
+                    echo "OK html $p" >> "$log"
+                    ok=$((ok+1))
+                else
+                    echo "FALHOU"
+                    echo "FAIL html $p" >> "$log"
+                    fail=$((fail+1))
+                fi
+                ;;
+            png)
+                if pdf_para_imagens "$p" "$outdir"; then
+                    echo "OK → PNG"
+                    echo "OK png  $p" >> "$log"
+                    ok=$((ok+1))
+                else
+                    echo "FALHOU"
+                    echo "FAIL png $p" >> "$log"
+                    fail=$((fail+1))
+                fi
+                ;;
+            all)
+                local subok=0
+                pdf_para_txt_silent "$p" "$outdir" && subok=$((subok+1))
+                pdf_para_html "$p" "$outdir" && subok=$((subok+1))
+                pdf_para_imagens "$p" "$outdir" && subok=$((subok+1))
+                if [ "$subok" -ge 1 ]; then
+                    echo "OK ($subok/3)"
+                    echo "OK all($subok) $p" >> "$log"
+                    ok=$((ok+1))
+                else
+                    echo "FALHOU"
+                    echo "FAIL all $p" >> "$log"
+                    fail=$((fail+1))
+                fi
+                ;;
+        esac
+    done
+    unset PDF_LOTE_SILENT
+
+    {
+        echo
+        echo "Resultado: $ok ok · $fail falha(s)"
+    } >> "$log"
+
+    whiptail --title "PDF lote concluído" --msgbox \
+"Convertidos: $ok\nFalhas: $fail\n\nPasta:\n$outdir\n\nLog:\n$log" 14 72
 }
 
 imagens_para_pdf() {
@@ -11544,24 +12832,31 @@ imagens_para_pdf() {
 
 menu_conversoes() {
     local opcao
-    opcao=$(whiptail --title 'Conversões multimídia' --menu 'Escolha o tipo de conversão:' 18 82 8 \
+    opcao=$(whiptail --title 'Conversões multimídia' --menu \
+'Selecione vários PDFs no eazy (TAB) ou na lista fzf.
+Lote grava tudo numa pasta à sua escolha.' 20 82 10 \
         '1' 'Vídeo → Vídeo (ffmpeg: MP4/AVI/MKV...)' \
         '2' 'Imagem → Imagem (JPG/PNG/BMP/JPEG...)' \
         '3' 'Imagens → PDF (img2pdf)' \
-        '4' 'PDF → Imagens PNG (pdftoppm)' \
-        '5' 'PDF → Texto / HTML' \
+        '4' 'PDF(s) → Imagens PNG  [lote]' \
+        '5' 'PDF(s) → TXT          [lote]' \
+        '6' 'PDF(s) → HTML         [lote]' \
+        '7' 'PDF(s) → TXT+HTML+PNG [lote tudo]' \
+        '8' 'PDF único → ver texto (pdftotext)' \
         '0' 'Voltar' 3>&1 1>&2 2>&3) || return
     case "$opcao" in
         1) converter_video_video ;;
         2) converter_imagem_imagem ;;
         3) converter_imagem_pdf ;;
-        4) converter_pdf_imagem ;;
-        5)
-            local pdf escolha
-            pdf=$(whiptail --inputbox 'Arquivo PDF:' 10 70 '' 3>&1 1>&2 2>&3) || return
+        4) converter_pdf_lote png ;;
+        5) converter_pdf_lote txt ;;
+        6) converter_pdf_lote html ;;
+        7) converter_pdf_lote all ;;
+        8)
+            local pdf
+            pdf=$(selecionar_arquivo_conversao 'Selecione um PDF' pdf) || return
             eh_arquivo_pdf "$pdf" || return
-            escolha=$(whiptail --title 'PDF' --menu 'Conversão:' 12 60 3 '1' 'PDF → texto' '2' 'PDF → HTML' '0' 'Voltar' 3>&1 1>&2 2>&3) || return
-            case "$escolha" in 1) pdf_ler_texto "$pdf" ;; 2) pdf_para_html "$pdf" ;; esac
+            pdf_ler_texto "$pdf"
             ;;
     esac
 }
@@ -11605,47 +12900,119 @@ eazy_instalar_deb() {
 }
 
 eazy_abrir_arquivo_enter() {
-    local tocado="$1"
+    local tocado="$1" abs op cmd
     [ -z "$tocado" ] && return 1
     if [[ "$tocado" =~ ^https?:// ]]; then
         abrir_html_ou_link "$tocado"
         return $?
     fi
-    if [[ "$tocado" =~ \.deb$|\.DEB$ ]]; then
-        eazy_instalar_deb "$tocado"
+    abs=$(caminho_absoluto "$tocado" 2>/dev/null || readlink -f -- "$tocado" 2>/dev/null || printf '%s' "$tocado")
+
+    # Menu: padrão ou comando / caminho
+    op=$(whiptail --title "Abrir — $(basename -- "$abs")" --menu \
+"O que fazer com este ficheiro?
+
+$abs" 18 78 7 \
+        "1" "▶  Abrir / tocar (comportamento normal)" \
+        "2" "⌨  Comando personalizado (ex.: mc, kate, nano)" \
+        "3" "📋 Mostrar caminho completo (copiar)" \
+        "4" "🖥  Abrir com app do sistema (xdg-open)" \
+        "5" "✏️  Editar (editor de texto)" \
+        "0" "Cancelar" \
+        3>&1 1>&2 2>&3) || return 0
+
+    case "$op" in
+        0|"") return 0 ;;
+        3)
+            # Mostra caminho; útil para colar noutro sítio
+            if command -v whiptail >/dev/null 2>&1; then
+                whiptail --title "Caminho completo" --msgbox \
+"Podes copiar (Shift+rato ou clipboard do terminal):
+
+$abs" 14 78
+            else
+                printf '%s\n' "$abs"
+                read -r -p "Enter..." _ || true
+            fi
+            return 0
+            ;;
+        2)
+            cmd=$(whiptail --title "Comando personalizado" --inputbox \
+"Comando na frente do ficheiro.
+Exemplos: kate · mc · nano · code · gimp · xdg-open
+
+O caminho será acrescentado no fim:" 14 72 "" 3>&1 1>&2 2>&3) || return 0
+            cmd=$(printf '%s' "$cmd" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            [ -z "$cmd" ] && return 0
+            clear
+            printf '\033[1;36m▶ %s %s\033[0m\n\n' "$cmd" "$abs"
+            # shellcheck disable=SC2086
+            ( cd -- "$(dirname -- "$abs")" && $cmd -- "$abs" ) || \
+            ( cd -- "$(dirname -- "$abs")" && $cmd "$abs" ) || true
+            echo
+            read -r -p "Enter para voltar ao eazy..." _ || true
+            return 0
+            ;;
+        4)
+            if command -v xdg-open >/dev/null 2>&1; then
+                xdg-open "$abs" >/dev/null 2>&1 &
+            elif command -v wslview >/dev/null 2>&1; then
+                wslview "$abs" >/dev/null 2>&1 &
+            else
+                whiptail --title "Abrir" --msgbox "xdg-open não encontrado.\n$abs" 9 60
+            fi
+            return 0
+            ;;
+        5)
+            if type editar_selecao >/dev/null 2>&1; then
+                editar_selecao "$abs" 2>/dev/null || ${EDITOR:-nano} -- "$abs"
+            else
+                ${EDITOR:-nano} -- "$abs"
+            fi
+            return 0
+            ;;
+        1)
+            # comportamento normal (continua abaixo)
+            ;;
+        *) return 0 ;;
+    esac
+
+    if [[ "$abs" =~ \.deb$|\.DEB$ ]]; then
+        eazy_instalar_deb "$abs"
         return $?
     fi
-    if eh_playlist_m3u "$tocado" 2>/dev/null; then
-        abrir_playlist_no_navegador "$tocado"
+    if eh_playlist_m3u "$abs" 2>/dev/null; then
+        abrir_playlist_no_navegador "$abs"
         return $?
     fi
-    if eh_arquivo_pdf "$tocado" 2>/dev/null; then
-        menu_pdf "$tocado"
+    if eh_arquivo_pdf "$abs" 2>/dev/null; then
+        menu_pdf "$abs"
         return $?
     fi
-    if eh_arquivo_html "$tocado" 2>/dev/null; then
-        menu_arquivo_html "$tocado"
+    if eh_arquivo_html "$abs" 2>/dev/null; then
+        menu_arquivo_html "$abs"
         return $?
     fi
-    if eh_arquivo_shell "$tocado" 2>/dev/null; then
-        menu_arquivo_shell "$tocado"
+    if eh_arquivo_shell "$abs" 2>/dev/null; then
+        menu_arquivo_shell "$abs"
         return $?
     fi
-    if eh_arquivo_python "$tocado" 2>/dev/null; then
-        menu_arquivo_python "$tocado"
+    if eh_arquivo_python "$abs" 2>/dev/null; then
+        menu_arquivo_python "$abs"
         return $?
     fi
-    if eh_arquivo_imagem "$tocado" 2>/dev/null; then
-        mostrar_imagem_com_pausa "$tocado"
+    if eh_arquivo_imagem "$abs" 2>/dev/null; then
+        mostrar_imagem_com_pausa "$abs"
         return $?
     fi
-    if eh_arquivo_texto "$tocado" 2>/dev/null; then
-        mostrar_texto "$tocado"
+    if eh_arquivo_texto "$abs" 2>/dev/null; then
+        mostrar_texto "$abs"
         return $?
     fi
-    tocar_arquivo "$tocado"
+    tocar_arquivo "$abs"
     return $?
 }
+
 
 menu_pdf() {
     local pdf="$1" opcao
@@ -11987,7 +13354,13 @@ Player HTML5 + botao Abrir." 14 70; then
 <body>
 CSS
         printf '<header><h1>%s</h1>\n' "$titulo"
-        printf '<p>%s video(s) · thumbs base64 · player HTML5</p></header>\n' "$n"
+        printf '<p>%s video(s) · thumbs base64 · player HTML5</p>\n' "$n"
+        cat <<'BAR'
+<div class="sort-bar"><span class="lbl">Ordenar:</span>
+<button type="button" id="sort-name" onclick="sortCards('name')">Nome</button>
+<button type="button" id="sort-size" onclick="sortCards('size')">Tamanho</button>
+<button type="button" id="sort-date" onclick="sortCards('date')">Data</button></div></header>
+BAR
         printf '%s\n' '<p class="tip">Se o video nao tocar no Firefox: use <b>Abrir ficheiro</b> (abre no VLC/app do sistema). No Brave costuma tocar no proprio cartao. Abra este HTML pela pasta no Explorer (nao arraste de outro sitio).</p>'
         printf '%s\n' '<div class="grid">'
 
@@ -12034,7 +13407,9 @@ CSS
             fi
 
             # Um so quadro: thumb + nome em baixo. Video escondido (sem segundo quadro).
-            printf '<div class="card" id="c%d">\n' "$i"
+            mt=$(stat -c '%Y' -- "$v" 2>/dev/null || echo 0)
+            printf '<div class="card" id="c%d" data-name="%s" data-bytes="%s" data-mtime="%s">\n' \
+                "$i" "$base_esc" "${sz:-0}" "$mt"
             printf '<div class="thumb-wrap" onclick="playCard(%d)" title="Reproduzir">\n' "$i"
             if [ -n "$b64" ]; then
                 printf '<img src="data:image/jpeg;base64,%s" alt="%s">\n' "$b64" "$base_esc"
@@ -12079,6 +13454,53 @@ function playCard(i) {
   }
 }
 </script>
+
+<script>
+(function(){
+  var state = { key: null, asc: true };
+  window.sortCards = function(key) {
+    var grid = document.querySelector('.grid');
+    if (!grid) return;
+    var cards = Array.prototype.slice.call(grid.querySelectorAll(':scope > .card'));
+    if (!cards.length) cards = Array.prototype.slice.call(grid.querySelectorAll('.card'));
+    if (state.key === key) state.asc = !state.asc;
+    else { state.key = key; state.asc = (key === 'name'); }
+    var mult = state.asc ? 1 : -1;
+    cards.sort(function(a, b) {
+      var va, vb;
+      if (key === 'name') {
+        va = (a.getAttribute('data-name') || '').toLowerCase();
+        vb = (b.getAttribute('data-name') || '').toLowerCase();
+        if (va < vb) return -1 * mult;
+        if (va > vb) return 1 * mult;
+        return 0;
+      }
+      if (key === 'size') {
+        va = parseInt(a.getAttribute('data-bytes') || '0', 10) || 0;
+        vb = parseInt(b.getAttribute('data-bytes') || '0', 10) || 0;
+        return (va - vb) * mult;
+      }
+      va = parseInt(a.getAttribute('data-mtime') || '0', 10) || 0;
+      vb = parseInt(b.getAttribute('data-mtime') || '0', 10) || 0;
+      return (va - vb) * mult;
+    });
+    cards.forEach(function(c){ grid.appendChild(c); });
+    ['name','size','date'].forEach(function(k){
+      var b = document.getElementById('sort-' + k);
+      if (!b) return;
+      var label = k === 'name' ? 'Nome' : (k === 'size' ? 'Tamanho' : 'Data');
+      if (k === key) {
+        b.classList.add('active');
+        b.textContent = label + (state.asc ? ' ↑' : ' ↓');
+      } else {
+        b.classList.remove('active');
+        b.textContent = label;
+      }
+    });
+  };
+})();
+</script>
+
 </body></html>
 JS
     } > "$html"
@@ -12347,7 +13769,13 @@ Thumbs redimensionados (ffmpeg/convert) em base64." 13 70; then
 </style>
 </head><body>
 CSS
-        printf '<header><h1>%s</h1><p>%s imagem(ns) · clique para ampliar</p></header>\n' "$titulo" "$n"
+        printf '<header><h1>%s</h1><p>%s imagem(ns) · clique para ampliar</p>\n' "$titulo" "$n"
+        cat <<'BAR'
+<div class="sort-bar"><span class="lbl">Ordenar:</span>
+<button type="button" id="sort-name" onclick="sortCards('name')">Nome</button>
+<button type="button" id="sort-size" onclick="sortCards('size')">Tamanho</button>
+<button type="button" id="sort-date" onclick="sortCards('date')">Data</button></div></header>
+BAR
         printf '%s\n' '<div class="grid">'
 
         local i=0 b64 base_esc sz mb rel
@@ -13181,57 +14609,53 @@ while true; do
     fi
     montar_param_player
 
-        # Cache: não refaz find/pesquisa se dir/filtro/modo não mudaram
-    EAZY_LISTA_CACHE_FILE="${EAZY_LISTA_CACHE_FILE:-$EAZY_TMP_DIR/eazy_lista_cache_$$}"
+        # --- SAVE SCREEN / CACHE (2 níveis: RAW + SORTED) ---
+    _ck_raw=$(eazy_lista_cache_key_raw)
     _ck=$(eazy_lista_cache_key)
-    if [ -n "${EAZY_LISTA_CACHE_KEY:-}" ] && [ "$_ck" = "$EAZY_LISTA_CACHE_KEY" ] && [ -s "$EAZY_LISTA_CACHE_FILE" ]; then
-        dados_brutos=$(cat "$EAZY_LISTA_CACHE_FILE")
+    _cache_hit=0
+    lista_preparada=""
+    # 1) lista já ordenada para este F1/F2/data?
+    # Em MODO_BUSCA a lista só vem de obter_lista_rapida (filtro real) ou snapshot salvo
+    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        _cache_hit=0
+        lista_preparada=""
+        dados_brutos=""
+    elif lista_preparada=$(eazy_lista_cache_load "$_ck" 2>/dev/null); then
+        [ -n "$lista_preparada" ] && _cache_hit=1
+    fi
+    if [ "$_cache_hit" -eq 1 ]; then
+        case "${MODO_ATUAL:-tamanho}" in
+            nome) ORDEM_TEXTO="NOME" ;;
+            data) ORDEM_TEXTO="DATA" ;;
+            *) ORDEM_TEXTO="TAMANHO" ;;
+        esac
+        [ "${MODO_DOWNLOAD:-0}" -eq 1 ] && [ "${MODO_ATUAL:-}" != "nome" ] && ORDEM_TEXTO="FILA"
         eazy_status_file "cache" "lista pronta" 2>/dev/null || true
     else
-        eazy_status_file "carregando lista" "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || true
-        dados_brutos=$(obter_lista_rapida)
-        printf '%s\n' "$dados_brutos" > "$EAZY_LISTA_CACHE_FILE"
-        EAZY_LISTA_CACHE_KEY="$_ck"
+        # 2) RAW em cache? (nunca em pesquisa — filtro por extensão tem de correr)
+        dados_brutos=""
+        if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+            eazy_status_file "pesquisa" "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || true
+            dados_brutos=$(obter_lista_rapida)
+            dados_brutos=$(printf '%s\n' "$dados_brutos" | awk 'NF>0')
+            # obter_lista_rapida corre em subshell ($(...)): BUSCA_REMAKE=0 lá dentro
+            # não chega ao pai. Sem isto, cada redesenho (sair do filme, F9…) apaga o
+            # cache e refaz o scan. Só Alt+R / Ctrl+F (nova) devem pôr REMAKE=1.
+            BUSCA_REMAKE=0
+        elif dados_brutos=$(eazy_lista_cache_load "$_ck_raw" 2>/dev/null); then
+            :
+        else
+            eazy_status_file "carregando lista" "$(pwd -P 2>/dev/null || pwd)" 2>/dev/null || true
+            dados_brutos=$(obter_lista_rapida)
+            dados_brutos=$(printf '%s\n' "$dados_brutos" | awk 'NF>0')
+            eazy_lista_cache_save "$_ck_raw" "$dados_brutos"
+        fi
+        eazy_status_file "a ordenar" "${MODO_ATUAL:-tamanho}" 2>/dev/null || true
+        lista_preparada=$(eazy_lista_ordenar "$dados_brutos")
+        eazy_lista_cache_save "$_ck" "$lista_preparada"
+        eazy_status_file "lista pronta" "ok" 2>/dev/null || true
     fi
-    _n_ord=$(printf '%s\n' "$dados_brutos" | grep -c . 2>/dev/null || echo 0)
-    eazy_status_file "a ordenar" "${MODO_ATUAL:-tamanho}" "[$_n_ord itens]" 2>/dev/null || true
 
-    linha_voltar=$(echo "$dados_brutos" | awk -F '\t' '$NF==".." || $2 ~ /◀ Voltar/')
-    restante_itens=$(echo "$dados_brutos" | awk -F '\t' '$NF!=".." && $2 !~ /◀ Voltar/')
-
-    # Ordenação F1=tamanho F2=nome Ctrl-T=data — pastas, histórico, playlists, filas, tmp, dup
-    # Downloads: só nome (tamanho na fila é dummy)
-    if [ "${MODO_DOWNLOAD:-0}" -eq 1 ]; then
-        if [ "$MODO_ATUAL" = "nome" ]; then
-            itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | sort -t$'\t' -k2,2f)
-            ORDEM_TEXTO="NOME"
-        else
-            itens_ordenados="$restante_itens"
-            ORDEM_TEXTO="FILA"
-        fi
-        if [ -n "$linha_voltar" ]; then
-            lista_preparada=$(printf "%s\n%s" "$linha_voltar" "$itens_ordenados")
-        else
-            lista_preparada="$itens_ordenados"
-        fi
-    else
-        if [ "$MODO_ATUAL" = "nome" ]; then
-            itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | sort -t$'\t' -k2,2f)
-            ORDEM_TEXTO="NOME"
-        elif [ "$MODO_ATUAL" = "data" ]; then
-            # Campo 1 = epoch (mtime) zero-padded — mais recentes primeiro
-            itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k1,1rn)
-            ORDEM_TEXTO="DATA"
-        else
-            itens_ordenados=$(printf '%s\n' "$restante_itens" | grep -v '^$' | LC_ALL=C sort -t "$(printf '\t')" -k1,1rn)
-            ORDEM_TEXTO="TAMANHO"
-        fi
-        if [ -n "$linha_voltar" ]; then
-            lista_preparada=$(printf "%s\n%s" "$linha_voltar" "$itens_ordenados")
-        else
-            lista_preparada="$itens_ordenados"
-        fi
-    fi
 
     TOTAL_PLAYLIST=$(grep -c '^' "$PLAYLIST_FILE" 2>/dev/null || echo 0)
     TOTAL_PLAYLIST=$(echo "$TOTAL_PLAYLIST" | LC_ALL=C tr -cd '0-9')
@@ -13264,7 +14688,7 @@ while true; do
             TEXTO_PROMPT=" 📋 FILA $FILA_ATUAL ($TOTAL_FILA)  [1:$(contar_fila 1)|2:$(contar_fila 2)|3:$(contar_fila 3)] ❯ "
             EAZY_HEADER_HINT=" [ENTER]: Tocar | [DEL]: Só da fila | [ALT+D]: Apaga do DISCO | [CTRL-P]: Próx. fila | [Q]: Sair "
         elif [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
-            TOTAL_HIST=$(grep -c '^' "$HISTORY_FILE" 2>/dev/null || echo 0)
+            TOTAL_HIST=$(eazy_history_db_count 2>/dev/null || echo 0)
             TOTAL_HIST=$(echo "$TOTAL_HIST" | tr -cd '0-9')
             TOTAL_HIST=${TOTAL_HIST:-0}
             TEXTO_PROMPT=" 🕐 HISTÓRICO ($TOTAL_HIST) ❯ "
@@ -13340,7 +14764,15 @@ while true; do
     fi
 
     # Grava lista ANTES de calcular posição
-    printf '%s\n' "$lista_preparada" > "$LISTA_FZF_FILE"
+    # Busca: evita cursor no “fundo” da lista (efeito vácuo após parcial)
+    if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        lista_preparada=$(printf '%s
+' "$lista_preparada" | awk -F '\t' 'NF>=2 && $NF!="" && $NF!="."')
+        TMP=1
+        ULTIMO_ARQUIVO=""
+    fi
+    printf '%s
+' "$lista_preparada" > "$LISTA_FZF_FILE"
 
     # Posição: ULTIMO_ARQUIVO (path absoluto) tem prioridade sobre índice
     lista_para_posicao="$lista_preparada"
@@ -13515,21 +14947,7 @@ while true; do
         --bind="home:first" \
         --bind="end:last" \
         --bind="${EAZY_LOAD_BIND:-load:pos($TMP)}" \
-        --bind="focus:execute-silent(bash -c 'eazy_sync_cursor \"\$1\" \"\$2\"' -- {n} {})" \
-        --bind="down:down+execute-silent(bash -c '
-            IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
-            TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")
-            [ -z \"\$TMP\" ] && TMP=0
-            TMP=\$((TMP + 1))
-            printf \"%s|%s|%s|%s|%s\n\" \"\$TMP\" \"\$ALVO\" \"\$ULTIMO_ARQUIVO\" \"\$ULTIMO_DIR\" \"\$MODO_PL\" > \"$TMP_FILE\"
-        ')" \
-        --bind="up:up+execute-silent(bash -c '
-            IFS=\"|\" read -r TMP ALVO ULTIMO_ARQUIVO ULTIMO_DIR MODO_PL < \"$TMP_FILE\"
-            TMP=\$(echo \"\$TMP\" | tr -cd \"0-9\")
-            [ -z \"\$TMP\" ] && TMP=1
-            [ \$TMP -gt 1 ] && TMP=\$((TMP - 1))
-            printf \"%s|%s|%s|%s|%s\n\" \"\$TMP\" \"\$ALVO\" \"\$ULTIMO_ARQUIVO\" \"\$ULTIMO_DIR\" \"\$MODO_PL\" > \"$TMP_FILE\"
-        ')")
+        --bind="focus:execute-silent(eazy_sync_cursor {n} {})")
 
     # --print-query + --expect: linha1=query, linha2=tecla, resto=seleção
     FZF_QUERY=$(printf '%s\n' "$saida_fzf" | sed -n '1p' | sed -E 's/\x1B\[[0-9;]*[[:alpha:]]//g; s/\r//g')
@@ -13565,12 +14983,8 @@ while true; do
     # Mas preserva se for SÓ navegação (Enter em ".." / Voltar deve funcionar)
     escolha=$(printf '%s\n' "$escolha_raw" | eazy_sem_navegacao)
     if [ -e "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" ]; then
+        # Sinal residual do monitor — só limpa; NÃO esvaziar resultados já listados
         rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" "${EAZY_BUSCA_CANCEL_PID_FILE:-}" 2>/dev/null || true
-        MODO_BUSCA=0
-        BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""; BUSCA_CONTEUDO=""
-        TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
-        whiptail --title "Pesquisa" --msgbox "Pesquisa interrompida por Esc." 8 55 2>/dev/null || true
-        continue
     fi
     if [ -z "$escolha" ] && [ -n "$escolha_raw" ]; then
         n_raw=$(printf '%s\n' "$escolha_raw" | grep -c '^' 2>/dev/null || echo 0)
@@ -13592,9 +15006,19 @@ while true; do
     fi
 
     if [ "$tecla" = "alt-r" ] && [ "${MODO_BUSCA:-0}" -eq 1 ]; then
+        # Refaz com os MESMOS parâmetros
         BUSCA_SNAPSHOT_FILE=""
         BUSCA_REMAKE=1
-        whiptail --title "Pesquisa" --msgbox "Remake solicitado. A pesquisa será refeita agora." 8 60
+        EAZY_BUSCA_NOME_ATUAL=""
+        TMP=1
+        ULTIMO_ARQUIVO=""
+        rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+        if type chave_cache_busca >/dev/null 2>&1; then
+            _ckb=$(chave_cache_busca 2>/dev/null || true)
+            [ -n "$_ckb" ] && rm -f "${BUSCA_CACHE_DIR}/${_ckb}.tsv" 2>/dev/null || true
+        fi
+        eazy_lista_cache_invalidate 2>/dev/null || true
+        whiptail --title "Pesquisa — Alt+R" --msgbox "A refazer a pesquisa com os mesmos parâmetros.\n\nExtensão: ${EXT_BUSCA:-todas}\nTamanho: ${BUSCA_TAM_LABEL:-qualquer}\nConteúdo: ${BUSCA_CONTEUDO:-—}" 12 60
         continue
     fi
 
@@ -13712,9 +15136,8 @@ Depois use:
         # grava onde estamos agora (para a próxima volta)
         if [ -n "${EAZY_VOLTA_KIND:-}" ]; then
             if eazy_aplicar_contexto_volta; then
-                eazy_beep
+                eazy_beep_dir
                 registrar_status
-                eazy_lista_cache_invalidate 2>/dev/null || true
                 continue
             fi
         fi
@@ -13728,33 +15151,42 @@ Depois use:
             MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""
             if cd -- "$destino_anterior" 2>/dev/null; then
-                eazy_beep
+                eazy_beep_dir
                 carregar_filtro_dir "$(pwd -P)"
                 carregar_posicao_dir "$(pwd -P)"
                 ALVO="$(pwd -P)"; ULTIMO_DIR="$(pwd -P)"
                 registrar_status
-                eazy_lista_cache_invalidate 2>/dev/null || true
             else
-                eazy_beep
+                eazy_beep_dir
             fi
         else
-            eazy_beep
+            eazy_beep_dir
         fi
         continue
     elif [ "$tecla" = "ctrl-l" ]; then
         eazy_ir_para_pasta "${escolha:-${cursor_raw:-}}" || true
         continue
+    elif [ "$tecla" = "ctrl-]" ] || [ "$tecla" = "ctrl-plus" ] || [ "$tecla" = "ctrl-*" ] || [ "$tecla" = "alt-plus" ]; then
+        # Ctrl++ / atalhos alternativos: adicionar pasta atual aos favoritos
+        eazy_dir_fav_add "$(pwd -P)" || true
+        continue
     elif [ "$tecla" = "f1" ]; then
-        MODO_ATUAL="tamanho"; continue
+        MODO_ATUAL="tamanho"
+        eazy_beep_dir 2>/dev/null || true
+        continue
     elif [ "$tecla" = "f2" ]; then
-        MODO_ATUAL="nome"; continue
+        MODO_ATUAL="nome"
+        eazy_beep_dir 2>/dev/null || true
+        continue
     elif [ "$tecla" = "ctrl-t" ]; then
         # Em duplicados: Ctrl-T = marcar de amarelo todas as vermelhas (F12)
         if [ "${MODO_DUP:-0}" -eq 1 ]; then
             eazy_dup_select_fixed
             continue
         fi
-        MODO_ATUAL="data"; continue
+        MODO_ATUAL="data"
+        eazy_beep_dir 2>/dev/null || true
+        continue
     elif [ "$tecla" = "f3" ]; then
         [ "$TELA_ATUAL" = "fs" ] && TELA_ATUAL="janela" || TELA_ATUAL="fs"; continue
     elif [ "$tecla" = "f4" ]; then
@@ -13774,7 +15206,10 @@ Depois use:
         fi
         TMP=1; continue
     elif [ "$tecla" = "f9" ]; then
-        configurar_defaults; continue
+        configurar_defaults
+        # F9 não é refazer pesquisa: só relê cache se estiver em MODO_BUSCA
+        BUSCA_REMAKE=0
+        continue
     elif [ "$tecla" = "alt-f10" ] || [ "$tecla" = "alt-0" ]; then
         # Mostra o que rolou por trás do fzf (log de erros/avisos da sessão)
         eazy_ensure_tmp
@@ -13841,17 +15276,19 @@ Depois use:
     elif [ "$tecla" = "ctrl-u" ]; then
         mover_arquivos "$escolha"; continue
     elif [ "$tecla" = "ctrl-g" ]; then
-        # Histórico de arquivos tocados (índice de cursor persistente)
+        # Histórico de arquivos tocados; a primeira entrada exige migração
         if [ "${MODO_PLAYLIST:-0}" -eq 1 ] && [ "$ARQUIVO_PLAYLIST_ABERTO" = "$HISTORY_FILE" ]; then
             salvar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
             MODO_PLAYLIST=0; ARQUIVO_PLAYLIST_ABERTO=""; TMP=1
             ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"
             carregar_posicao_dir "$(pwd -P)"
             registrar_status
-        elif [ ! -s "$HISTORY_FILE" ]; then
+        elif ! eazy_history_migrate_on_entry; then
+            # Migrou agora: não abre nesta mesma tentativa.
+            continue
+        elif [ "$(eazy_history_db_count 2>/dev/null || echo 0)" -eq 0 ] 2>/dev/null; then
             whiptail --title "Histórico" --msgbox "Histórico vazio.\nToque arquivos para ir preenchendo." 9 50
         else
-            # salva posição da lista/pasta atual antes de entrar no histórico
             salvar_posicao_dir "$(eazy_chave_lista_atual)" "${TMP:-1}" "${ULTIMO_ARQUIVO:-}"
             MODO_BUSCA=0; MODO_DUP=0; MODO_DOWNLOAD=0
             MODO_PLAYLIST=1
@@ -13894,11 +15331,14 @@ Depois use:
                 "5" "Adicionar seleção global às listas/filas" \
                 "6" "Torrents: ver / incluir / deletar" \
                 "7" "▶ Streams — fila (play direto)" \
+                "T" "📺 TV Aberta — lives / canais" \
                 3>&1 1>&2 2>&3)
             case "$escolha_dl" in
                 1) MODO_DOWNLOAD=1; TMP=2; registrar_status ;;
                 2) adicionar_download ;;
                 3) eazy_editar_fila_downloads ;;
+                7) eazy_menu_streams ;;
+                T|t) eazy_tv_aberta ;;
                 4)
                     local url_br
                     url_br=$(whiptail --title "Abrir no browser" --inputbox "URL:" 10 70 "https://" 3>&1 1>&2 2>&3) || true
@@ -13989,9 +15429,10 @@ Depois use:
             continue
         fi
         if [ "${MODO_PLAYLIST:-0}" -eq 0 ] && [ "${MODO_DUP:-0}" -eq 0 ] && [ "${MODO_DOWNLOAD:-0}" -eq 0 ]; then
+            # Ctrl+F: Nova pesquisa (scan real) OU abrir pesquisa salva (Ctrl+S)
+            # Cache TEMPORÁRIO de sessão não é usado. Alt+R = refazer mesmos parâmetros.
             iniciar_nova=0
             if [ "${MODO_BUSCA:-0}" -eq 1 ]; then
-                # Já em pesquisa: só avança se escolher Nova pesquisa (ou abrir salva)
                 menu_args=( "N" "Nova pesquisa" "C" "Continuar nesta pesquisa" )
                 if [ -d "$SAVED_SEARCHES_DIR" ] && find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print -quit 2>/dev/null | grep -q .; then
                     menu_args=( "N" "Nova pesquisa" "S" "Abrir pesquisa salva" "C" "Continuar nesta pesquisa" )
@@ -14002,22 +15443,24 @@ Depois use:
                 fi
                 if [ "$escolha_busca" = "S" ]; then
                     if carregar_pesquisa_salva; then
-                        TMP=2; registrar_status
+                        TMP=1; ULTIMO_ARQUIVO=""; registrar_status
                     fi
                     continue
                 fi
-                # N = Nova pesquisa → limpa e inicia configuração direto
+                # N = nova
                 MODO_BUSCA=0
                 BUSCA_TAM_MIN=""; BUSCA_TAM_MAX=""; BUSCA_TAM_LABEL=""
-                BUSCA_CONTEUDO=""
-                BUSCA_SNAPSHOT_FILE=""
-                TMP=1; ALVO="$(pwd)"; ULTIMO_DIR="$(pwd)"; registrar_status
+                BUSCA_CONTEUDO=""; BUSCA_SNAPSHOT_FILE=""
                 iniciar_nova=1
             else
                 if [ -d "$SAVED_SEARCHES_DIR" ] && find "$SAVED_SEARCHES_DIR" -maxdepth 1 -type f -name '*.search' -print -quit 2>/dev/null | grep -q .; then
-                    escolha_busca=$(whiptail --title "Pesquisa" --menu "Escolha uma opção:" 12 60 2 "N" "Nova pesquisa" "S" "Abrir pesquisa salva" 3>&1 1>&2 2>&3) || continue
-                    if [ "$escolha_busca" = "S" ] && carregar_pesquisa_salva; then
-                        TMP=2; registrar_status; continue
+                    escolha_busca=$(whiptail --title "Pesquisa" --menu "Escolha uma opção:" 12 60 2 \
+                        "N" "Nova pesquisa" "S" "Abrir pesquisa salva" 3>&1 1>&2 2>&3) || continue
+                    if [ "$escolha_busca" = "S" ]; then
+                        if carregar_pesquisa_salva; then
+                            TMP=1; ULTIMO_ARQUIVO=""; registrar_status
+                        fi
+                        continue
                     fi
                     if [ "$escolha_busca" != "N" ]; then
                         continue
@@ -14026,15 +15469,32 @@ Depois use:
                 iniciar_nova=1
             fi
             if [ "$iniciar_nova" -eq 1 ]; then
-                # Não usar EXT_BUSCA=$(selecionar_extensoes): a command substitution
-                # roda a função em subshell e perde BUSCA_CONTEUDO.
+                # Força scan real: sem snapshot, sem cache de sessão, sem lista antiga
+                BUSCA_SNAPSHOT_FILE=""
+                BUSCA_REMAKE=1
+                EAZY_BUSCA_NOME_ATUAL=""
+                rm -f "${EAZY_BUSCA_CANCEL_FILE:-$EAZY_TMP_DIR/eazy_search_cancel_$$}" 2>/dev/null || true
+                eazy_lista_cache_invalidate 2>/dev/null || true
+                if type chave_cache_busca >/dev/null 2>&1; then
+                    _ckb=$(chave_cache_busca 2>/dev/null || true)
+                    [ -n "$_ckb" ] && rm -f "${BUSCA_CACHE_DIR}/${_ckb}.tsv" 2>/dev/null || true
+                fi
+                # Limpa TODO o cache temporário de busca desta sessão
+                rm -f "${BUSCA_CACHE_DIR:-/dev/null}"/*.tsv 2>/dev/null || true
+
                 _ext_busca_tmp="$EAZY_TMP_DIR/eazy_ext_busca_$$"
                 selecionar_extensoes > "$_ext_busca_tmp"
                 EXT_BUSCA=$(cat "$_ext_busca_tmp" 2>/dev/null || true)
                 rm -f "$_ext_busca_tmp"
                 if [ -n "$EXT_BUSCA" ]; then
                     if selecionar_tamanho_busca; then
-                        MODO_BUSCA=1; TMP=2; registrar_status
+                        BUSCA_ORIGEM=$(pwd -P 2>/dev/null || pwd)
+                        BUSCA_SNAPSHOT_FILE=""
+                        BUSCA_REMAKE=1
+                        MODO_BUSCA=1
+                        TMP=1
+                        ULTIMO_ARQUIVO=""
+                        registrar_status
                     fi
                 fi
             fi
@@ -14630,6 +16090,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             eazy_lista_cache_invalidate 2>/dev/null || true
             continue
         fi
+        # Em busca: NUNCA faz cd. Só abre ficheiros reais.
         playlist_sel="$EAZY_TMP_DIR/eazy_sel_play_$$"
         : > "$playlist_sel"
         if [ "${tecla:-}" = "alt-enter" ]; then
@@ -14641,7 +16102,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
                 p="$primeiro_caminho"
             fi
             p_abs=$(caminho_absoluto "$p")
-            [ -f "$p_abs" ] && printf '%s\n' "$p_abs" >> "$playlist_sel"
+            # Só ficheiro regular. Dir/symlink-para-dir/inexistente → ignora (não trava, não cd)
+            if [ -f "$p_abs" ] && [ ! -d "$p_abs" ]; then
+                printf '%s\n' "$p_abs" >> "$playlist_sel"
+            fi
         fi
         total_sel=$(grep -c '^' "$playlist_sel" 2>/dev/null || echo 0)
         total_sel=$(echo "$total_sel" | tr -cd '0-9')
@@ -14652,10 +16116,13 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
             ULTIMO_ARQUIVO=$(tail -n1 "$playlist_sel")
             registrar_status
             tocar_lista "$playlist_sel"
-        elif [ "$total_sel" -ge 1 ] && [ -f "$(head -n1 "$playlist_sel")" ]; then
+        elif [ "$total_sel" -ge 1 ] && [ -f "$(head -n1 "$playlist_sel")" ] && [ ! -d "$(head -n1 "$playlist_sel")" ]; then
             ULTIMO_ARQUIVO=$(head -n1 "$playlist_sel")
             registrar_status
             eazy_abrir_arquivo_enter "$ULTIMO_ARQUIVO"
+        else
+            # path inválido ou não é ficheiro — não tenta entrar como pasta
+            eazy_beep 2>/dev/null || true
         fi
         rm -f "$playlist_sel"
         continue
@@ -14684,10 +16151,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         salvar_filtro_dir "$local_dir_antes" "${FZF_QUERY:-}"
         DIRETORIO_ANTERIOR="$local_dir_antes"
         if ! cd ..; then
-            eazy_beep
+            eazy_beep_dir
             continue
         fi
-        eazy_beep
+        eazy_beep_dir
         parent_dir=$(pwd -P 2>/dev/null || pwd)
         # FORÇA o pai a focar a pasta de onde saímos (caminho absoluto)
         ULTIMO_ARQUIVO="$local_dir_antes"
@@ -14699,7 +16166,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         ULTIMO_DIR="$parent_dir"
         registrar_status
         salvar_sessao
-        eazy_lista_cache_invalidate 2>/dev/null || true
+        # NÃO invalida cache: pasta pai/filhas ficam em cache até mtime mudar
         continue
     fi
 
@@ -14720,10 +16187,10 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         FZF_QUERY=""
         DIRETORIO_ANTERIOR="$dir_atual_antes"
         if ! cd -- "$_item_save" 2>/dev/null && ! cd -- "$primeiro_caminho"; then
-            eazy_beep
+            eazy_beep_dir
             continue
         fi
-        eazy_beep
+        eazy_beep_dir
         # Filho: carrega posição interna; limpa item do pai
         ULTIMO_ARQUIVO=""
         carregar_posicao_dir "$(pwd -P)"
@@ -14731,7 +16198,7 @@ Só libera o Ctrl-D para uma nova busca." 12 58; then
         ULTIMO_DIR="$(pwd -P)"
         registrar_status
         salvar_sessao
-        eazy_lista_cache_invalidate 2>/dev/null || true
+        # NÃO invalida cache: reentrar pastas pesadas usa cache por mtime
         continue
     fi
 

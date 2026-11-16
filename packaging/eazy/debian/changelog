@@ -1,3 +1,10 @@
+eazy (5.1.3) stable; urgency=medium
+  * Fix SQLite history migration to read the preserved legacy file directly, without shell newline/NUL translation.
+  * Rebuild the history table from the source file after the migration marker is removed; preserve the source file.
+  * Route Ctrl+G and Ctrl+P history entry through the same first-use migration guard and query history rows directly from SQLite.
+  * Restore the eazy --stream launcher and ship eazy-index.py with package and local installers; refresh help and manual for 5.1.3.
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Mon, 16 Nov 2026 12:00:00 -0300
+
 eazy (5.0.0) stable; urgency=medium
   * Use the reviewed easiea base with selection, export and maintenance improvements.
   * Add the eazy-yt-stream center with persistent searches, favorites, durations and pagination.
