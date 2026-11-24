@@ -68,7 +68,7 @@ case "${1:-}" in
 esac
 
 EAZY_VERSION="5.2.0"
-EAZY_REVISION="48"
+EAZY_REVISION="51"
 EAZY_CODENAME="sqlite-live-watch"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -109,6 +109,8 @@ EAZY_NOTES_EDITOR="${EAZY_NOTES_EDITOR:-$EAZY_INSTALL_DIR/eazy-notes-editor}"
 [ -x "$EAZY_NOTES_EDITOR" ] || EAZY_NOTES_EDITOR="/usr/lib/eazy/eazy-notes-editor"
 EAZY_AI_CLIENT="${EAZY_AI_CLIENT:-$EAZY_INSTALL_DIR/eazy-ai.py}"
 [ -f "$EAZY_AI_CLIENT" ] || EAZY_AI_CLIENT="/usr/lib/eazy/eazy-ai.py"
+EAZY_M3U_CONVERTER="$EAZY_INSTALL_DIR/eazy-convert-m3u.py"
+[ -f "$EAZY_M3U_CONVERTER" ] || EAZY_M3U_CONVERTER="/usr/lib/eazy/eazy-convert-m3u.py"
 CONFIG_FILE="$CONFIG_DIR/config"
 KEYS_FILE="$CONFIG_DIR/keys"
 LAST_COPY_DEST_FILE="$CONFIG_DIR/last_copy_destination"
@@ -137,6 +139,16 @@ SHOW_DELETED="${SHOW_DELETED:-0}"
 MPV_SCRIPT_DIR="$CONFIG_DIR/mpv_scripts"
 SCRIPTS_DIR="${CONFIG_DIR}/scripts"
 BACKUPS_DIR="${CONFIG_DIR}/backups"
+
+eazy_default_windows_eazydata() {
+    local win_profile linux_profile
+    command -v cmd.exe >/dev/null 2>&1 || return 0
+    command -v wslpath >/dev/null 2>&1 || return 0
+    win_profile=$(cmd.exe /d /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r' | tail -n 1)
+    [ -n "$win_profile" ] || return 0
+    linux_profile=$(wslpath -u "$win_profile" 2>/dev/null) || return 0
+    [ -n "$linux_profile" ] && printf '%s/EazyData\n' "${linux_profile%/}"
+}
 
 # --- VALORES PADRÃO (FALLBACKS) ---
 TELA_PADRAO="fs"
@@ -211,6 +223,8 @@ DOWNLOAD_YTDLP_ARGS="${DOWNLOAD_YTDLP_ARGS:-}"
 SEL_GLOBAL_OP="${SEL_GLOBAL_OP:-1}"
 IA_ATIVA="${IA_ATIVA:-0}"
 IA_NOME="${IA_NOME:-smithi}"
+M3U_WINDOWS_OUT_DIR="${M3U_WINDOWS_OUT_DIR:-$(eazy_default_windows_eazydata)}"
+M3U_LINUX_OUT_DIR="${M3U_LINUX_OUT_DIR:-$HOME/EazyData}"
 MOSTRAR_EXT="${MOSTRAR_EXT:-1}"
 MOSTRAR_DATA="${MOSTRAR_DATA:-1}"
 EAZY_START_DIR="$(pwd -P 2>/dev/null || pwd)"
@@ -1746,6 +1760,104 @@ eazy_live_watch_menu() {
     done
 }
 
+eazy_config_set_value() {
+    local key="$1" value="$2" tmp
+    [[ "$key" =~ ^[A-Z_]+$ ]] || return 1
+    mkdir -p "$CONFIG_DIR" || return 1
+    tmp="${CONFIG_FILE}.tmp.$$"
+    if [ -f "$CONFIG_FILE" ]; then
+        grep -v "^${key}=" "$CONFIG_FILE" > "$tmp" || true
+    else
+        : > "$tmp"
+    fi
+    printf '%s=%q\n' "$key" "$value" >> "$tmp"
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv -f -- "$tmp" "$CONFIG_FILE"
+}
+
+eazy_m3u_filesystem_for_path() {
+    local path="$1" fs=""
+    if command -v findmnt >/dev/null 2>&1; then
+        fs=$(findmnt --noheadings --raw --output FSTYPE --target "$path" 2>/dev/null | head -n 1)
+    fi
+    if [ -z "$fs" ] && [ -e "$path" ]; then
+        fs=$(stat -f -c '%T' -- "$path" 2>/dev/null || true)
+    fi
+    printf '%s' "${fs:-desconhecido}"
+}
+
+eazy_m3u_show_mounts() {
+    local report="$EAZY_TMP_DIR/m3u_mounts_$$.txt"
+    mkdir -p "$EAZY_TMP_DIR"
+    {
+        printf 'Montagem                                                   Sistema de arquivos\n'
+        printf '%s\n' '--------------------------------------------------------------------------------'
+        if command -v findmnt >/dev/null 2>&1; then
+            findmnt --noheadings --raw --types ext4,ntfs,ntfs3,drvfs,9p,fuseblk,xfs,btrfs,nfs,nfs4,cifs,vfat,exfat \
+                --output TARGET,FSTYPE 2>/dev/null \
+                | awk '{ printf "%-58s %s\n", $1, $2 }'
+        else
+            printf 'findmnt não está instalado; instale util-linux para listar montagens.\n'
+        fi
+        printf '\nDestinos de playlists configurados:\n'
+        printf '  Windows: %s  [%s]\n' "${M3U_WINDOWS_OUT_DIR:-não definido}" "$(eazy_m3u_filesystem_for_path "${M3U_WINDOWS_OUT_DIR:-/}")"
+        printf '  Linux:   %s  [%s]\n' "${M3U_LINUX_OUT_DIR:-não definido}" "$(eazy_m3u_filesystem_for_path "${M3U_LINUX_OUT_DIR:-$HOME}")"
+    } > "$report"
+    whiptail --title 'Montagens e sistemas de arquivos' --textbox "$report" 24 88
+    rm -f -- "$report"
+}
+
+eazy_m3u_set_destination() {
+    local kind="$1" current prompt dest fs key
+    if [ "$kind" = windows ]; then
+        current="${M3U_WINDOWS_OUT_DIR:-}"
+        prompt="Pasta Windows acessível pelo Linux/WSL onde serão salvas conversões Linux → Windows.\nExemplo: /mnt/c/Users/USUARIO/EazyData"
+        key=M3U_WINDOWS_OUT_DIR
+    else
+        current="${M3U_LINUX_OUT_DIR:-$HOME/EazyData}"
+        prompt="Pasta Linux onde serão salvas conversões Windows → Linux.\nExemplo: $HOME/EazyData ou um caminho Linux montado."
+        key=M3U_LINUX_OUT_DIR
+    fi
+    dest=$(whiptail --title 'Destino da integração' --inputbox "$prompt" 13 78 "$current" 3>&1 1>&2 2>&3) || return 0
+    [ -n "$dest" ] || return 0
+    case "$dest" in
+        '~') dest="$HOME" ;;
+        '~/'*) dest="$HOME/${dest#\~/}" ;;
+    esac
+    case "$dest" in
+        /*) ;;
+        *) whiptail --title 'Caminho inválido' --msgbox 'Informe um caminho Linux absoluto, por exemplo /mnt/c/Users/USUARIO/EazyData.' 9 76; return 1 ;;
+    esac
+    if [ ! -d "$dest" ]; then
+        whiptail --title 'Criar pasta de destino' --yesno "A pasta ainda não existe:\n$dest\n\nCriar agora?" 11 76 || return 0
+        mkdir -p -- "$dest" || { whiptail --title 'Erro' --msgbox "Não foi possível criar:\n$dest" 9 70; return 1; }
+    fi
+    fs=$(eazy_m3u_filesystem_for_path "$dest")
+    if whiptail --title 'Confirmar destino' --yesno "Pasta:\n$dest\n\nSistema de arquivos detectado: $fs\n\nSalvar como destino $([ "$kind" = windows ] && echo Windows || echo Linux)?" 13 78; then
+        if [ "$key" = M3U_WINDOWS_OUT_DIR ]; then M3U_WINDOWS_OUT_DIR="$dest"; else M3U_LINUX_OUT_DIR="$dest"; fi
+        eazy_config_set_value "$key" "$dest"
+        whiptail --title 'Integração' --msgbox "Destino salvo.\n\n$dest\nSistema de arquivos: $fs" 10 72
+    fi
+}
+
+eazy_configurar_integracao() {
+    local opcao
+    while true; do
+        opcao=$(whiptail --title 'F9 — Integração Linux/Windows (WSL)' --menu \
+            "Destinos das playlists convertidas:\nLinux → Windows: ${M3U_WINDOWS_OUT_DIR:-não configurado}\nWindows → Linux: ${M3U_LINUX_OUT_DIR:-não configurado}" 18 82 4 \
+            '1' 'Configurar pasta Windows (saída Linux → Windows)' \
+            '2' 'Configurar pasta Linux (saída Windows → Linux)' \
+            '3' 'Ver pastas montadas e sistemas de arquivos' \
+            '0' 'Voltar' 3>&1 1>&2 2>&3) || return 0
+        case "$opcao" in
+            1) eazy_m3u_set_destination windows ;;
+            2) eazy_m3u_set_destination linux ;;
+            3) eazy_m3u_show_mounts ;;
+            *) return 0 ;;
+        esac
+    done
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -1777,6 +1889,7 @@ configurar_defaults() {
         "busca_live" "Busca ao vivo na barra / cache progressivo" \
         "indexdb" "Atualizar/Gerar banco de dados" \
         "monitor" "Raízes monitoradas: $(eazy_live_watch_status_label)" \
+        "integration" "Integração Linux/Windows — destinos e sistemas de arquivos" \
         "history_clear" "Limpar histórico (sem apagar arquivos)" \
         "deleted" "Mostrar arquivos deletados: $([ "${SHOW_DELETED:-0}" = "1" ] && echo ON || echo OFF)" \
         "dir_fav" "Ctrl+L menu pastas favoritas" \
@@ -1819,6 +1932,9 @@ configurar_defaults() {
             return ;;
         monitor)
             eazy_live_watch_menu
+            return ;;
+        integration)
+            eazy_configurar_integracao
             return ;;
         history_clear)
             eazy_history_clear
@@ -1986,6 +2102,8 @@ OSD_PADRAO="$OSD_PADRAO"
 VOL_PADRAO="$VOL_PADRAO"
 DIR_PADRAO="$DIR_PADRAO"
 PLAYLIST_DIR_PADRAO="$PLAYLIST_DIR_PADRAO"
+M3U_WINDOWS_OUT_DIR=$(printf '%q' "$M3U_WINDOWS_OUT_DIR")
+M3U_LINUX_OUT_DIR=$(printf '%q' "$M3U_LINUX_OUT_DIR")
 DOWNLOAD_DIR="$DOWNLOAD_DIR"
 TORRENT_DIR="${TORRENT_DIR:-$HOME/Downloads/Torrents}"
 NOTES_EXPORT_DIR="${NOTES_EXPORT_DIR:-}"
@@ -4534,6 +4652,9 @@ if [ "$1" = "--install" ]; then
     [ -f "$EDITOR_SRC" ] || EDITOR_SRC="/usr/lib/eazy/eazy-notes-editor"
     AI_SRC="$SCRIPT_DIR/eazy-ai.py"
     [ -f "$AI_SRC" ] || AI_SRC="/usr/lib/eazy/eazy-ai.py"
+    M3U_CONVERTER_SRC="$SCRIPT_DIR/eazy-convert-m3u.py"
+    [ -f "$M3U_CONVERTER_SRC" ] || M3U_CONVERTER_SRC="/usr/lib/eazy/eazy-convert-m3u.py"
+    [ -f "$M3U_CONVERTER_SRC" ] || { echo "Conversor M3U não encontrado: eazy-convert-m3u.py" >&2; exit 1; }
     INDEXER_SRC="$SCRIPT_DIR/eazy-index.py"
     [ -f "$INDEXER_SRC" ] || INDEXER_SRC="/usr/lib/eazy/eazy-index.py"
     [ -f "$INDEXER_SRC" ] || { echo "Indexador SQLite não encontrado: eazy-index.py" >&2; exit 1; }
@@ -4564,11 +4685,14 @@ if [ "$1" = "--install" ]; then
     install -Dm755 "$SCRIPT_ATUAL" "$DEST_USER_LOCAL"
     sudo install -Dm644 "$INDEXER_SRC" /usr/lib/eazy/eazy-index.py
     install -Dm644 "$INDEXER_SRC" "$(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
+    sudo install -Dm755 "$M3U_CONVERTER_SRC" /usr/lib/eazy/eazy-convert-m3u.py
+    install -Dm755 "$M3U_CONVERTER_SRC" "$(dirname -- "$DEST_USER_LOCAL")/eazy-convert-m3u.py"
     sudo install -Dm755 "$LIVE_WATCH_SRC" /usr/lib/eazy/eazy-live-watch.py
     sudo install -Dm644 "$FULL_MONITOR_SRC" /usr/lib/eazy/full.c
     install -Dm755 "$LIVE_WATCH_SRC" "$(dirname -- "$DEST_USER_LOCAL")/eazy-live-watch.py"
     install -Dm644 "$FULL_MONITOR_SRC" "$(dirname -- "$DEST_USER_LOCAL")/full.c"
     printf '%s\n' "  ✓ $DEST_USR_BIN" "  ✓ $DEST_USR_LIB" "  ✓ $DEST_USR_LOCAL -> $DEST_USR_BIN" "  ✓ $DEST_USER_LOCAL" "  ✓ /usr/lib/eazy/eazy-index.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/eazy-index.py"
+    printf '%s\n' "  ✓ /usr/lib/eazy/eazy-convert-m3u.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/eazy-convert-m3u.py"
     printf '%s\n' "  ✓ /usr/lib/eazy/eazy-live-watch.py" "  ✓ /usr/lib/eazy/full.c" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/eazy-live-watch.py" "  ✓ $(dirname -- "$DEST_USER_LOCAL")/full.c"
     if [ -f "$MIGRATOR_SRC" ]; then
         sudo install -Dm755 "$MIGRATOR_SRC" /usr/lib/eazy/migrate_eazy_lists.py
@@ -4816,6 +4940,9 @@ elif [ "$1" = "--uninstall" ]; then
     if [ -f /usr/lib/eazy/eazy-index.py ]; then
         sudo rm -f /usr/lib/eazy/eazy-index.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-index.py" && REMOVIDO=1
     fi
+    if [ -f /usr/lib/eazy/eazy-convert-m3u.py ]; then
+        sudo rm -f /usr/lib/eazy/eazy-convert-m3u.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-convert-m3u.py" && REMOVIDO=1
+    fi
     if [ -f /usr/lib/eazy/eazy-live-watch.py ]; then
         sudo rm -f /usr/lib/eazy/eazy-live-watch.py && echo -e "\033[1;32m✓\033[0m /usr/lib/eazy/eazy-live-watch.py" && REMOVIDO=1
     fi
@@ -4833,6 +4960,9 @@ elif [ "$1" = "--uninstall" ]; then
     fi
     if [ -f "$INSTALL_HOME/.local/bin/eazy-index.py" ]; then
         rm -f "$INSTALL_HOME/.local/bin/eazy-index.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy-index.py" && REMOVIDO=1
+    fi
+    if [ -f "$INSTALL_HOME/.local/bin/eazy-convert-m3u.py" ]; then
+        rm -f "$INSTALL_HOME/.local/bin/eazy-convert-m3u.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy-convert-m3u.py" && REMOVIDO=1
     fi
     if [ -f "$INSTALL_HOME/.local/bin/eazy-live-watch.py" ]; then
         rm -f "$INSTALL_HOME/.local/bin/eazy-live-watch.py" && echo -e "\033[1;32m✓\033[0m $INSTALL_HOME/.local/bin/eazy-live-watch.py" && REMOVIDO=1
@@ -12125,7 +12255,7 @@ NÃO = descartar
                 "-iname" "*.jpg" "-o" "-iname" "*.jpeg" "-o" "-iname" "*.png" "-o" \
                 "-iname" "*.gif" "-o" "-iname" "*.zip" "-o" "-iname" "*.tar" "-o" \
                 "-iname" "*.gz" "-o" "-iname" "*.bz2" "-o" "-iname" "*.xz" "-o" \
-                "-iname" "*.rar" "-o" "-iname" "*.7z" "-o" "-iname" "*.m3u" "-o" \
+                "-iname" "*.rar" "-o" "-iname" "*.7z" "-o" "-iname" "*.m3u" "-o" "-iname" "*.m3u8" "-o" \
                 "-iname" "*.pls" "-o" "-iname" "*.txt" ")")
             ;;
     esac
@@ -13307,7 +13437,7 @@ eh_playlist_m3u() {
     [ -f "$f" ] || return 1
     ext="${f##*.}"
     ext=$(printf '%s' "$ext" | tr '[:upper:]' '[:lower:]')
-    [ "$ext" = "m3u" ]
+    [[ "$ext" = "m3u" || "$ext" = "m3u8" ]]
 }
 
 # Abre uma playlist no navegador interno, sem iniciar o player imediatamente.
@@ -13325,6 +13455,62 @@ abrir_playlist_no_navegador() {
     ULTIMO_ARQUIVO=""
     carregar_posicao_dir "$ARQUIVO_PLAYLIST_ABERTO"
     registrar_status
+}
+
+eazy_converter_playlist_m3u() {
+    local lista="$1" resultado rc=0 destino direcao fs
+    if [ ! -f "$EAZY_M3U_CONVERTER" ]; then
+        whiptail --title "Conversor M3U" --msgbox "O conversor não foi encontrado:\n$EAZY_M3U_CONVERTER\n\nMantenha eazy-convert-m3u.py ao lado do Eazy ou instale o pacote completo." 11 76
+        return 1
+    fi
+    if ! command -v "${PYTHON_CMD:-python3}" >/dev/null 2>&1; then
+        whiptail --title "Conversor M3U" --msgbox "Python 3 não foi encontrado. Instale Python 3 e tente novamente." 9 64
+        return 1
+    fi
+    direcao=$("${PYTHON_CMD:-python3}" "$EAZY_M3U_CONVERTER" auto "$lista" --detect-only 2>&1) || {
+        whiptail --title 'Não foi possível detectar os caminhos' --msgbox "$direcao" 12 76
+        return 1
+    }
+    case "$direcao" in
+        linux-to-windows) destino="${M3U_WINDOWS_OUT_DIR:-}" ;;
+        windows-to-linux) destino="${M3U_LINUX_OUT_DIR:-}" ;;
+        *) whiptail --title 'Conversor M3U' --msgbox "Direção não reconhecida: $direcao" 9 70; return 1 ;;
+    esac
+    if [ -z "$destino" ]; then
+        whiptail --title 'Integração não configurada' --msgbox "Configure a pasta de saída correspondente em F9 → Integração antes de converter." 10 72
+        return 1
+    fi
+    if [ ! -d "$destino" ]; then
+        whiptail --title 'Criar pasta de integração' --yesno "A pasta de destino não existe:\n$destino\n\nCriar agora?" 11 76 || return 0
+        mkdir -p -- "$destino" || { whiptail --title 'Erro' --msgbox "Não foi possível criar:\n$destino" 9 70; return 1; }
+    fi
+    fs=$(eazy_m3u_filesystem_for_path "$destino")
+    resultado=$("${PYTHON_CMD:-python3}" "$EAZY_M3U_CONVERTER" auto "$lista" \
+        --windows-output-dir "$M3U_WINDOWS_OUT_DIR" \
+        --linux-output-dir "$M3U_LINUX_OUT_DIR" \
+        --distro "${WSL_DISTRO_NAME:-Ubuntu}" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then
+        whiptail --title "Conversor M3U" --msgbox "$resultado\n\nSistema de arquivos de destino: $fs\nO arquivo original foi preservado." 13 76
+    else
+        whiptail --title "Falha na conversão M3U" --msgbox "$resultado" 12 76
+    fi
+    return "$rc"
+}
+
+eazy_menu_playlist_m3u() {
+    local lista="$1" opcao
+    opcao=$(whiptail --title "Playlist — $(basename -- "$lista")" --menu \
+        "O que deseja fazer com esta playlist?\n\n$lista" 16 78 4 \
+        "1" "Abrir no navegador do Eazy" \
+        "2" "Reproduzir a playlist agora" \
+        "3" "Converter caminhos automaticamente" \
+        "0" "Cancelar" 3>&1 1>&2 2>&3) || return 0
+    case "$opcao" in
+        1) abrir_playlist_no_navegador "$lista" ;;
+        2) tocar_arquivo "$lista" ;;
+        3) eazy_converter_playlist_m3u "$lista" ;;
+        *) return 0 ;;
+    esac
 }
 
 # Constrói uma playlist descartável com todos os arquivos da lista atualmente aberta.
@@ -14742,6 +14928,11 @@ eazy_abrir_arquivo_enter() {
     fi
     abs=$(caminho_absoluto "$tocado" 2>/dev/null || readlink -f -- "$tocado" 2>/dev/null || printf '%s' "$tocado")
 
+    if eh_playlist_m3u "$abs" 2>/dev/null; then
+        eazy_menu_playlist_m3u "$abs"
+        return $?
+    fi
+
     # Menu: padrão ou comando / caminho
     op=$(whiptail --title "Abrir — $(basename -- "$abs")" --menu \
 "O que fazer com este ficheiro?
@@ -14813,10 +15004,6 @@ O caminho será acrescentado no fim:" 14 72 "" 3>&1 1>&2 2>&3) || return 0
 
     if [[ "$abs" =~ \.deb$|\.DEB$ ]]; then
         eazy_instalar_deb "$abs"
-        return $?
-    fi
-    if eh_playlist_m3u "$abs" 2>/dev/null; then
-        abrir_playlist_no_navegador "$abs"
         return $?
     fi
     if eh_arquivo_pdf "$abs" 2>/dev/null; then
@@ -18056,9 +18243,9 @@ while true; do
             mkdir -p "$PLAYLIST_DIR_PADRAO" 2>/dev/null || true
             playlist_escolhida=$(
                 {
-                    find . -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
+                    find . -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.m3u8" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
                     if [ -d "$PLAYLIST_DIR_PADRAO" ]; then
-                        find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
+                        find "$PLAYLIST_DIR_PADRAO" -maxdepth 1 -type f \( -iname "*.m3u" -o -iname "*.m3u8" -o -iname "*.pls" \) -printf "%p\n" 2>/dev/null
                     fi
                 } | sed 's|^\./||' | sort -u | fzf --prompt="Selecionar Playlist ❯ " --preview='head -20 {}' --preview-window=down:40%
             )

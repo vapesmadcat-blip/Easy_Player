@@ -19,4 +19,4 @@ compile-bin:
 	./tools/compilar-eazy.sh eazy $(BIN_TARGET)
 
 dist:
-	tar -czf eazy-$(VERSION).tar.gz eazy eazy-index.py eazy-yt-stream eazy-tor eazy-ai.py eazy-notes-editor eazy.desktop eazy.1 README.md README_BETA_5.2.0.md RELEASE_5.2.0.md CHANGELOG.md EAZY_EXPLICADO.md GUIA_RAPIDO.md VERSION Makefile run-beta.sh migrate_eazy_lists.py docs/eazy-help-5.2.0.txt docs/eazy-help-5.2.0.html
+	tar -czf eazy-$(VERSION).tar.gz eazy eazy-win.py eazy-index.py eazy-convert-m3u.py eazy-yt-stream eazy-tor eazy-ai.py eazy-notes-editor eazy.desktop eazy.1 README.md README_BETA_5.2.0.md RELEASE_5.2.0.md CHANGELOG.md EAZY_EXPLICADO.md GUIA_RAPIDO.md VERSION Makefile run-beta.sh migrate_eazy_lists.py docs/eazy-help-5.2.0.txt docs/eazy-help-5.2.0.html

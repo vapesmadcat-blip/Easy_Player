@@ -1,3 +1,22 @@
+## 5.2.0 rev.51 — edição Windows inicial
+
+- Inclui `eazy-win.py`, uma edição Windows independente em preview, baseada no protótipo enviado: navegação local, seleção amarela, menu M3U/M3U8 e configuração persistente em `%APPDATA%\\Easy\\integration.json`.
+- O F9 configura as pastas de saída Windows e Linux/WSL, a distribuição WSL e consulta volumes/sistemas de arquivos do Windows. A conversão usa o helper compartilhado, grava no destino do sistema de destino e mantém o original.
+- A edição Windows ainda não tem paridade com o navegador Linux/WSL, o banco SQLite nem as operações completas de arquivos; exige Python 3 e `eazy-convert-m3u.py` ao lado do script.
+- Atualiza a revisão de teste e acrescenta testes da interface Windows, dos destinos M3U nos dois sentidos e da persistência da integração; não cria release.
+
+## 5.2.0 rev.50 — destinos de integração no F9
+
+- Acrescenta F9 → Integração para configurar a pasta de saída Windows e a pasta de saída Linux, além de listar pontos montados e seus sistemas de arquivos detectados.
+- Direciona M3U convertido para a pasta do sistema de destino: Linux → Windows grava no destino Windows; Windows → Linux grava no destino Linux. A pasta é validada/criada com confirmação e a origem permanece intacta.
+- Mantém o escopo no Eazy Linux/WSL; a PoC Windows recebida fica como referência para etapa futura, sem integrar ainda.
+
+## 5.2.0 rev.49 — ações e conversão de playlists M3U
+
+- Enter em arquivos `.m3u` e `.m3u8` abre um menu específico para navegar no Eazy, reproduzir imediatamente, converter caminhos automaticamente ou cancelar.
+- Integra `eazy-convert-m3u.py` para converter caminhos Linux/WSL e Windows, preservando linhas de metadados e o original; novas conversões usam nomes livres e não sobrescrevem conversões anteriores.
+- Inclui o utilitário no instalador/desinstalador e na distribuição tarball; não altera Help/man nem executa instalação.
+
 ## 5.2.0 rev.48 — decisões de conflito antes da cópia
 
 - A simulação apresenta cada colisão antes de qualquer escrita e usa as mesmas opções da rev.46: renomear automaticamente, sobrescrever, pular este item e continuar, pular os conflitos restantes ou cancelar.

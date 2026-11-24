@@ -1,8 +1,16 @@
-# Eazy 5.2.0 — rev.48 beta
+# Eazy 5.2.0 — rev.51 beta
 
 ## Execução sem instalação
 
-Descompacte em uma pasta e execute `./run-beta.sh` ou `./eazy`. Mantenha `eazy-index.py` e `migrate_eazy_lists.py` ao lado de `eazy`.
+Descompacte em uma pasta e execute `./run-beta.sh` ou `./eazy`. Mantenha `eazy-index.py`, `migrate_eazy_lists.py` e `eazy-convert-m3u.py` ao lado de `eazy`.
+
+## Edição Windows (preview)
+
+No Windows, execute `py eazy-win.py` (Python 3 necessário), mantendo `eazy-convert-m3u.py` na mesma pasta. Esta edição inicial, baseada no protótipo recebido, oferece navegação local, seleção amarela, abertura padrão de arquivos e um menu ao pressionar Enter em `.m3u`/`.m3u8` para abrir/reproduzir, converter ou cancelar.
+
+Em **F9 → Integração**, configure o destino Windows (por padrão `%USERPROFILE%\\EazyData`), o destino Linux/WSL como caminho UNC acessível pelo Windows (por exemplo, `\\\\wsl.localhost\\Ubuntu\\home\\USUARIO\\EazyData`) e o nome da distribuição WSL. A tela também consulta volumes montados e sistemas de arquivos do Windows. A conversão chama o mesmo `eazy-convert-m3u.py` da edição Linux/WSL, envia o resultado à pasta do sistema de destino e preserva a playlist original.
+
+**Escopo:** a edição Windows continua sendo um preview separado; ainda não tem paridade com o Eazy Linux/WSL, não usa o banco SQLite de produção e não implementa as operações completas de arquivos. A experiência interativa e a leitura de sistemas de arquivos devem ser validadas em um Windows real; o self-test no Linux cobre somente lógica portátil.
 
 ## Migração de filas e listas antigas
 
@@ -25,6 +33,10 @@ O banco padrão é `~/.config/eazy/eazy-index.sqlite3`. O migrador faz backup do
 A migração do histórico lê diretamente `~/.config/eazy/history`, linha a linha, recria `history_items` e mantém o arquivo original intacto. Na primeira tentativa de abrir Histórico pelo Ctrl+G ou Ctrl+P, o Easy migra e retorna; entre novamente para consultar os dados SQLite.
 
 ## Operações
+
+Ao pressionar Enter em um arquivo `.m3u` ou `.m3u8`, o Eazy pergunta se deseja navegar na playlist, reproduzi-la imediatamente, converter automaticamente os caminhos entre Linux/WSL e Windows ou cancelar. A conversão preserva o original e escolhe um nome livre se já existir uma conversão anterior.
+
+Em **F9 → Integração**, configure o diretório Windows acessível pelo WSL (por exemplo, `/mnt/c/Users/USUARIO/EazyData`) e o diretório Linux de saída (por exemplo, `$HOME/EazyData`). A opção de montagens exibe os pontos detectados e o tipo de sistema de arquivos (`drvfs`/NTFS, `9p`, `ext4` e outros). Caminhos Linux convertidos para Windows são gravados no destino Windows; caminhos Windows convertidos para Linux são gravados no destino Linux. O Easy pergunta antes de criar uma pasta de destino que ainda não exista.
 
 O Ctrl+P abre filas, listas SQL, Última pesquisa, Seleção global, histórico e duplicados. A opção **Seleção global** mostra os caminhos selecionados entre pastas; **Del** remove itens da seleção global sem apagar arquivos do disco. Insert adiciona a seleção atual a uma fila ou permite criar tabela/lista personalizada. Alt+D é a ação separada para apagar arquivos físicos, após confirmação.
 
