@@ -1,101 +1,288 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>eazy 5.2.0 — Help</title>
-<style>:root{color-scheme:dark}body{font:16px/1.55 system-ui,sans-serif;max-width:1000px;margin:40px auto;padding:0 20px;background:#10141c;color:#e8eef7}h1{color:#6ee7b7}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#171e2b;padding:24px;border-radius:12px}</style>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>eazy 5.2.0 rev.56 — Help</title>
+<style>
+:root {
+  --bg: #0b1220;
+  --card: #121a2b;
+  --card2: #182234;
+  --text: #e8eefc;
+  --muted: #9aa8c7;
+  --accent: #6ee7ff;
+  --accent2: #a78bfa;
+  --green: #34d399;
+  --orange: #fbbf24;
+  --pink: #f472b6;
+  --border: rgba(110,231,255,.18);
+  --shadow: 0 12px 40px rgba(0,0,0,.45);
+  --radius: 16px;
+  --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0; font-family: var(--font); color: var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #1e3a5f 0%, transparent 50%),
+    radial-gradient(900px 500px at 90% 0%, #3b1d5c 0%, transparent 45%),
+    var(--bg);
+  line-height: 1.55; min-height: 100vh;
+}
+.wrap { max-width: 1100px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+header.hero {
+  display: grid; gap: 1rem;
+  grid-template-columns: 1fr;
+  background: linear-gradient(135deg, rgba(110,231,255,.12), rgba(167,139,250,.12));
+  border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px);
+  padding: 1.75rem 1.5rem; box-shadow: var(--shadow); margin-bottom: 1.5rem;
+}
+@media (min-width: 800px) {
+  header.hero { grid-template-columns: 1.4fr .8fr; align-items: center; }
+}
+.badge {
+  display: inline-block; font-size: .75rem; font-weight: 700; letter-spacing: .04em;
+  padding: .25rem .65rem; border-radius: 999px;
+  background: rgba(110,231,255,.15); color: var(--accent);
+  border: 1px solid rgba(110,231,255,.35);
+}
+h1 { margin: .4rem 0 .2rem; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.sub { color: var(--muted); margin: 0; }
+.hero-meta {
+  display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-start;
+}
+@media (min-width: 800px) { .hero-meta { justify-content: flex-end; } }
+.pill {
+  font-size: .8rem; padding: .45rem .8rem; border-radius: 999px;
+  background: var(--card); border: 1px solid var(--border); color: var(--muted);
+}
+nav.toc {
+  display: grid; gap: .55rem;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  margin: 0 0 1.75rem;
+}
+nav.toc a {
+  text-decoration: none; color: var(--text); background: var(--card);
+  border: 1px solid var(--border); border-radius: 12px; padding: .7rem .85rem;
+  font-size: .9rem; transition: .15s ease; text-align: center;
+}
+nav.toc a:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+section.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 1.25rem 1.25rem 1.1rem;
+  margin-bottom: 1.1rem; box-shadow: var(--shadow);
+}
+section.card h2 {
+  margin: 0 0 1rem; font-size: 1.15rem; display: flex; align-items: center; gap: .5rem;
+}
+section.card h2 span.dot {
+  width: .55rem; height: .55rem; border-radius: 50%; display: inline-block;
+}
+.grid-keys {
+  display: grid; gap: .55rem .9rem;
+  grid-template-columns: minmax(120px, 180px) 1fr;
+}
+@media (max-width: 560px) {
+  .grid-keys { grid-template-columns: 1fr; gap: .15rem; }
+  .grid-keys .k { margin-top: .55rem; }
+}
+.k {
+  font-family: var(--mono); font-size: .82rem; font-weight: 600;
+  color: var(--accent); background: rgba(110,231,255,.08);
+  border: 1px solid rgba(110,231,255,.22); border-radius: 8px;
+  padding: .28rem .55rem; white-space: nowrap; align-self: start;
+}
+.v { color: var(--text); font-size: .95rem; padding: .2rem 0; }
+.v em { color: var(--muted); font-style: normal; font-size: .88rem; }
+.note {
+  margin-top: 1rem; padding: .85rem 1rem; border-radius: 12px;
+  background: var(--card2); border-left: 3px solid var(--accent2);
+  color: var(--muted); font-size: .92rem;
+}
+footer {
+  margin-top: 2rem; text-align: center; color: var(--muted); font-size: .85rem;
+}
+footer a { color: var(--accent); }
+.c-nav .dot { background: var(--accent); }
+.c-dup .dot { background: var(--orange); }
+.c-fila .dot { background: var(--green); }
+.c-dl .dot { background: var(--pink); }
+.c-ai .dot { background: var(--accent2); }
+.c-play .dot { background: #38bdf8; }
+.c-maint .dot { background: #fb7185; }
+.c-sys .dot { background: #94a3b8; }
+.c-cli .dot { background: #4ade80; }
+
+  .toolbar { display:flex; flex-wrap:wrap; gap:8px; margin: 12px 0 16px; }
+  .btn {
+    cursor:pointer; border:1px solid var(--border); background:rgba(255,255,255,.06);
+    color:var(--text); border-radius:10px; padding:8px 14px; font-weight:600; font-size:.85rem;
+  }
+  .btn:hover { border-color: rgba(108,182,255,.45); background:rgba(108,182,255,.12); }
+  .tree { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:.88rem; }
+  .tree details { margin-left: .4rem; border-left: 1px solid var(--border); padding-left: .55rem; margin-top: 2px; }
+  .tree details > summary {
+    cursor:pointer; list-style:none; color: var(--accent); font-weight:600;
+    padding: 3px 0;
+  }
+  .tree details > summary::-webkit-details-marker { display:none; }
+  .tree details > summary::before { content:"▸ "; color: var(--muted); }
+  .tree details[open] > summary::before { content:"▾ "; }
+  .tree .file {
+    display:flex; gap:10px; flex-wrap:wrap; align-items:baseline;
+    padding: 2px 0 2px .2rem; color: var(--text);
+  }
+  .tree .file a { color: var(--text); text-decoration:none; }
+  .tree .file a:hover { color: var(--accent); }
+  .tree .sz { color: var(--muted); font-size:.8rem; }
+  .view-tabs { display:flex; gap:8px; margin-bottom: 12px; }
+  .view-tabs button.active { border-color: rgba(52,211,153,.45); background:rgba(52,211,153,.12); }
+  #view-table.hidden, #view-tree.hidden { display:none !important; }
+</style>
 </head>
-<body><h1>eazy 5.2.0</h1><pre>eazy 5.2.0 rev.2 (sqlite-history-and-playlists) — navegador e player multimídia no terminal
-Made by John B Kersting
-Uso:
-  eazy [OPÇÕES] [PASTA|ARQUIVO]
-Argumentos:
-  PASTA              Abre o eazy nesse diretório
-  ARQUIVO            Abre a pasta do arquivo e posiciona o cursor nele
-Opções:
-  -h, --help         Mostra esta ajuda
-  -V, --version      Mostra a versão e revisão
-  --config           Assistente de configuração (inclui pasta de downloads)
-  --ai               Abre o chat de IA configurado via OpenRouter
-  --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
-  --shell-init       Imprime função bash: eazy muda de pasta ao sair
-  --verbose, -v      Mostra ficheiros a processar (barra de estado)
-  --silent, -q       Silencioso (padrão): sem barra de processamento
-  --ignore           Anónimo: sem sessão, seleção, posições, histórico, filas
-  --unselect         Limpa seleção global e local (selected_paths) e continua
-  --install          Instala dependências, comando global e scripts auxiliares
-  --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
-  --stream           Abre a Central completa de streaming/filmes
-  --uninstall        Remove os destinos eazy instalados e o launcher .desktop
-  --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
-  --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
-  --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
-  -m, --maintenance  Manutenção + backup/restaurar (escolhe o que salvar)
-  --backup           Backup selecionável (~/.config/eazy e afins)
-  --restore-backup   Restaurar um .tar.gz de backup
-  -a, --advanced-maintenance
-                     Manutenção avançada (seleção fina de arquivos do eazy)
-Atalhos principais (dentro do eazy):
-  Enter              Abrir/tocar; em .deb mostra dados e instala com confirmação
-  Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
-  Tab · Espaço       Marcar itens (persiste entre pastas)
-  Ctrl-A             Selecionar todos os visíveis
-  Ctrl-X             Limpar seleção do diretório atual
-  Ctrl-R             Inverter seleção (marcas + persistência)
-  Insert             Enviar seleção para fila ou lista temporária SQL
-  Ctrl-P             Diretório → filas 1–3 → listas SQL → histórico → duplicados
-  Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
-  Ctrl-D             Duplicados
-  Ctrl-B             Downloads, fila de streams e Central eazy-yt-stream
-  Ctrl-O             Abrir playlist .m3u / .pls
-  Ctrl-G             Histórico de reprodução
-  Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
-  Ctrl-Y / Ctrl-U    Copiar / mover seleção
-  Ctrl-E             Tocar seleção em ordem aleatória
-  Ctrl-L             Ir à pasta do arquivo
-  Ctrl-Backspace     Voltar ao último diretório
-  Ctrl-H             Exportar HTML: seleção (se houver) ou conteúdo da tela
-  Alt+0 (ou Alt+F10) Tela do terminal (status) + pausa Enter
-  Ctrl-/             Preview on/off (persiste)
-  Del                Remover item somente da lista
-  Shift+Del          Apagar seleção (pergunta: local ou global)
-  Alt-D              Apagar do disco após confirmação
-  F9                 Configuração, overview e teste de som
-  F10                Ajuda expandida (atalhos, .deb, downloads, Tor e configuração)
-  F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
-  Q · X · Ctrl-Q     Sair (salva sessão)
-Manutenção (eazy -m):
-  1  Dados do próprio eazy (sem sudo)
-  2  Manutenção do sistema (sudo quando necessário)
-  3  Manutenção COMPLETA — RAM/Disco/CPU/órfãos/TRIM (sudo)
-No mpv:
-  d                  Marcar para exclusão ao sair
-  D                  Marcar e ir ao próximo
-Arquivos de configuração:
-  ~/.config/eazy/config
-  ~/.config/eazy/session
-  ~/.config/eazy/selected_paths
-  ~/.config/eazy/eazy-index.sqlite3
-  ~/.config/eazy/tmp/          (snapshots efêmeros e temporários; não usa /tmp)
-  ~/.config/eazy/scripts/manut-completa.sh
-PERSISTÊNCIA SQLITE (histórico e listas):
-  Banco: ~/.config/eazy/eazy-index.sqlite3
-  Histórico: Ctrl+G ou Ctrl+P → Histórico. Na primeira entrada, o Easy avisa,
-  recria history_items lendo ~/.config/eazy/history linha a linha e preserva
-  intacto o arquivo original. A primeira tentativa migra e retorna; entre
-  novamente no Histórico.
-  Filas 1–3 e listas personalizadas: tabelas SQLite individuais. Ctrl+P,
-  criação, inclusão, remoção, validação e reprodução usam o banco. Os arquivos
-  em ~/.config/eazy/tmp são snapshots transitórios de compatibilidade, não
-  listas permanentes. O cabeçalho mostra o nome lógico escolhido no Ctrl+P.
-  Migração de arquivos antigos (feche o Easy antes): primeiro veja a prévia,
-  depois aplique. Os arquivos legados não são apagados e o banco recebe backup.
-    python3 migrate_eazy_lists.py
-    python3 migrate_eazy_lists.py --apply
-  Não use --replace sem revisar uma divergência e querer substituir a tabela.
-  Auxiliar de índice: eazy-index.py (junto de eazy ou em /usr/lib/eazy/)
-Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk, python3
-Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools
-</pre></body>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <span class="badge">HELP COMPLETO</span>
+      <h1>eazy 5.2.0 rev.56</h1>
+      <p class="sub">eazy 5.2.0 rev.56 · Navegador e reprodutor multimídia · Made by John B Kersting</p>
+    </div>
+    <div class="hero-meta">
+      <span class="pill">fzf + mpv</span>
+      <span class="pill">eazy-tor</span>
+      <span class="pill">IA</span>
+      <span class="pill">KDE ready</span>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <a href="#nav">Navegação</a>
+    <a href="#dup">Duplicados</a>
+    <a href="#fila">Filas</a>
+    <a href="#dl">Downloads / Tor</a>
+    <a href="#ai">IA &amp; Notas</a>
+    <a href="#player">Player</a>
+    <a href="#maint">Manutenção</a>
+    <a href="#sys">Sistema</a>
+    <a href="#cli">CLI</a>
+  </nav>
+
+  <section class="card c-nav" id="nav">
+    <h2><span class="dot"></span> Navegação, filtros e busca</h2>
+    <div class="grid-keys">
+      <div class="k">Enter</div><div class="v">Tocar item / entrar em pasta / abrir playlist</div>
+      <div class="k">Ctrl+Espaço / F6</div><div class="v">Seleção inteira <em>(Alt+Enter se o terminal permitir)</em></div>
+      <div class="k">Tab / Espaço</div><div class="v">Marcar item; em pasta, mostra no indicador Dir a soma dos bytes dos arquivos na árvore</div>
+      <div class="k">HD livre/total</div><div class="v">Espaço disponível / capacidade do filesystem que contém a pasta atual; usa o caminho atual também nos redraws</div>
+      <div class="k">Ctrl-A / Ctrl-R / Ctrl-X</div><div class="v">Todos / inverter / limpar seleção</div>
+      <div class="k">Ctrl-Backspace</div><div class="v">Voltar ao último diretório</div>
+      <div class="k">Ctrl-H</div><div class="v">Exportar HTML da seleção ou da tela</div>
+      <div class="k">Ctrl-L</div><div class="v">Ir à pasta do arquivo sob o cursor</div>
+      <div class="k">Ctrl-/</div><div class="v">Ligar/desligar preview</div>
+      <div class="k">Ctrl-F</div><div class="v">Busca recursiva por extensão, tamanho e texto</div>
+      <div class="k">Esc</div><div class="v">Sair da busca e voltar à pasta normal</div>
+      <div class="k">F1 · F2 · F3</div><div class="v">Ordenar tamanho/nome e alternar visualização</div>
+      <div class="k">F4–F7 · F8</div><div class="v">Filtros áudio/vídeo/imagens/zip · alternar TODOS</div>
+      <div class="k">Alt+0</div><div class="v">Log real do terminal (por trás do fzf) + pausa</div>
+      <div class="k">Alt+Q</div><div class="v">Pausar com read sem limpar a tela; Enter retorna</div>
+    </div>
+  </section>
+
+  <section class="card c-dup" id="dup">
+    <h2><span class="dot"></span> Duplicados e progresso</h2>
+    <div class="grid-keys">
+      <div class="k">Ctrl-D</div><div class="v">Buscar duplicados ou reabrir lista temporária</div>
+      <div class="k">F12</div><div class="v">Amostra: um arquivo por grupo <em>(marca vermelha fixa)</em></div>
+      <div class="k">Ctrl-T</div><div class="v">Passar amostras para a seleção ativa</div>
+      <div class="k">● vermelho</div><div class="v">Amostra fixa (F12)</div>
+      <div class="k">✓ amarelo</div><div class="v">Seleção ativa (Enter, Del, copiar, mover)</div>
+    </div>
+  </section>
+
+  <section class="card c-fila" id="fila">
+    <h2><span class="dot"></span> Filas, playlists e ações</h2>
+    <div class="grid-keys">
+      <div class="k">Insert</div><div class="v">Enviar seleção para fila 1, 2 ou 3</div>
+      <div class="k">Ctrl-P</div><div class="v">Alternar filas 1 → 2 → 3 → diretório</div>
+      <div class="k">Ctrl-O</div><div class="v">Abrir playlist .m3u / .pls</div>
+      <div class="k">Ctrl-G</div><div class="v">Histórico de arquivos tocados</div>
+      <div class="k">Ctrl-K / Y / U / E</div><div class="v">Ações · copiar · mover · shuffle/export</div>
+      <div class="k">Ctrl-N</div><div class="v">Notas rápidas</div>
+    </div>
+  </section>
+
+  <section class="card c-dl" id="dl">
+    <h2><span class="dot"></span> Downloads, Tor e torrents</h2>
+    <div class="grid-keys">
+      <div class="k">Ctrl-B</div><div class="v">Fila de downloads</div>
+      <div class="k">Enter na fila</div><div class="v">Escolhe app: <strong>aria2c · Axel · wget · yt-dlp · eazy-tor</strong> <em>(sugere o último)</em></div>
+      <div class="k">eazy-tor</div><div class="v">Magnet / .torrent — incluso no .deb</div>
+      <div class="k">Tor</div><div class="v">Por item + torsocks <em>socks5://127.0.0.1:9050</em></div>
+      <div class="k">F9 → Downloads</div><div class="v">Motor padrão e parâmetros</div>
+    </div>
+    <div class="note">CLI: <code>eazy-tor --dir ~/Downloads/Torrents --tor magnet:?xt=…</code></div>
+  </section>
+
+  <section class="card c-ai" id="ai">
+    <h2><span class="dot"></span> IA (eazy-ai) e notas</h2>
+    <div class="grid-keys">
+      <div class="k">F9 → IA</div><div class="v">Abrir chat com IA <em>(eazy-ai.py)</em></div>
+      <div class="k">eazy-ai.py</div><div class="v">Cliente de API — incluso no pacote</div>
+      <div class="k">Ctrl-N</div><div class="v">Última nota · no editor: nova nota</div>
+      <div class="k">Editor</div><div class="v">Ctrl-S salva · Esc salva e sai · Ctrl-E lista</div>
+    </div>
+  </section>
+
+  <section class="card c-play" id="player">
+    <h2><span class="dot"></span> Player, conversões e PDF</h2>
+    <div class="grid-keys">
+      <div class="k">Enter</div><div class="v">Reproduzir com mpv / mplayer / vlc / ffplay</div>
+      <div class="k">F9 → parâmetros</div><div class="v">Editar valor, substituir em campo vazio ou remover argumentos por player em <code>~/.config/eazy/config</code></div>
+      <div class="k">mpv [d] / [D]</div><div class="v">Marcar exclusão · marcar e ir ao próximo</div>
+      <div class="k">C (Ctrl-K)</div><div class="v">Conversões de vídeo, imagem e PDF</div>
+      <div class="k">PDF no Enter</div><div class="v">Texto · HTML · PNG · leitor do sistema</div>
+    </div>
+  </section>
+
+  <section class="card c-maint" id="maint">
+    <h2><span class="dot"></span> Manutenção (Ctrl-K)</h2>
+    <div class="grid-keys">
+      <div class="k">S · H · A · V · W</div><div class="v">Sistema · HD · Som · Vídeo · SWAP</div>
+      <div class="k">Z</div><div class="v">Selecionar diretórios vazios e arquivos regulares de 0 bytes; a raiz pesquisada fica protegida</div>
+      <div class="k">M · P · C</div><div class="v">Menu · proteger · conversões</div>
+      <div class="k">DRY-RUN</div><div class="v">Simula ações destrutivas (visível no cabeçalho)</div>
+    </div>
+  </section>
+
+  <section class="card c-sys" id="sys">
+    <h2><span class="dot"></span> Sistema, config e saída</h2>
+    <div class="grid-keys">
+      <div class="k">F9</div><div class="v">Config, hardware, som, IA</div>
+      <div class="k">F10</div><div class="v">Este help</div>
+      <div class="k">Q / Ctrl-Q</div><div class="v">Salvar sessão e sair</div>
+      <div class="k">tmp</div><div class="v"><code>~/.config/eazy/tmp</code> — nunca /tmp do sistema</div>
+    </div>
+  </section>
+
+  <section class="card c-cli" id="cli">
+    <h2><span class="dot"></span> Linha de comando</h2>
+    <div class="grid-keys">
+      <div class="k">eazy --install</div><div class="v">Deps + eazy + indexador, conversor e monitor + tor + IA + editor</div>
+      <div class="k">eazy --shell-init</div><div class="v">Função bash para cd ao sair</div>
+      <div class="k">eazy --torrent</div><div class="v">Encaminha ao eazy-tor</div>
+      <div class="k">eazy -V</div><div class="v">Versão</div>
+    </div>
+    <div class="note">Pacote .deb: <strong>eazy</strong> · <strong>eazy-index.py</strong> · <strong>eazy-convert-m3u.py</strong> · <strong>eazy-live-watch.py</strong> · <strong>full.c</strong> · <strong>eazy-tor</strong> · <strong>eazy-ai.py</strong> · <strong>eazy-notes-editor</strong></div>
+  </section>
+
+  <footer>
+    Gerado pelo eazy 5.2.0 rev.56 ·
+    <a href="https://github.com/vapesmadcat-blip/Easy_Player">GitHub Easy_Player</a>
+  </footer>
+</div>
+</body>
 </html>

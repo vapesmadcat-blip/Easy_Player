@@ -1,8 +1,28 @@
-# Eazy 5.2.0 — rev.51 beta
+# Eazy 5.2.0 — rev.56 beta (base rev.55)
+
+## Indicador de espaço em disco
+
+O cabeçalho mostra **HD livre/total**: o primeiro número é o espaço disponível e o segundo é a capacidade do filesystem que contém a pasta atualmente navegada. Por exemplo, em `/mnt/c/Users/...`, consulta o mount de `/mnt/c`; em `/home/...`, consulta o filesystem que contém `/home`. A atualização repassa o caminho absoluto ao `df`, inclusive nos redraws do FZF.
+
+## Parâmetros extras dos players
+
+Em **F9 → Players e parâmetros extras**, a lista mostra mpv, MPlayer, VLC/cvlc e ffplay ao lado dos parâmetros atualmente configurados. Selecione um player e escolha **Editar o valor atual** (campo preenchido), **Substituir por uma nova linha** (campo vazio) ou **Remover todos os parâmetros deste player**. O programa confirma o salvamento; ao remover, apaga a chave persistida e limpa o valor em memória. As entradas ficam em `~/.config/eazy/config` (`PLAYER_EXTRA_MPV`, `PLAYER_EXTRA_MPLAYER`, `PLAYER_EXTRA_CVLC` e `PLAYER_EXTRA_FFPLAY`).
+
+## Tamanho de diretórios selecionados
+
+Ao marcar um diretório com **Espaço** (ou Tab), o indicador **Dir** do cabeçalho mostra a soma dos tamanhos dos arquivos regulares dentro dele e de suas subpastas. A soma exclui o tamanho técnico das entradas de diretório e atualiza os tamanhos dos arquivos observados durante a seleção.
+
+## Limpeza Ctrl+K
+
+Em **Ctrl+K → Z**, o Easy lista diretórios vazios e arquivos regulares de 0 bytes (com ou sem extensão), pede confirmação e remove somente os itens escolhidos. A pasta raiz informada não é oferecida para remoção; diretórios são removidos com `rmdir`, sem apagar conteúdo recursivamente. O DRY-RUN continua simulando as operações.
 
 ## Execução sem instalação
 
-Descompacte em uma pasta e execute `./run-beta.sh` ou `./eazy`. Mantenha `eazy-index.py`, `migrate_eazy_lists.py` e `eazy-convert-m3u.py` ao lado de `eazy`.
+Descompacte em uma pasta e execute `./run-beta.sh` ou `./eazy`. Mantenha `eazy-index.py`, `migrate_eazy_lists.py`, `eazy-convert-m3u.py`, `eazy-live-watch.py` e `full.c` ao lado de `eazy`.
+
+## Instalador beta
+
+`install-eazy-pronto.sh` baixa a revisão 56 da branch `main`, valida a versão baixada e instala os componentes necessários em `~/.local/bin`, sem `sudo`. O monitor recursivo compila `full.c` ao iniciar e requer `cc`/`gcc`; os instaladores informam quando não há compilador. O instalador web Debian continua apontando para a release estável `v5.2.0`.
 
 ## Edição Windows (preview)
 

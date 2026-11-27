@@ -68,7 +68,7 @@ case "${1:-}" in
 esac
 
 EAZY_VERSION="5.2.0"
-EAZY_REVISION="51"
+EAZY_REVISION="56"
 EAZY_CODENAME="sqlite-live-watch"
 EAZY_NAME="eazy"
 EAZY_AUTHOR="John B Kersting"
@@ -1775,6 +1775,20 @@ eazy_config_set_value() {
     mv -f -- "$tmp" "$CONFIG_FILE"
 }
 
+eazy_config_unset_value() {
+    local key="$1" tmp
+    [[ "$key" =~ ^[A-Z_]+$ ]] || return 1
+    mkdir -p "$CONFIG_DIR" || return 1
+    tmp="${CONFIG_FILE}.tmp.$$"
+    if [ -f "$CONFIG_FILE" ]; then
+        grep -v "^${key}=" "$CONFIG_FILE" > "$tmp" || true
+    else
+        : > "$tmp"
+    fi
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv -f -- "$tmp" "$CONFIG_FILE"
+}
+
 eazy_m3u_filesystem_for_path() {
     local path="$1" fs=""
     if command -v findmnt >/dev/null 2>&1; then
@@ -1858,6 +1872,101 @@ eazy_configurar_integracao() {
     done
 }
 
+eazy_player_extra_preview() {
+    local value="${1//$'\n'/ }"
+    if [ -z "$value" ]; then
+        printf '(sem parâmetros)'
+        return 0
+    fi
+    if [ "${#value}" -gt 38 ]; then
+        value="${value:0:35}..."
+    fi
+    printf '%s' "$value"
+}
+
+eazy_configurar_parametros_players() {
+    local player key current title prompt novo action edit_current
+    while true; do
+        player=$(whiptail --title 'F9 — Parâmetros extras dos players' --menu \
+            'Escolha o player para editar. Os parâmetros atuais aparecem ao lado:' 18 78 5 \
+            'mpv'     "mpv     | $(eazy_player_extra_preview "${PLAYER_EXTRA_MPV:-}")" \
+            'mplayer' "MPlayer | $(eazy_player_extra_preview "${PLAYER_EXTRA_MPLAYER:-}")" \
+            'cvlc'    "VLC     | $(eazy_player_extra_preview "${PLAYER_EXTRA_CVLC:-}")" \
+            'ffplay'  "ffplay  | $(eazy_player_extra_preview "${PLAYER_EXTRA_FFPLAY:-}")" \
+            '0'       'Voltar' 3>&1 1>&2 2>&3) || return 0
+        case "$player" in
+            mpv)
+                key=PLAYER_EXTRA_MPV; current="${PLAYER_EXTRA_MPV:-}"
+                title='Parâmetros extras — mpv'
+                ;;
+            mplayer)
+                key=PLAYER_EXTRA_MPLAYER; current="${PLAYER_EXTRA_MPLAYER:-}"
+                title='Parâmetros extras — MPlayer'
+                ;;
+            cvlc)
+                key=PLAYER_EXTRA_CVLC; current="${PLAYER_EXTRA_CVLC:-}"
+                title='Parâmetros extras — VLC/cvlc'
+                ;;
+            ffplay)
+                key=PLAYER_EXTRA_FFPLAY; current="${PLAYER_EXTRA_FFPLAY:-}"
+                title='Parâmetros extras — ffplay'
+                ;;
+            *) return 0 ;;
+        esac
+        action=$(whiptail --title "$title" --menu \
+            "Valor atual: $(eazy_player_extra_preview "$current")\nEscolha editar/substituir ou remover o parâmetro salvo." 13 76 4 \
+            'edit' 'Editar o valor atual (campo preenchido)' \
+            'replace' 'Substituir por uma nova linha (campo vazio)' \
+            'clear' 'Remover todos os parâmetros deste player' \
+            'back' 'Voltar à lista de players' 3>&1 1>&2 2>&3) || continue
+        case "$action" in
+            clear)
+                if ! eazy_config_unset_value "$key"; then
+                    whiptail --title 'Erro ao remover parâmetros' --msgbox "Não foi possível atualizar:\n$CONFIG_FILE" 9 68
+                    continue
+                fi
+                case "$key" in
+                    PLAYER_EXTRA_MPV) PLAYER_EXTRA_MPV='' ;;
+                    PLAYER_EXTRA_MPLAYER) PLAYER_EXTRA_MPLAYER='' ;;
+                    PLAYER_EXTRA_CVLC) PLAYER_EXTRA_CVLC='' ;;
+                    PLAYER_EXTRA_FFPLAY) PLAYER_EXTRA_FFPLAY='' ;;
+                esac
+                whiptail --title 'Parâmetros removidos' --msgbox "Os parâmetros de $player foram removidos." 8 62
+                continue
+                ;;
+            back) continue ;;
+            edit) edit_current="$current" ;;
+            replace) edit_current='' ;;
+            *) continue ;;
+        esac
+        if [ "$action" = replace ]; then
+            prompt="Digite a linha completa de novos parâmetros. O campo começa vazio; para apagar tudo sem digitar, use a ação 'Remover todos os parâmetros'."
+        else
+            prompt="O valor atual está preenchido. Edite o que desejar e confirme. Para trocar tudo sem apagar caractere por caractere, use 'Substituir por uma nova linha'."
+        fi
+        if novo=$(whiptail --title "$title" --inputbox "$prompt" 11 72 "$edit_current" 3>&1 1>&2 2>&3); then
+            if [ -z "$novo" ]; then
+                if ! eazy_config_unset_value "$key"; then
+                    whiptail --title 'Erro ao salvar parâmetros' --msgbox "Não foi possível atualizar:\n$CONFIG_FILE" 9 68
+                    continue
+                fi
+            else
+                if ! eazy_config_set_value "$key" "$novo"; then
+                    whiptail --title 'Erro ao salvar parâmetros' --msgbox "Não foi possível atualizar:\n$CONFIG_FILE" 9 68
+                    continue
+                fi
+            fi
+            case "$key" in
+                PLAYER_EXTRA_MPV) PLAYER_EXTRA_MPV="$novo" ;;
+                PLAYER_EXTRA_MPLAYER) PLAYER_EXTRA_MPLAYER="$novo" ;;
+                PLAYER_EXTRA_CVLC) PLAYER_EXTRA_CVLC="$novo" ;;
+                PLAYER_EXTRA_FFPLAY) PLAYER_EXTRA_FFPLAY="$novo" ;;
+            esac
+            whiptail --title 'Parâmetros salvos' --msgbox "Valor atualizado para $player:\n$(eazy_player_extra_preview "$novo")" 9 68
+        fi
+    done
+}
+
 configurar_defaults() {
     mkdir -p "$CONFIG_DIR"
 
@@ -1879,6 +1988,7 @@ configurar_defaults() {
         "sound" "Teste de som" \
         "shell" "Shell do sistema (neste diretório)" \
         "exec" "Executar programa (campo + root)" \
+        "player_extra" "Players e parâmetros extras (editar por player)" \
         "exitdir" "Ao sair: dir do navegador ou o anterior" \
         "download" "Downloads — downloader/Tor/parâmetros" \
         "dirs" "Diretórios — downloads, torrents, notas, HTML…" \
@@ -1901,6 +2011,7 @@ configurar_defaults() {
         sound) testar_som; return ;;
         shell) abrir_shell_sistema; return ;;
         exec) eazy_executar_programa; return ;;
+        player_extra) eazy_configurar_parametros_players; return ;;
         exitdir) configurar_dir_saida; return ;;
         download) configurar_downloads; return ;;
         dirs) configurar_diretorios_eazy; return ;;
@@ -2044,24 +2155,8 @@ configurar_defaults() {
         3>&1 1>&2 2>&3)
     [ -n "$novo_player" ] && PLAYER_PADRAO="$novo_player"
 
-    # Cada player guarda a sua própria linha de argumentos; vazio remove os extras.
-    local extra_mpv extra_mplayer extra_cvlc extra_ffplay
-    if extra_mpv=$(whiptail --title "Parâmetros extras — mpv" --inputbox \
-        "Argumentos extras do mpv (ex.: --keep-open=yes):" 10 72 "$PLAYER_EXTRA_MPV" 3>&1 1>&2 2>&3); then
-        PLAYER_EXTRA_MPV="$extra_mpv"
-    fi
-    if extra_mplayer=$(whiptail --title "Parâmetros extras — MPlayer" --inputbox \
-        "Argumentos extras do MPlayer (ex.: -zoom):" 10 72 "$PLAYER_EXTRA_MPLAYER" 3>&1 1>&2 2>&3); then
-        PLAYER_EXTRA_MPLAYER="$extra_mplayer"
-    fi
-    if extra_cvlc=$(whiptail --title "Parâmetros extras — VLC" --inputbox \
-        "Argumentos extras do cvlc (ex.: --no-video-title-show):" 10 72 "$PLAYER_EXTRA_CVLC" 3>&1 1>&2 2>&3); then
-        PLAYER_EXTRA_CVLC="$extra_cvlc"
-    fi
-    if extra_ffplay=$(whiptail --title "Parâmetros extras — ffplay" --inputbox \
-        "Argumentos extras do ffplay (ex.: -loop 0):" 10 72 "$PLAYER_EXTRA_FFPLAY" 3>&1 1>&2 2>&3); then
-        PLAYER_EXTRA_FFPLAY="$extra_ffplay"
-    fi
+    # Lista os quatro players junto dos parâmetros atuais; só abre o campo escolhido.
+    eazy_configurar_parametros_players
 
     # Checkbox: vídeo sem áudio
     local audio_sel
@@ -2116,10 +2211,10 @@ PYTHON_CMD="${PYTHON_CMD:-python3}"
 SHELL_CMD="${SHELL_CMD:-bash}"
 EOF
     {
-        printf 'PLAYER_EXTRA_MPV=%q\n' "$PLAYER_EXTRA_MPV"
-        printf 'PLAYER_EXTRA_MPLAYER=%q\n' "$PLAYER_EXTRA_MPLAYER"
-        printf 'PLAYER_EXTRA_CVLC=%q\n' "$PLAYER_EXTRA_CVLC"
-        printf 'PLAYER_EXTRA_FFPLAY=%q\n' "$PLAYER_EXTRA_FFPLAY"
+        [ -z "$PLAYER_EXTRA_MPV" ] || printf 'PLAYER_EXTRA_MPV=%q\n' "$PLAYER_EXTRA_MPV"
+        [ -z "$PLAYER_EXTRA_MPLAYER" ] || printf 'PLAYER_EXTRA_MPLAYER=%q\n' "$PLAYER_EXTRA_MPLAYER"
+        [ -z "$PLAYER_EXTRA_CVLC" ] || printf 'PLAYER_EXTRA_CVLC=%q\n' "$PLAYER_EXTRA_CVLC"
+        [ -z "$PLAYER_EXTRA_FFPLAY" ] || printf 'PLAYER_EXTRA_FFPLAY=%q\n' "$PLAYER_EXTRA_FFPLAY"
     } >> "$CONFIG_FILE"
     whiptail --title "Sucesso" --msgbox "Configurações salvas em:\n$CONFIG_FILE\n\nDownloads: $DOWNLOAD_DIR\nPlayer: $PLAYER_PADRAO\nPython: ${PYTHON_CMD:-python3}\nShell: ${SHELL_CMD:-bash}\nSem áudio: $([ "$SEM_AUDIO" = "1" ] && echo "SIM" || echo "NÃO")" 14 55
 }
@@ -2238,7 +2333,7 @@ Uso: eazy [pasta|arquivo] · eazy -m
 NAVEGAÇÃO E SELEÇÃO
   Enter          Só o item sob o cursor
   Ctrl+Espaço/F6 Seleção inteira
-  Tab · Espaço   Marcar (persiste entre pastas)
+  Tab · Espaço   Marcar (pasta: soma recursiva no indicador Dir do cabeçalho)
   Ctrl-A/X/R     Todos / limpar / inverter
   F12            Reaplica persistência no multi-select
   Ctrl-L · Ctrl-/  Pasta do arquivo · Preview
@@ -2365,7 +2460,7 @@ NAVEGAÇÃO, FILTROS E BUSCA
 ──────────────────────────
   Enter              Tocar item sob o cursor / entrar em pasta / abrir playlist
   Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
-  Tab / Espaço       Marcar ou alternar o item (persiste entre pastas)
+  Tab / Espaço       Marcar item; em pasta, soma recursiva aparece no indicador Dir
   Ctrl-A             Selecionar todos (fora de Duplicados)
   Ctrl-R             Inverter a seleção
   Ctrl-X             Limpar a seleção
@@ -2376,6 +2471,8 @@ NAVEGAÇÃO, FILTROS E BUSCA
   Ctrl-F             Busca recursiva (extensão, tamanho, texto)
   Esc                Sair da busca e voltar à pasta normal
   F1/F2/Ctrl-T       Ordenar tamanho/nome/data (pastas, histórico, playlists, filas)
+  HD livre/total     Espaço livre / capacidade do filesystem da pasta atual
+                     Ex.: /mnt/c/... consulta o mount de /mnt/c; /home usa o de /home
   F3                 Alternar visualização tela cheia/janela
   F4/F5/F6/F7        Filtrar áudio/vídeo/imagens/compactados
   F8                 Alternar entre filtro atual e TODOS
@@ -2451,6 +2548,7 @@ S
 PLAYER, CONVERSÕES E PDF
 ────────────────────────
   Enter              Reproduzir (mpv / mplayer / vlc / ffplay)
+  F9 → parâmetros    Editar o valor atual, substituir em campo vazio ou remover
   mpv: [d]           Marcar exclusão
   mpv: [D]           Marcar exclusão e ir ao próximo
   C (Ctrl-K)         Conversões: vídeo, imagem, PDF→HTML/texto/PNG, imagem→PDF
@@ -2465,7 +2563,8 @@ MANUTENÇÃO (Ctrl-K)
   A  Som             Diagnóstico, reinício, teste de áudio
   V  Vídeo           GPU, codecs, otimização
   W  SWAP            Status, criação, limpeza
-  Z  Dirs vazios     Buscar, selecionar e remover
+  Z  Vazios          Selecionar dirs vazios e arquivos regulares de 0 bytes
+                     A raiz pesquisada fica protegida; dirs usam rmdir, sem recursão
   M  Menu completo   Manutenção
   Backup             Escolher o que salvar (.config, filas, hist…)
   Restaurar          Restaurar .tar.gz de backup
@@ -2514,7 +2613,7 @@ S
 
 eazy_help_texto() {
     cat <<EOF
-eazy ${EAZY_VERSION} — Navegador e Reprodutor Multimídia
+eazy ${EAZY_VERSION} rev.${EAZY_REVISION} — Navegador e Reprodutor Multimídia
 Made by ${EAZY_AUTHOR}  ·  F10 = esta ajuda
 ════════════════════════════════════════════════════════════════════
 
@@ -2536,13 +2635,14 @@ $(eazy_help_secao sys)
 
 $(eazy_help_secao cli)
 
-Pacote .deb inclui: eazy, eazy-tor, eazy-ai.py, eazy-notes-editor
+Pacote .deb inclui: eazy, eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c, eazy-tor, eazy-ai.py, eazy-notes-editor
 EOF
 }
 
+
 eazy_gerar_help_html() {
     local out="${1:-${CONFIG_DIR}/eazy-help-${EAZY_VERSION}.html}"
-    local ver="${EAZY_VERSION:-}"
+    local ver="${EAZY_VERSION:-} rev.${EAZY_REVISION:-}"
     local author="${EAZY_AUTHOR:-John B Kersting}"
     mkdir -p "$(dirname -- "$out")" 2>/dev/null || true
     cat > "$out" <<EOF
@@ -2724,7 +2824,8 @@ footer a { color: var(--accent); }
     <div class="grid-keys">
       <div class="k">Enter</div><div class="v">Tocar item / entrar em pasta / abrir playlist</div>
       <div class="k">Ctrl+Espaço / F6</div><div class="v">Seleção inteira <em>(Alt+Enter se o terminal permitir)</em></div>
-      <div class="k">Tab / Espaço</div><div class="v">Marcar item sob o cursor <em>(persiste entre pastas)</em></div>
+      <div class="k">Tab / Espaço</div><div class="v">Marcar item; em pasta, mostra no indicador Dir a soma dos bytes dos arquivos na árvore</div>
+      <div class="k">HD livre/total</div><div class="v">Espaço disponível / capacidade do filesystem que contém a pasta atual; usa o caminho atual também nos redraws</div>
       <div class="k">Ctrl-A / Ctrl-R / Ctrl-X</div><div class="v">Todos / inverter / limpar seleção</div>
       <div class="k">Ctrl-Backspace</div><div class="v">Voltar ao último diretório</div>
       <div class="k">Ctrl-H</div><div class="v">Exportar HTML da seleção ou da tela</div>
@@ -2788,6 +2889,7 @@ footer a { color: var(--accent); }
     <h2><span class="dot"></span> Player, conversões e PDF</h2>
     <div class="grid-keys">
       <div class="k">Enter</div><div class="v">Reproduzir com mpv / mplayer / vlc / ffplay</div>
+      <div class="k">F9 → parâmetros</div><div class="v">Editar valor, substituir em campo vazio ou remover argumentos por player em <code>~/.config/eazy/config</code></div>
       <div class="k">mpv [d] / [D]</div><div class="v">Marcar exclusão · marcar e ir ao próximo</div>
       <div class="k">C (Ctrl-K)</div><div class="v">Conversões de vídeo, imagem e PDF</div>
       <div class="k">PDF no Enter</div><div class="v">Texto · HTML · PNG · leitor do sistema</div>
@@ -2798,7 +2900,8 @@ footer a { color: var(--accent); }
     <h2><span class="dot"></span> Manutenção (Ctrl-K)</h2>
     <div class="grid-keys">
       <div class="k">S · H · A · V · W</div><div class="v">Sistema · HD · Som · Vídeo · SWAP</div>
-      <div class="k">Z · M · P · C</div><div class="v">Dirs vazios · menu · proteger · conversões</div>
+      <div class="k">Z</div><div class="v">Selecionar diretórios vazios e arquivos regulares de 0 bytes; a raiz pesquisada fica protegida</div>
+      <div class="k">M · P · C</div><div class="v">Menu · proteger · conversões</div>
       <div class="k">DRY-RUN</div><div class="v">Simula ações destrutivas (visível no cabeçalho)</div>
     </div>
   </section>
@@ -2816,12 +2919,12 @@ footer a { color: var(--accent); }
   <section class="card c-cli" id="cli">
     <h2><span class="dot"></span> Linha de comando</h2>
     <div class="grid-keys">
-      <div class="k">eazy --install</div><div class="v">Deps + eazy + tor + IA + editor</div>
+      <div class="k">eazy --install</div><div class="v">Deps + eazy + indexador, conversor e monitor + tor + IA + editor</div>
       <div class="k">eazy --shell-init</div><div class="v">Função bash para cd ao sair</div>
       <div class="k">eazy --torrent</div><div class="v">Encaminha ao eazy-tor</div>
       <div class="k">eazy -V</div><div class="v">Versão</div>
     </div>
-    <div class="note">Pacote .deb: <strong>eazy</strong> · <strong>eazy-tor</strong> · <strong>eazy-ai.py</strong> · <strong>eazy-notes-editor</strong></div>
+    <div class="note">Pacote .deb: <strong>eazy</strong> · <strong>eazy-index.py</strong> · <strong>eazy-convert-m3u.py</strong> · <strong>eazy-live-watch.py</strong> · <strong>full.c</strong> · <strong>eazy-tor</strong> · <strong>eazy-ai.py</strong> · <strong>eazy-notes-editor</strong></div>
   </section>
 
   <footer>
@@ -2934,8 +3037,8 @@ Diretórios a limpar:\n\
 # incluindo arquivos ocultos. Subdiretórios vazios não tornam a árvore não vazia.
 listar_dirs_sem_arquivos() {
     local pasta="${1:-.}"
-    find "$pasta" -depth -type d -print 2>/dev/null | while IFS= read -r dir; do
-        if ! find "$dir" -type f -print -quit 2>/dev/null | grep -q .; then
+    find "$pasta" -mindepth 1 -depth -type d -print 2>/dev/null | while IFS= read -r dir; do
+        if ! find "$dir" -mindepth 1 ! -type d -print -quit 2>/dev/null | grep -q .; then
             printf '%s\n' "$dir"
         fi
     done | awk -F/ '{ print NF "\t" $0 }' | LC_ALL=C sort -rn -k1,1 -k2,2 | cut -f2-
@@ -2947,7 +3050,7 @@ remover_dirs_vazios_fzf() { limpar_vazios "$@"; }
 
 limpar_vazios() {
     local pasta="${1:-.}"
-    local tmp selected n dir ok=0 falha=0 dry_status
+    local tmp selected n dir item_type ok=0 falha=0 dry_status
     local tmp_dirs tmp_files n_dirs n_files
 
     [ -d "$pasta" ] || {
@@ -2967,8 +3070,8 @@ limpar_vazios() {
     tmp_files=$(mktemp "${EAZY_TMP_DIR}/eazy-empty-files.XXXXXX") || return 1
 
     listar_dirs_sem_arquivos "$pasta" > "$tmp_dirs"
-    # Ficheiros 0 bytes SEM extensão (nome sem ponto) sob a pasta atual (recursivo)
-    find "$pasta" -type f -size 0 ! -name '*.*' -print 2>/dev/null | LC_ALL=C sort > "$tmp_files"
+    # Todos os arquivos regulares de 0 bytes, com ou sem extensão, recursivamente.
+    find "$pasta" -mindepth 1 -type f -size 0 -print 2>/dev/null | LC_ALL=C sort > "$tmp_files"
 
     n_dirs=$(wc -l < "$tmp_dirs" 2>/dev/null | tr -cd '0-9'); n_dirs=${n_dirs:-0}
     n_files=$(wc -l < "$tmp_files" 2>/dev/null | tr -cd '0-9'); n_files=${n_files:-0}
@@ -2982,15 +3085,15 @@ limpar_vazios() {
     rm -f "$tmp_dirs" "$tmp_files"
 
     if [ "$n" -eq 0 ]; then
-        whiptail --title "Vazios" --msgbox "Nada encontrado em:\n$pasta\n\n· diretórios vazios\n· ficheiros 0 bytes sem extensão" 12 55
+        whiptail --title "Vazios" --msgbox "Nada encontrado em:\n$pasta\n\n· diretórios sem arquivos descendentes\n· arquivos regulares de 0 bytes" 12 55
         rm -f "$tmp"
         return 0
     fi
 
-    echo -e "\n${CYAN}Vazios: $n_dirs pasta(s) + $n_files ficheiro(s) 0B s/ext | DRY: $dry_status${NC}"
+    echo -e "\n${CYAN}Vazios: $n_dirs pasta(s) + $n_files arquivo(s) 0B | DRY: $dry_status${NC}"
     selected=$(cat "$tmp" | fzf -m --reverse --border \
         --prompt="Selecionar vazios ❯ " \
-        --header="[TAB] marcar | [ENTER] confirmar | [ESC] cancelar | DIR=pastas | FILE 0B=ficheiros vazios s/ext | DRY:$dry_status" \
+        --header="[TAB] marcar | [ENTER] confirmar | [ESC] cancelar | DIR=pastas | FILE 0B=arquivos vazios | DRY:$dry_status" \
         --preview='p={}; p="${p#\[DIR\] }"; p="${p#\[FILE 0B\] }"; echo "$p"; echo; ls -la "$p" 2>/dev/null | head -15' \
         --preview-window=down:35%:wrap \
         --height=80%) || true
@@ -3017,9 +3120,9 @@ limpar_vazios() {
     } > "$tmp"
 
     if command -v whiptail >/dev/null 2>&1; then
-        whiptail --title "Revisão — $n pasta(s)" --textbox "$tmp" 22 78 --scrolltext
+        whiptail --title "Revisão — $n item(ns)" --textbox "$tmp" 22 78 --scrolltext
         if ! whiptail --title "Confirmar" --yesno \
-            "Remover $n item(ns) vazio(s)?\n\nPastas vazias → rmdir\nFicheiros 0B s/ext → rm\n\nDRY RUN: $dry_status" 13 58; then
+            "Remover $n item(ns) vazio(s)?\n\nDiretórios vazios → rmdir\nArquivos regulares de 0 bytes → rm\n\nDRY RUN: $dry_status" 13 58; then
             rm -f "$tmp"
             echo -e "${YELLOW}Cancelado.${NC}"
             return 0
@@ -3035,11 +3138,14 @@ limpar_vazios() {
         echo ""
         while IFS= read -r dir; do
             [ -z "$dir" ] && continue
-            # remove prefixos da lista fzf
-            dir="${dir#[DIR] }"
-            dir="${dir#[FILE 0B] }"
+            # Remove os rótulos como texto literal, não como padrões glob.
+            case "$dir" in
+                '[DIR] '*) dir="${dir:6}"; item_type=dir ;;
+                '[FILE 0B] '*) dir="${dir:10}"; item_type=file ;;
+                *) echo "✗ (rótulo inválido) $dir"; falha=$((falha + 1)); continue ;;
+            esac
             if [ "${DRY_RUN:-0}" = "1" ]; then
-                if [ -f "$dir" ]; then
+                if [ "$item_type" = file ]; then
                     echo "[DRY RUN] rm -- $dir"
                 else
                     echo "[DRY RUN] rmdir -- $dir"
@@ -3047,7 +3153,12 @@ limpar_vazios() {
                 ok=$((ok + 1))
                 continue
             fi
-            if [ -f "$dir" ]; then
+            if [ "$item_type" = file ]; then
+                if [ ! -f "$dir" ] || [ -L "$dir" ] || [ -s "$dir" ]; then
+                    echo "✗ (não é arquivo regular vazio) $dir"
+                    falha=$((falha + 1))
+                    continue
+                fi
                 if rm -f -- "$dir" 2>/dev/null; then
                     echo "✓ ficheiro $dir"
                     ok=$((ok + 1))
@@ -3057,7 +3168,7 @@ limpar_vazios() {
                 fi
                 continue
             fi
-            if [ ! -d "$dir" ]; then
+            if [ ! -d "$dir" ] || [ -L "$dir" ]; then
                 echo "✗ (não existe) $dir"
                 falha=$((falha + 1))
                 continue
@@ -4752,7 +4863,7 @@ if [ "$1" = "--install" ]; then
     # Man page embutida (não depende de eazy.1 ao lado do script)
     MAN_TMP=$(mktemp "${EAZY_TMP_DIR:-${CONFIG_DIR:-$HOME/.config/eazy}/tmp}/eazy-man.XXXXXX")
     cat > "$MAN_TMP" <<'EAZY_MAN_EOF'
-.TH EAZY 1 "2026-11-16" "eazy 5.2.0" "User Commands"
+.TH EAZY 1 "2026-11-27" "eazy 5.2.0 rev.56" "User Commands"
 .SH NAME
 eazy \- navegador de arquivos, reprodutor multimídia, downloads e streaming no terminal
 .SH SYNOPSIS
@@ -4781,7 +4892,7 @@ Mostra a versão e revisão instalada.
 Abre a Central eazy-yt-stream.
 .TP
 .B \-\-install
-Instala dependências, eazy, eazy-index.py, o migrador de listas, eazy-yt-stream, eazy-tor, eazy-ai.py, eazy-notes-editor, launcher e man page.
+Instala dependências, eazy, eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c, o migrador de listas, eazy-yt-stream, eazy-tor, eazy-ai.py, eazy-notes-editor, launcher e man page.
 .TP
 .B \-\-update-all
 Atualiza dependências e o binário oficial yt-dlp.
@@ -4798,6 +4909,12 @@ Abre o restaurador de backup.
 .BR \-a ", " \-\-advanced-maintenance
 Abre a manutenção avançada para selecionar arquivos próprios do eazy.
 .SH KEY BINDINGS
+.TP
+.B Space / Tab
+Marca a seleção. Em um diretório, o indicador Dir mostra a soma recursiva dos bytes dos arquivos da árvore, sem somar metadados das pastas.
+.TP
+.B HD livre/total
+Mostra o espaço disponível e a capacidade do filesystem que contém a pasta atualmente navegada; o caminho atual é repassado ao df também nos redraws do FZF.
 .TP
 .B F1 / F2 / Ctrl-T
 Ordena por tamanho, nome ou data.
@@ -4859,7 +4976,7 @@ Arquivo original de histórico legado, preservado durante a migração.
 Executável principal.
 .TP
 .I /usr/lib/eazy/
-Componentes auxiliares, incluindo eazy-index.py e o migrador de listas.
+Componentes auxiliares, incluindo eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c e o migrador de listas.
 .TP
 .I /usr/share/man/man1/eazy.1.gz
 Esta man page.
@@ -4870,6 +4987,9 @@ Indexação de arquivos e operações transacionais SQLite.
 .TP
 .B migrate_eazy_lists.py
 Prévia e migração das listas legadas para tabelas SQLite.
+.TP
+.B eazy-live-watch.py / full.c
+Monitor recursivo de alterações no filesystem para atualizar o índice e a listagem; cc/gcc é necessário para compilar o monitor.
 .TP
 .B eazy-yt-stream
 Streaming, pesquisas, filmes gratuitos, TV aberta, favoritos e downloads.
@@ -9323,7 +9443,8 @@ eazy_status_header() {
         fi
     fi
     if [ "$cache_hit" -ne 1 ]; then
-        read -r livre total < <(info_disco)
+        local atual_dir="${EAZY_HEADER_DISK_PATH:-$(pwd -P 2>/dev/null || pwd)}"
+        read -r livre total < <(info_disco "$atual_dir")
         livre=${livre:-0}; total=${total:-0}
         if [ "${MODO_DUP:-0}" -eq 1 ]; then
         IFS=$'\t' read -r sel_count sel_bytes < <(eazy_dup_db --dup-marks-stats 2>/dev/null)
@@ -17410,6 +17531,10 @@ while true; do
         EAZY_HEADER_HINT=" [FONTE: SQLite direto] $EAZY_HEADER_HINT"
     fi
     export EAZY_HEADER_HINT
+    # Os comandos transform-header do fzf rodam em subprocessos; passe a pasta
+    # navegada explicitamente para que df consulte o mount correto, não o cwd inicial.
+    EAZY_HEADER_DISK_PATH="${PASTA_ATUAL:-$(pwd -P 2>/dev/null || pwd)}"
+    export EAZY_HEADER_DISK_PATH
     EAZY_HEADER_CACHE_FILE="${EAZY_TMP_DIR}/eazy_header_stats_$$"
     rm -f -- "$EAZY_HEADER_CACHE_FILE" 2>/dev/null || true
     export EAZY_HEADER_CACHE_FILE

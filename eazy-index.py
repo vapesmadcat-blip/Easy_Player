@@ -229,7 +229,7 @@ def selection_count(db: sqlite3.Connection, state: int | None = None) -> int:
 
 def selection_stats(db: sqlite3.Connection, state: int | None = 2) -> tuple[int, int, int]:
     sql = (
-        "SELECT COUNT(*), COALESCE(SUM(size),0), "
+        "SELECT COUNT(*), COALESCE(SUM(CASE WHEN kind='directory' THEN 0 ELSE size END),0), "
         "COALESCE(SUM(kind='directory'),0) FROM files WHERE selected<>0"
     )
     params: tuple[object, ...] = ()
@@ -243,11 +243,20 @@ def selection_stats(db: sqlite3.Connection, state: int | None = 2) -> tuple[int,
 def selection_ui_stats(db: sqlite3.Connection, root: str) -> tuple[int, int, int, int, int, int]:
     global_count, global_bytes, global_dirs = selection_stats(db, 2)
     root = os.path.abspath(root).rstrip(os.sep) or os.sep
-    local_count, local_bytes, local_dirs = db.execute(
-        "SELECT COUNT(*),COALESCE(SUM(size),0),COALESCE(SUM(kind='directory'),0) "
+    local_count, local_dirs = db.execute(
+        "SELECT COUNT(*),COALESCE(SUM(kind='directory'),0) "
         "FROM files WHERE selected IN (1,2) AND (parent=? OR path=?)",
         (root, root),
     ).fetchone()
+    local_bytes = db.execute(
+        "WITH selected_dirs(path) AS ("
+        "SELECT path FROM files WHERE parent=? AND kind='directory' AND selected IN (1,2)) "
+        "SELECT COALESCE(SUM(f.size),0) FROM files f "
+        "WHERE f.selected IN (1,2) AND f.kind<>'directory' AND (f.parent=? OR EXISTS ("
+        "SELECT 1 FROM selected_dirs d "
+        "WHERE substr(f.path,1,length(d.path)+1)=d.path||'/'))",
+        (root, root),
+    ).fetchone()[0]
     return (int(global_count), int(global_bytes), int(global_dirs),
             int(local_count), int(local_bytes), int(local_dirs))
 
@@ -262,9 +271,16 @@ def selection_toggle_ui(db: sqlite3.Connection, path: str, root: str,
                     continue
                 child = raw_path.decode("utf-8", "surrogateescape")
                 try:
+                    st = os.stat(child, follow_symlinks=False)
+                    if not stat.S_ISREG(st.st_mode):
+                        continue
                     child = selection_ensure_path(db, child)
                 except OSError:
                     continue
+                db.execute(
+                    "UPDATE files SET size=?,mtime_ns=?,ctime_ns=?,device=?,inode=? WHERE path=?",
+                    (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_dev, st.st_ino, child),
+                )
                 db.execute("UPDATE files SET selected=? WHERE path=?", (state, child))
     return state, selection_ui_stats(db, root)
 

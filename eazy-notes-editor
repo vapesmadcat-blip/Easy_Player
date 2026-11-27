@@ -3,7 +3,7 @@
 # Uso: bash editor [arquivo]
 #
 # Ctrl+N Nova | Ctrl+S Salvar+nova | Ctrl+T Tema | Ctrl+I Importar
-# ESC salva e sai | Setas movem | Enter CRLF | Backspace apaga
+# Ctrl+C Copiar | Ctrl+V Colar | ESC salva e sai | Setas | Enter | Backspace
 
 set -u
 
@@ -92,6 +92,10 @@ IMPORT_FILTER=""
 NOTES_DIR="$(pwd)"   # notas ficam aqui (onde o editor foi iniciado)
 MAX_IMPORT_BYTES=4096
 MSG_STATUS=""
+UI_FRAME_DRAWN=0
+UI_LAST_COLS=0
+UI_LAST_LINES=0
+PREV_VISIBLE_ROWS=()
 
 if [[ $# -ge 1 && -n "${1:-}" ]]; then
     ARQUIVO_ATUAL="$1"
@@ -263,6 +267,24 @@ ler_byte() {
 desenhar() {
     local COLS=$(tput cols 2>/dev/null || echo 80)
     local LINES=$(tput lines 2>/dev/null || echo 24)
+    local HELP_W GAP BOX_W BOX_H START_X START_Y INNER_W INNER_H HELP_X HELP_H content_start
+    HELP_W=$(( COLS * 32 / 100 ))
+    (( HELP_W < 22 )) && HELP_W=22
+    (( HELP_W > 36 )) && HELP_W=36
+    GAP=2
+    BOX_W=$(( COLS - HELP_W - GAP - 4 ))
+    (( BOX_W < 36 )) && BOX_W=36
+    BOX_H=$(( LINES * 78 / 100 ))
+    (( BOX_H < 12 )) && BOX_H=12
+    (( BOX_H > LINES - 3 )) && BOX_H=$((LINES - 3))
+    START_X=2
+    START_Y=$(( (LINES - BOX_H) / 2 ))
+    (( START_Y < 1 )) && START_Y=1
+    INNER_W=$(( BOX_W - 2 ))
+    INNER_H=$(( BOX_H - 5 ))
+    HELP_X=$(( START_X + BOX_W + GAP ))
+    HELP_H=$BOX_H
+    content_start=$((START_Y+3))
 
     # Layout: editor ~60% à esquerda, help ~35% à direita
     local HELP_W=$(( COLS * 32 / 100 ))
@@ -284,7 +306,6 @@ desenhar() {
     local HELP_X=$(( START_X + BOX_W + GAP ))
     local HELP_H=$BOX_H
 
-    clear
     if [[ -n "${BG:-}" ]]; then
         printf "${BG}"
         local yy
@@ -294,6 +315,11 @@ desenhar() {
     fi
 
     gotoxy() { printf '\033[%d;%dH' "$1" "$2"; }
+
+    if (( UI_FRAME_DRAWN == 0 || COLS != UI_LAST_COLS || LINES != UI_LAST_LINES )); then
+    UI_FRAME_DRAWN=0
+    UI_LAST_COLS=$COLS
+    UI_LAST_LINES=$LINES
 
     # ── Caixa do editor ──
     gotoxy $START_Y $START_X
@@ -356,12 +382,12 @@ desenhar() {
         " Ctrl+S    salvar+nova"
         " Ctrl+I    importar/dirs"
         " Ctrl+T    tema"
+        " Ctrl+C    copiar buffer"
+        " Ctrl+V    colar clipboard"
         " ESC       salvar e sair"
         ""
         " PgUp/PgDn página"
-        " Quebra de linha"
-        " automática na"
-        " largura da caixa"
+        " Quebra automática"
     )
     local hy=$((START_Y+3))
     local hi
@@ -388,6 +414,10 @@ desenhar() {
     printf "${RESET}${ACCENT}║${RESET}"
     gotoxy $((content_start+INNER_H+2)) $HELP_X
     printf "${ACCENT}╚"; printf '═%.0s' $(seq 1 $hw); printf "╝${RESET}"
+
+    UI_FRAME_DRAWN=1
+    PREV_VISIBLE_ROWS=()
+    fi
 
     # ── Conteúdo com soft-wrap ──
     # linhas lógicas (separadas por LF)
@@ -447,27 +477,38 @@ desenhar() {
     fi
     (( start_line < 0 )) && start_line=0
 
-    local y=$content_start
-    local cursor_sy=-1 cursor_sx=-1
-    for ((i=start_line; i<num_vis && y < content_start+INNER_H; i++)); do
-        gotoxy $y $((START_X+1))
-        local texto="${visuais[$i]}"
-        (( ${#texto} > INNER_W-1 )) && texto="${texto:0:$((INNER_W-1))}"
-        printf "${TEXT}%s${RESET}" "$texto"
-        if (( i == vis_cursor )); then
-            cursor_sy=$y
+    local cursor_sy=-1 cursor_sx=-1 row_idx row_text row_y old_row common prefix_len tail_text tail_width
+    for ((row_idx=0; row_idx<INNER_H; row_idx++)); do
+        i=$((start_line + row_idx))
+        row_text=""
+        if (( i < num_vis )); then
+            row_text="${visuais[$i]}"
+            (( ${#row_text} > INNER_W-1 )) && row_text="${row_text:0:$((INNER_W-1))}"
+        fi
+        old_row="${PREV_VISIBLE_ROWS[$row_idx]-__UNSET__}"
+        if [[ "$old_row" != "$row_text" ]]; then
+            common=0
+            if [[ "$old_row" != "__UNSET__" ]]; then
+                while (( common < ${#old_row} && common < ${#row_text} )) &&
+                      [[ "${old_row:common:1}" == "${row_text:common:1}" ]]; do
+                    ((common++))
+                done
+            fi
+            row_y=$((content_start + row_idx))
+            gotoxy "$row_y" "$((START_X+1+common))"
+            tail_text="${row_text:common}"
+            tail_width=$((INNER_W-1-common))
+            printf "${TEXT}%-*s${RESET}" "$tail_width" "$tail_text"
+            PREV_VISIBLE_ROWS[$row_idx]="$row_text"
+        fi
+        if (( vis_cursor == i )); then
+            cursor_sy=$((content_start + row_idx))
             local col_in_vis=$(( CUR_COL - 1 - ${v_off[$i]} ))
             (( col_in_vis < 0 )) && col_in_vis=0
             (( col_in_vis > ${#visuais[$i]} )) && col_in_vis=${#visuais[$i]}
             cursor_sx=$(( START_X + 1 + col_in_vis ))
         fi
-        ((y++))
     done
-
-    if (( cursor_sy >= 0 )); then
-        gotoxy $cursor_sy $cursor_sx
-        printf "${CURSOR}${BOLD}▌${RESET}"
-    fi
 
     # Status inferior
     gotoxy $LINES 1
@@ -542,9 +583,20 @@ desenhar() {
             printf "${HELP}(nenhum arquivo no diretório)${RESET}"
         fi
     fi
+
+    # Status e overlays também movem o cursor físico; posicioná-lo por último.
+    if [[ "$MODO" != "import" ]] && (( cursor_sy >= 0 )); then
+        tput cnorm 2>/dev/null || true
+        gotoxy "$cursor_sy" "$cursor_sx"
+    else
+        tput civis 2>/dev/null || true
+    fi
 }
 
 # ─── Loop ─────────────────────────────────────────────────────
+# Limpa uma única vez ao entrar. Cada atualização subsequente redesenha nas
+# posições do terminal sem apagar toda a tela, evitando o piscar a cada tecla.
+clear
 while true; do
     desenhar
     codigo=$(ler_byte)
@@ -661,6 +713,52 @@ while true; do
             TEMA_IDX=$(( (TEMA_IDX + 1) % ${#TEMAS[@]} ))
             TEMA_ATUAL="${TEMAS[$TEMA_IDX]}"
             aplicar_tema "$TEMA_ATUAL"
+            UI_FRAME_DRAWN=0
+            ;;
+        3)  # Ctrl+C — copiar buffer para o clipboard
+            if command -v xclip >/dev/null 2>&1; then
+                printf '%s' "$BUFFER" | xclip -selection clipboard 2>/dev/null
+                MSG_STATUS="copiado (xclip)"
+            elif command -v xsel >/dev/null 2>&1; then
+                printf '%s' "$BUFFER" | xsel --clipboard --input 2>/dev/null
+                MSG_STATUS="copiado (xsel)"
+            elif command -v wl-copy >/dev/null 2>&1; then
+                printf '%s' "$BUFFER" | wl-copy 2>/dev/null
+                MSG_STATUS="copiado (wl-copy)"
+            elif command -v pbcopy >/dev/null 2>&1; then
+                printf '%s' "$BUFFER" | pbcopy 2>/dev/null
+                MSG_STATUS="copiado (pbcopy)"
+            else
+                # Terminal puro: OSC 52 (Kitty, Alacritty, WezTerm, iTerm2, WinTerm, tmux…)
+                b64=""
+                b64=$(printf '%s' "$BUFFER" | base64 -w0 2>/dev/null || printf '%s' "$BUFFER" | base64 | tr -d '\n')
+                # passa pelo tmux se estiver dentro dele
+                if [[ -n "${TMUX:-}" ]]; then
+                    printf '\033Ptmux;\033\033]52;c;%s\007\033\\' "$b64"
+                else
+                    printf '\033]52;c;%s\007' "$b64"
+                fi
+                MSG_STATUS="copiado (OSC52)"
+            fi
+            ;;
+        22) # Ctrl+V — colar do clipboard
+            clip=""
+            if command -v xclip >/dev/null 2>&1; then
+                clip=$(xclip -selection clipboard -o 2>/dev/null) || true
+            elif command -v xsel >/dev/null 2>&1; then
+                clip=$(xsel --clipboard --output 2>/dev/null) || true
+            elif command -v wl-paste >/dev/null 2>&1; then
+                clip=$(wl-paste 2>/dev/null) || true
+            elif command -v pbpaste >/dev/null 2>&1; then
+                clip=$(pbpaste 2>/dev/null) || true
+            fi
+            if [[ -n "$clip" ]]; then
+                inserir "$clip"
+                MSG_STATUS="colado"
+            else
+                # em term puro não dá pra ler o clipboard; use Shift+Insert / botão do meio
+                MSG_STATUS="use Shift+Ins (term puro)"
+            fi
             ;;
         27)
             old_stty=$(stty -g 2>/dev/null || true)

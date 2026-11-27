@@ -9,20 +9,21 @@ PKGROOT="$SCRIPT_DIR/pkgroot"
 DIST_DIR="$SCRIPT_DIR/dist"
 PACKAGE="eazy"
 VERSION="$(sed -n 's/^Version:[[:space:]]*//p' "$DEBIAN_DIR/control" | head -n1)"
-HELP_TXT="$SRC_DIR/docs/eazy-help-${VERSION}.txt"
-HELP_HTML="$SRC_DIR/docs/eazy-help-${VERSION}.html"
+HELP_VERSION="$(tr -d '\r\n' < "$SRC_DIR/VERSION")"
+HELP_TXT="$SRC_DIR/docs/eazy-help-${HELP_VERSION}.txt"
+HELP_HTML="$SRC_DIR/docs/eazy-help-${HELP_VERSION}.html"
 [ -n "$VERSION" ] || { printf 'Erro: versão ausente em %s\n' "$DEBIAN_DIR/control" >&2; exit 1; }
 ARCH="all"
 OUTPUT="$DIST_DIR/${PACKAGE}_${VERSION}_${ARCH}.deb"
 
-for required in dpkg-deb install gzip; do
+for required in dpkg-deb install gzip sha256sum; do
     command -v "$required" >/dev/null 2>&1 || {
         printf 'Erro: comando necessário não encontrado: %s\n' "$required" >&2
         exit 1
     }
 done
 
-for required_file in "$SRC_DIR/eazy" "$SRC_DIR/eazy-index.py" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy-tor" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy-yt-stream" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$HELP_TXT" "$HELP_HTML" "$SRC_DIR/migrate_eazy_lists.py" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
+for required_file in "$SRC_DIR/eazy" "$SRC_DIR/VERSION" "$SRC_DIR/eazy-index.py" "$SRC_DIR/eazy-convert-m3u.py" "$SRC_DIR/eazy-live-watch.py" "$SRC_DIR/full.c" "$SRC_DIR/eazy-notes-editor" "$SRC_DIR/eazy-tor" "$SRC_DIR/eazy-ai.py" "$SRC_DIR/eazy-yt-stream" "$SRC_DIR/eazy.desktop" "$SRC_DIR/eazy.1" "$SRC_DIR/README.md" "$SRC_DIR/README_BETA_5.2.0.md" "$SRC_DIR/CHANGELOG.md" "$SRC_DIR/EAZY_EXPLICADO.md" "$SRC_DIR/GUIA_RAPIDO.md" "$HELP_TXT" "$HELP_HTML" "$SRC_DIR/migrate_eazy_lists.py" "$DEBIAN_DIR/control" "$DEBIAN_DIR/changelog" "$DEBIAN_DIR/copyright"; do
     [ -f "$required_file" ] || {
         printf 'Erro: arquivo necessário não encontrado: %s\n' "$required_file" >&2
         exit 1
@@ -43,6 +44,9 @@ mkdir -p \
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/bin/eazy"
 install -m 0755 "$SRC_DIR/eazy" "$PKGROOT/usr/lib/eazy/eazy"
 install -m 0644 "$SRC_DIR/eazy-index.py" "$PKGROOT/usr/lib/eazy/eazy-index.py"
+install -m 0755 "$SRC_DIR/eazy-convert-m3u.py" "$PKGROOT/usr/lib/eazy/eazy-convert-m3u.py"
+install -m 0755 "$SRC_DIR/eazy-live-watch.py" "$PKGROOT/usr/lib/eazy/eazy-live-watch.py"
+install -m 0644 "$SRC_DIR/full.c" "$PKGROOT/usr/lib/eazy/full.c"
 ln -s /usr/bin/eazy "$PKGROOT/usr/local/bin/eazy"
 install -m 0755 "$SRC_DIR/eazy-notes-editor" "$PKGROOT/usr/lib/eazy/eazy-notes-editor"
 install -m 0755 "$SRC_DIR/eazy-tor" "$PKGROOT/usr/lib/eazy/eazy-tor"
@@ -53,6 +57,7 @@ install -m 0755 "$SRC_DIR/eazy-yt-stream" "$PKGROOT/usr/lib/eazy/eazy-yt-stream"
 install -m 0755 "$SRC_DIR/eazy-yt-stream" "$PKGROOT/usr/bin/eazy-yt-stream"
 install -m 0644 "$SRC_DIR/eazy.desktop" "$PKGROOT/usr/share/applications/eazy.desktop"
 install -m 0644 "$SRC_DIR/README.md" "$PKGROOT/usr/share/doc/$PACKAGE/README.md"
+install -m 0644 "$SRC_DIR/README_BETA_5.2.0.md" "$PKGROOT/usr/share/doc/$PACKAGE/README_BETA_5.2.0.md"
 install -m 0644 "$SRC_DIR/CHANGELOG.md" "$PKGROOT/usr/share/doc/$PACKAGE/CHANGELOG.md"
 install -m 0644 "$SRC_DIR/EAZY_EXPLICADO.md" "$PKGROOT/usr/share/doc/$PACKAGE/EAZY_EXPLICADO.md"
 install -m 0644 "$SRC_DIR/GUIA_RAPIDO.md" "$PKGROOT/usr/share/doc/$PACKAGE/GUIA_RAPIDO.md"
@@ -70,8 +75,10 @@ gzip -n -9 -f "$PKGROOT/usr/share/doc/$PACKAGE/changelog.Debian"
 touch "$PKGROOT/DEBIAN/conffiles"
 
 dpkg-deb --build --root-owner-group "$PKGROOT" "$OUTPUT" >/dev/null
+sha256sum "$OUTPUT" > "$OUTPUT.sha256"
 
 printf 'Pacote criado: %s\n' "$OUTPUT"
+printf 'Checksum: %s\n' "$OUTPUT.sha256"
 printf 'Tamanho: '
 du -h "$OUTPUT" | cut -f1
 printf '\nMetadados:\n'

@@ -4,6 +4,10 @@
 
 Execute `eazy` para abrir o navegador. Use `Enter` para entrar em pastas ou abrir arquivos, `Tab` para selecionar e avançar, `Espaço` para selecionar sem avançar e `Esc` para cancelar uma operação interrompível.
 
+## Espaço livre no cabeçalho
+
+O indicador **HD livre/total** mostra primeiro o espaço disponível e depois a capacidade total do filesystem que contém a pasta navegada. Em `/mnt/c/...`, consulta o mount de `/mnt/c`; em `/home/...`, consulta o filesystem de `/home`.
+
 ## Apagar (3.2.3)
 
 | Tecla | Efeito |
@@ -55,10 +59,16 @@ Palavras separadas por espaço significam `AND`. Use `OR`, `NOT` e frases entre 
 
 Use `Insert` para enviar itens às filas 1, 2 ou 3. `Ctrl-P` alterna entre as filas e a pasta. Em listas com múltiplos itens, `Tab` seleciona e avança; `Espaço` marca o item mantendo o cursor no mesmo lugar.
 
+Ao marcar um diretório com `Espaço` ou `Tab`, o indicador **Dir** do cabeçalho mostra o tamanho total dos arquivos dentro dele e das subpastas, sem somar o tamanho técnico das pastas.
+
 Ao **zerar a seleção global**, o diálogo mostra a **quantidade de arquivos** e o **tamanho total** em bytes.
 
 ## Manutenção e DRY-RUN
 
-Use `eazy -m`, `eazy -a` ou o menu `Ctrl-K`. O modo **DRY-RUN** mostra o que seria feito sem remover dados.
+Use `eazy -m`, `eazy -a` ou o menu `Ctrl-K`. Em `Ctrl-K → Z`, revise diretórios vazios e arquivos regulares de 0 bytes antes de confirmar; a raiz pesquisada é preservada e diretórios são removidos com `rmdir`, sem recursão. O modo **DRY-RUN** mostra o que seria feito sem remover dados.
+
+## Parâmetros extras dos players
+
+Em **F9 → Players e parâmetros extras**, escolha mpv, MPlayer, VLC/cvlc ou ffplay. Depois selecione **Editar o valor atual** (campo preenchido), **Substituir por uma nova linha** (campo vazio) ou **Remover todos os parâmetros deste player**. As chaves são salvas em `~/.config/eazy/config`.
 
 O guia completo está em [`EAZY_EXPLICADO.md`](EAZY_EXPLICADO.md).

@@ -1,4 +1,4 @@
-.TH EAZY 1 "2026-11-16" "eazy 5.2.0" "User Commands"
+.TH EAZY 1 "2026-11-27" "eazy 5.2.0 rev.56" "User Commands"
 .SH NAME
 eazy \- navegador de arquivos, reprodutor multimídia, downloads e streaming no terminal
 .SH SYNOPSIS
@@ -27,7 +27,7 @@ Mostra a versão e revisão instalada.
 Abre a Central eazy-yt-stream.
 .TP
 .B \-\-install
-Instala dependências, eazy, eazy-index.py, o migrador de listas, eazy-yt-stream, eazy-tor, eazy-ai.py, eazy-notes-editor, launcher e man page.
+Instala dependências, eazy, eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c, o migrador de listas, eazy-yt-stream, eazy-tor, eazy-ai.py, eazy-notes-editor, launcher e man page.
 .TP
 .B \-\-update-all
 Atualiza dependências e o binário oficial yt-dlp.
@@ -45,11 +45,20 @@ Abre o restaurador de backup.
 Abre a manutenção avançada para selecionar arquivos próprios do eazy.
 .SH KEY BINDINGS
 .TP
+.B Space / Tab
+Marca a seleção. Em um diretório, o indicador Dir do cabeçalho mostra a soma dos bytes dos arquivos da árvore, sem somar metadados dos diretórios.
+.TP
+.B HD livre/total
+Mostra primeiro o espaço disponível e depois a capacidade do filesystem que contém a pasta atualmente navegada. Por exemplo, em /mnt/c/Users consulta o mount que contém /mnt/c; em /home consulta o filesystem que contém /home. O caminho atual é repassado ao df também nos redraws do FZF.
+.TP
 .B F1 / F2 / Ctrl-T
 Ordena por tamanho, nome ou data.
 .TP
 .B F9
-Configuração, diagnóstico, som e IA.
+Configuração, diagnóstico, som e IA; inclui parâmetros extras separados por player. O submenu permite editar o valor atual, substituir usando um campo vazio ou remover explicitamente os parâmetros salvos de cada player.
+.TP
+.B Ctrl-K → Z
+Lista diretórios sem arquivos descendentes e arquivos regulares de 0 bytes para revisão e remoção confirmada. Diretórios são removidos sem recursão; a pasta raiz pesquisada é preservada. Respeita o DRY-RUN.
 .TP
 .B F10
 Ajuda expandida no terminal ou em HTML.
@@ -92,6 +101,9 @@ Na primeira entrada em Histórico por Ctrl-G ou Ctrl-P, o Easy avisa, reconstró
 Antes de usar filas/listas antigas em arquivos, feche o Easy e confira a prévia com python3 migrate_eazy_lists.py. Em instalação Debian, use python3 /usr/lib/eazy/migrate_eazy_lists.py. Aplique com --apply. O migrador faz backup do banco e preserva os arquivos antigos. Não use --replace sem revisar a divergência.
 .SH FILES
 .TP
+.I ~/.config/eazy/config
+Preferências do usuário, incluindo PLAYER_EXTRA_MPV, PLAYER_EXTRA_MPLAYER, PLAYER_EXTRA_CVLC e PLAYER_EXTRA_FFPLAY.
+.TP
 .I ~/.config/eazy/eazy-index.sqlite3
 Índice local, histórico, filas e tabelas de listas temporárias.
 .TP
@@ -105,7 +117,7 @@ Arquivo original de histórico legado, preservado durante a migração.
 Executável principal.
 .TP
 .I /usr/lib/eazy/
-Componentes auxiliares, incluindo eazy-index.py e o migrador de listas.
+Componentes auxiliares, incluindo eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c e o migrador de listas.
 .TP
 .I /usr/share/man/man1/eazy.1.gz
 Esta man page.
@@ -116,6 +128,9 @@ Indexação de arquivos e operações transacionais SQLite.
 .TP
 .B migrate_eazy_lists.py
 Prévia e migração das listas legadas para tabelas SQLite.
+.TP
+.B eazy-live-watch.py / full.c
+Monitor recursivo de alterações no filesystem para atualizar o índice e a listagem; cc/gcc é necessário para compilar o monitor no primeiro uso.
 .TP
 .B eazy-yt-stream
 Streaming, pesquisas, filmes gratuitos, TV aberta, favoritos e downloads.

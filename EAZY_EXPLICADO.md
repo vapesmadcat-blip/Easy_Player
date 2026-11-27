@@ -6,6 +6,8 @@ O **eazy** é um navegador, organizador e reprodutor multimídia para o terminal
 
 A interface é orientada principalmente pelo teclado, mas também permite seleção por mouse quando o terminal oferece esse recurso. O cabeçalho mostra o diretório atual, o modo de ordenação, o estado do DRY-RUN, o espaço do disco e as informações da seleção.
 
+O campo **HD livre/total** exibe primeiro os bytes disponíveis e depois a capacidade total do filesystem que contém a pasta navegada. Assim, em `/mnt/c/Users/...` o espaço é consultado no mount de `/mnt/c`; em `/home/...`, no filesystem que contém `/home`. O caminho atual é passado explicitamente ao `df`, inclusive nos redraws do cabeçalho.
+
 A ideia central é simples: **navegar, localizar, selecionar e executar ações sobre arquivos em um único fluxo**. O eazy também preserva o contexto do usuário, incluindo sessão, cursor, listas temporárias, histórico, pesquisas, notas e últimos destinos de cópia e movimentação.
 
 ## 2. Inicialização e ciclo principal
@@ -45,7 +47,7 @@ A seleção múltipla é uma das funções centrais do eazy. Arquivos e diretór
 
 A seleção pode conter diretórios. Uma pasta selecionada é reconhecida como diretório, recebe ícone próprio, tem tamanho calculado recursivamente e não é tratada como uma mídia comum pelo player.
 
-O cabeçalho informa a quantidade de itens selecionados e os bytes ocupados. Para um arquivo, o cálculo usa o tamanho do arquivo. Para uma pasta, o cálculo considera o conteúdo recursivo da pasta.
+O cabeçalho informa a quantidade de itens selecionados e os bytes ocupados. Para um arquivo, o cálculo usa o tamanho do arquivo. Ao marcar/desmarcar uma pasta com `Espaço` ou `Tab`, o indicador `Dir` é atualizado com a soma dos tamanhos dos arquivos dentro da pasta e de suas subpastas; não inclui o tamanho técnico dos próprios diretórios nem duplica arquivos.
 
 ## 5. Navegação entre diretórios
 
@@ -273,9 +275,9 @@ A área de SWAP mostra o estado atual e oferece ações de criação, configura�
 
 O diagnóstico térmico utiliza sensores do sistema, especialmente `lm-sensors` quando instalado, e pode consultar informações disponíveis no kernel. O menu mostra temperaturas detectadas e avisa quando uma ferramenta não está instalada.
 
-### 17.8 Diretórios vazios
+### 17.8 Diretórios vazios e arquivos zerados
 
-A função de diretórios vazios procura pastas sem conteúdo, permite revisar a lista e selecionar o que deve ser removido. O programa apresenta confirmação e respeita o DRY-RUN.
+Em Ctrl+K → Z, a lista inclui diretórios sem arquivos descendentes e arquivos regulares de 0 bytes, com ou sem extensão. Revise e selecione os itens antes da confirmação. Diretórios são removidos somente com `rmdir` (nunca com exclusão recursiva), e a própria pasta raiz pesquisada não é listada. O DRY-RUN simula a remoção sem alterar os itens.
 
 ### 17.9 Validação de M3U
 

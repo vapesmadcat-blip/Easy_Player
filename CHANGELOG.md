@@ -1,3 +1,36 @@
+## 5.2.0 rev.56 — filesystem correto no indicador HD
+
+- O cabeçalho consulta o filesystem que contém a pasta atualmente navegada, passando seu caminho absoluto a `df`; em WSL, navegar em `/mnt/c/...` consulta o mount de `/mnt/c`, enquanto `/home/...` consulta o filesystem de `/home`.
+- A ajuda explica a ordem `livre/total` e a associação ao mount da pasta; testes verificam os caminhos encaminhados em redraws do FZF.
+- Atualiza o instalador local, a man page e os empacotadores para incluir `eazy-live-watch.py`, `full.c` e `eazy-convert-m3u.py`; o tarball, ZIP e pacote Debian rev.56 recebem nomes próprios e SHA256.
+- Corrige o fallback de cópia OSC 52 no editor de notas para não declarar uma variável `local` fora de função.
+- Atualização beta da rev.55; a release estável v5.2.0 publicada permanece intacta.
+
+## 5.2.0 rev.55 — tamanho recursivo de diretórios selecionados
+
+- Espaço/Tab em diretório atualiza o indicador `Dir` do cabeçalho com a soma dos bytes dos arquivos dentro da árvore selecionada, em vez do tamanho do registro do diretório.
+- Soma arquivos regulares uma vez, sem adicionar tamanhos de metadados das pastas; refresca tamanhos dos arquivos encontrados ao selecionar a árvore.
+- Adiciona teste SQLite para subpastas, cache de tamanho obsoleto, promoção global e remoção da seleção; não cria release.
+
+## 5.2.0 rev.54 — edição explícita de parâmetros dos players
+
+- O menu F9 agora separa “Editar o valor atual”, “Substituir por uma nova linha (campo vazio)” e “Remover todos os parâmetros”, por player; mostra o valor atual, confirma quando salva e atualiza imediatamente os valores em memória e no arquivo de configuração.
+- Amplia os testes para cobrir edição, substituição e remoção persistida de MPV e MPlayer, além de preservar as demais configurações.
+- Corrige o fluxo confuso da rev.53; não cria release.
+
+## 5.2.0 rev.53 — correções baseadas no beta rev.52
+
+- Limpar os argumentos extras de qualquer player, inclusive MPV, remove a chave persistida; o assistente geral não recria entradas vazias.
+- Ctrl+K → Z remove corretamente diretórios vazios e arquivos regulares de 0 bytes, com ou sem extensão. Corrige a remoção literal dos rótulos [DIR]/[FILE 0B], protege a raiz pesquisada e preserva pastas com symlinks/conteúdo.
+- Adiciona testes para limpeza de MPV, diretórios com espaços, arquivos 0 B, DRY-RUN, proteção da raiz e confirma que os 17 testes de cópia de árvore continuam passando. Não cria release.
+
+## 5.2.0 rev.52 — edição dos parâmetros extras dos players
+
+- Adiciona no F9 acesso direto à configuração dos parâmetros extras, exibindo mpv, MPlayer, VLC/cvlc e ffplay junto aos valores atuais.
+- Selecionar um player abre o campo de edição correspondente; alterações são persistidas imediatamente, e um campo vazio remove a entrada salva daquele player, inclusive MPV.
+- O assistente de configuração padrão reutiliza a mesma tela em vez de abrir quatro caixas sequenciais.
+- Inclui teste de seleção/edição/persistência; não cria release.
+
 ## 5.2.0 rev.51 — edição Windows inicial
 
 - Inclui `eazy-win.py`, uma edição Windows independente em preview, baseada no protótipo enviado: navegação local, seleção amarela, menu M3U/M3U8 e configuração persistente em `%APPDATA%\\Easy\\integration.json`.

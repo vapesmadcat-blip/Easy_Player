@@ -2,6 +2,8 @@
 
 Navegador e reprodutor multimídia no terminal, com seleção persistente, filas e listas temporárias SQLite, histórico SQLite, downloads, manutenção, IA, editor de notas, torrents e Central de streaming.
 
+**Canal atual:** a branch `main` contém a versão beta testada **5.2.0 rev.56**. A tag/release `v5.2.0` e o instalador Debian abaixo permanecem na versão estável publicada; a atualização desta branch não substitui nem sobrescreve essa release. Para obter a beta em `~/.local/bin`, use `install-eazy-pronto.sh`.
+
 ## Executar sem instalação
 
 Para testar uma cópia descompactada, execute `./run-beta.sh` (ou `./eazy`) com `eazy-index.py` ao lado do programa. Isso não instala nada.
@@ -19,6 +21,14 @@ curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.2
 curl -fLO https://github.com/vapesmadcat-blip/Easy_Player/releases/download/v5.2.0/eazy_5.2.0_all.deb.sha256
 sha256sum -c eazy_5.2.0_all.deb.sha256
 sudo apt install ./eazy_5.2.0_all.deb
+```
+
+## Instalação da beta rev.56
+
+Para instalar a beta da branch `main` no diretório do usuário, sem `sudo`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vapesmadcat-blip/Easy_Player/main/install-eazy-pronto.sh | bash
 ```
 
 ## Persistência local SQLite
@@ -42,14 +52,18 @@ A Central abre com `eazy --stream` ou pelo menu de streams do `Ctrl-B`. Usa `yt-
 
 ## Componentes
 
-A distribuição inclui `eazy`, `eazy-index.py`, `migrate_eazy_lists.py`, `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e Help HTML/TXT. Os instaladores colocam os componentes nos caminhos de sistema ou do usuário sem caminhos de usuário fixos.
+A distribuição beta inclui `eazy`, `eazy-index.py`, `eazy-convert-m3u.py`, `eazy-live-watch.py`, `full.c`, `migrate_eazy_lists.py`, `eazy-yt-stream`, `eazy-tor`, `eazy-ai.py`, `eazy-notes-editor`, launcher desktop, man page e Help HTML/TXT. Os instaladores colocam os componentes nos caminhos de sistema ou do usuário sem caminhos de usuário fixos.
 
 ## Desenvolvimento e validação
 
 ```bash
-bash -n eazy eazy-yt-stream
-python3 -m unittest discover -s tests -p 'test_sqlite_*.py' -v
-./packaging/build-deb.sh
+bash -n eazy eazy-yt-stream install-eazy-pronto.sh packaging/eazy/build-deb.sh
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+bash tests/test_cleanup_empty_items.sh
+bash tests/test_copy_move_selection_scope.sh
+bash tests/test_copy_tree_conflicts.sh
+./packaging/eazy/build-deb.sh
+make dist
 ./eazy --version
 ./eazy --help
 ```

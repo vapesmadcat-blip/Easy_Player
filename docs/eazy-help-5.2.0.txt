@@ -1,91 +1,139 @@
-eazy 5.2.0 rev.2 (sqlite-history-and-playlists) — navegador e player multimídia no terminal
-Made by John B Kersting
-Uso:
-  eazy [OPÇÕES] [PASTA|ARQUIVO]
-Argumentos:
-  PASTA              Abre o eazy nesse diretório
-  ARQUIVO            Abre a pasta do arquivo e posiciona o cursor nele
-Opções:
-  -h, --help         Mostra esta ajuda
-  -V, --version      Mostra a versão e revisão
-  --config           Assistente de configuração (inclui pasta de downloads)
-  --ai               Abre o chat de IA configurado via OpenRouter
-  --restore-keys     Restaura atalhos de teclado padrão (~/.config/eazy/keys)
-  --shell-init       Imprime função bash: eazy muda de pasta ao sair
-  --verbose, -v      Mostra ficheiros a processar (barra de estado)
-  --silent, -q       Silencioso (padrão): sem barra de processamento
-  --ignore           Anónimo: sem sessão, seleção, posições, histórico, filas
-  --unselect         Limpa seleção global e local (selected_paths) e continua
-  --install          Instala dependências, comando global e scripts auxiliares
-  --update-all       Atualiza todas as dependências (+ yt-dlp oficial)
-  --stream           Abre a Central completa de streaming/filmes
-  --uninstall        Remove os destinos eazy instalados e o launcher .desktop
-  --update-ytdlp     Atualiza o yt-dlp (binário oficial, sem pip)
-  --torrent [OPÇÕES] Encaminha para o downloader separado eazy-tor
-  --torrent-list [FILE] Cria lista em lote a partir da fila do eazy
-  -m, --maintenance  Manutenção + backup/restaurar (escolhe o que salvar)
-  --backup           Backup selecionável (~/.config/eazy e afins)
-  --restore-backup   Restaurar um .tar.gz de backup
-  -a, --advanced-maintenance
-                     Manutenção avançada (seleção fina de arquivos do eazy)
-Atalhos principais (dentro do eazy):
-  Enter              Abrir/tocar; em .deb mostra dados e instala com confirmação
+eazy 5.2.0 rev.56 — Navegador e Reprodutor Multimídia
+Made by John B Kersting  ·  F10 = esta ajuda
+════════════════════════════════════════════════════════════════════
+
+NAVEGAÇÃO, FILTROS E BUSCA
+──────────────────────────
+  Enter              Tocar item sob o cursor / entrar em pasta / abrir playlist
   Ctrl+Espaço / F6   Seleção inteira (Alt+Enter se o terminal permitir)
-  Tab · Espaço       Marcar itens (persiste entre pastas)
-  Ctrl-A             Selecionar todos os visíveis
-  Ctrl-X             Limpar seleção do diretório atual
-  Ctrl-R             Inverter seleção (marcas + persistência)
-  Insert             Enviar seleção para fila ou lista temporária SQL
-  Ctrl-P             Diretório → filas 1–3 → listas SQL → histórico → duplicados
-  Ctrl-F             Busca recursiva (extensão, tamanho, conteúdo)
-  Ctrl-D             Duplicados
-  Ctrl-B             Downloads, fila de streams e Central eazy-yt-stream
-  Ctrl-O             Abrir playlist .m3u / .pls
-  Ctrl-G             Histórico de reprodução
-  Ctrl-K             Menu de ações (mesma seleção do Alt+Enter)
-  Ctrl-Y / Ctrl-U    Copiar / mover seleção
-  Ctrl-E             Tocar seleção em ordem aleatória
-  Ctrl-L             Ir à pasta do arquivo
+  Tab / Espaço       Marcar item; em pasta, soma recursiva aparece no indicador Dir
+  Ctrl-A             Selecionar todos (fora de Duplicados)
+  Ctrl-R             Inverter a seleção
+  Ctrl-X             Limpar a seleção
   Ctrl-Backspace     Voltar ao último diretório
-  Ctrl-H             Exportar HTML: seleção (se houver) ou conteúdo da tela
-  Alt+0 (ou Alt+F10) Tela do terminal (status) + pausa Enter
-  Ctrl-/             Preview on/off (persiste)
-  Del                Remover item somente da lista
-  Shift+Del          Apagar seleção (pergunta: local ou global)
-  Alt-D              Apagar do disco após confirmação
-  F9                 Configuração, overview e teste de som
-  F10                Ajuda expandida (atalhos, .deb, downloads, Tor e configuração)
-  F12                Reaplicar persistência como multi-select (ou amostra em duplicados)
-  Q · X · Ctrl-Q     Sair (salva sessão)
-Manutenção (eazy -m):
-  1  Dados do próprio eazy (sem sudo)
-  2  Manutenção do sistema (sudo quando necessário)
-  3  Manutenção COMPLETA — RAM/Disco/CPU/órfãos/TRIM (sudo)
-No mpv:
-  d                  Marcar para exclusão ao sair
-  D                  Marcar e ir ao próximo
-Arquivos de configuração:
-  ~/.config/eazy/config
-  ~/.config/eazy/session
-  ~/.config/eazy/selected_paths
-  ~/.config/eazy/eazy-index.sqlite3
-  ~/.config/eazy/tmp/          (snapshots efêmeros e temporários; não usa /tmp)
-  ~/.config/eazy/scripts/manut-completa.sh
-PERSISTÊNCIA SQLITE (histórico e listas):
-  Banco: ~/.config/eazy/eazy-index.sqlite3
-  Histórico: Ctrl+G ou Ctrl+P → Histórico. Na primeira entrada, o Easy avisa,
-  recria history_items lendo ~/.config/eazy/history linha a linha e preserva
-  intacto o arquivo original. A primeira tentativa migra e retorna; entre
-  novamente no Histórico.
-  Filas 1–3 e listas personalizadas: tabelas SQLite individuais. Ctrl+P,
-  criação, inclusão, remoção, validação e reprodução usam o banco. Os arquivos
-  em ~/.config/eazy/tmp são snapshots transitórios de compatibilidade, não
-  listas permanentes. O cabeçalho mostra o nome lógico escolhido no Ctrl+P.
-  Migração de arquivos antigos (feche o Easy antes): primeiro veja a prévia,
-  depois aplique. Os arquivos legados não são apagados e o banco recebe backup.
-    python3 migrate_eazy_lists.py
-    python3 migrate_eazy_lists.py --apply
-  Não use --replace sem revisar uma divergência e querer substituir a tabela.
-  Auxiliar de índice: eazy-index.py (junto de eazy ou em /usr/lib/eazy/)
-Dependências: fzf, mpv (ou mplayer/cvlc/ffplay), whiptail, find, awk, python3
-Opcionais: yt-dlp, aria2c, axel, chafa, ffmpeg, p7zip-full, smartmontools
+  Ctrl-H             Exportar HTML: seleção marcada ou lista da tela
+  Ctrl-L             Ir à pasta do arquivo sob o cursor
+  Ctrl-/             Ligar/desligar preview
+  Ctrl-F             Busca recursiva (extensão, tamanho, texto)
+  Esc                Sair da busca e voltar à pasta normal
+  F1/F2/Ctrl-T       Ordenar tamanho/nome/data (pastas, histórico, playlists, filas)
+  HD livre/total     Espaço livre / capacidade do filesystem da pasta atual
+                     Ex.: /mnt/c/... consulta o mount de /mnt/c; /home usa o de /home
+  F3                 Alternar visualização tela cheia/janela
+  F4/F5/F6/F7        Filtrar áudio/vídeo/imagens/compactados
+  F8                 Alternar entre filtro atual e TODOS
+  Page Up/Down       Rolar a página
+  Alt+0              Tela do terminal (log real por trás do fzf) + pausa
+  Alt+Q              Pausar com read sem limpar a tela; Enter retorna
+
+DUPLICADOS E PROGRESSO
+──────────────────────
+  Ctrl-D             Buscar duplicados ou reabrir a lista temporária
+  F12                Amostra: um arquivo por grupo
+  Ctrl-A             Marcar todos os duplicados
+  Ctrl-T             Passar amostras (vermelho) para a seleção ativa
+  Ctrl-R             Inverter a seleção ativa
+  Ctrl-X             Limpar a seleção ativa
+  Tab / Espaço       Alternar seleção do item focado
+  Alt-X              Limpar a lista temporária de duplicados
+  ● vermelho         Amostra fixa criada pelo F12
+  ✓ amarelo          Seleção ativa (Enter, Del, copiar, mover)
+  Progresso          Inventário, hashes e consolidação
+
+FILAS, PLAYLISTS E AÇÕES
+────────────────────────
+  Insert             Enviar seleção para fila 1, 2 ou 3
+  Ctrl-P             Alternar filas 1→2→3→diretório
+  Ctrl-O             Abrir playlist .m3u/.pls
+  Ctrl-G             Tocar histórico de arquivos tocados
+  Ctrl-E             Shuffle / exportar
+  Ctrl-K             Menu de ações (manutenção, converter, …)
+  Ctrl-Y             Copiar seleção
+  Ctrl-U             Mover seleção
+  Ctrl-S             Salvar
+  Ctrl-N             Notas rápidas (última nota / editor)
+
+DOWNLOADS, TOR E TORRENTS
+─────────────────────────
+  Ctrl-B             Gerenciador de downloads (fila)
+  Enter na fila      SEMPRE pergunta app + Tor (sugere o último usado)
+  eazy-tor           Downloader de magnet/.torrent (incluso no .deb)
+  Tor                Opção por item + torsocks (socks5://127.0.0.1:9050)
+  F9 → Downloads     Motor padrão (aria/axel/wget/ytdlp) e parâmetros
+  Destino            DOWNLOAD_DIR e TORRENT_DIR configuráveis
+
+  CLI:
+    eazy --torrent [opts] arquivo.torrent|magnet:...
+    eazy-tor --dir ~/Downloads/Torrents --tor magnet:?xt=...
+
+IA (eazy-ai) E NOTAS
+────────────────────
+  F9 → IA            Abrir chat com IA (eazy-ai.py)
+  eazy-ai.py         Cliente de chat por API (incluso no .deb)
+  Ctrl-N             Abrir última nota
+  Editor de notas    Ctrl-N nova · Ctrl-S salva · Esc salva e sai
+  Ctrl-E             Listar notas
+  Del                Apagar nota
+  Ctrl-R             Renomear
+  Ctrl-X             Exportar para ~/Documentos/Easy-Notes/
+
+  CLI:
+    eazy-ai.py
+    eazy-notes-editor
+
+PLAYER, CONVERSÕES E PDF
+────────────────────────
+  Enter              Reproduzir (mpv / mplayer / vlc / ffplay)
+  F9 → parâmetros    Editar o valor atual, substituir em campo vazio ou remover
+  mpv: [d]           Marcar exclusão
+  mpv: [D]           Marcar exclusão e ir ao próximo
+  C (Ctrl-K)         Conversões: vídeo, imagem, PDF→HTML/texto/PNG, imagem→PDF
+  PDF no Enter       Ler texto, converter HTML/PNG ou abrir no sistema
+
+MANUTENÇÃO (Ctrl-K)
+───────────────────
+  S  Sistema         CPU, RAM, cache, processos, rede, logs
+  H  HD              Disco, partições, SMART
+  A  Som             Diagnóstico, reinício, teste de áudio
+  V  Vídeo           GPU, codecs, otimização
+  W  SWAP            Status, criação, limpeza
+  Z  Vazios          Selecionar dirs vazios e arquivos regulares de 0 bytes
+                     A raiz pesquisada fica protegida; dirs usam rmdir, sem recursão
+  M  Menu completo   Manutenção
+  Backup             Escolher o que salvar (.config, filas, hist…)
+  Restaurar          Restaurar .tar.gz de backup
+  V  Validar M3U     Limpar playlist
+  P  Proteger        Pasta/arquivo com senha
+  C  Conversões      Mídia e PDF
+  DRY-RUN            Simula ações destrutivas (visível no header)
+  sudo               Pede senha antes de comandos privilegiados
+
+SISTEMA, CONFIG E SAÍDA
+───────────────────────
+  F9                 Configuração, overview de hardware, teste de som, IA
+  F10                Este help (HTML / terminal / seções)
+  Alt+0              Log do terminal (por trás do fzf)
+  Alt+Q              Pausar com read sem limpar a tela; Enter retorna
+  Ctrl-Q / Q / X     Salvar sessão e sair
+  eazy -m            Manutenção / backup / restaurar
+  Backup             eazy -m → Backup (escolhe o que salvar)
+  Restaurar          eazy -m → Restaurar backup (.tar.gz)
+  Temporários        ~/.config/eazy/tmp  (NÃO usa /tmp do sistema)
+  Config             ~/.config/eazy/
+  Backups            ~/.config/eazy/backups/
+
+LINHA DE COMANDO
+────────────────
+  eazy [pasta|arquivo]
+  eazy --verbose          Mostra o que está a processar
+  eazy --ignore           Anónimo (sem persistências)
+  eazy --unselect         Limpa seleção global/local e abre o eazy
+  eazy --install          Instala deps + eazy + tor + IA + editor
+  eazy --update-all       Atualiza todas as dependências do sistema
+  eazy --shell-init       Função bash para cd ao sair
+  eazy --torrent …        Encaminha ao eazy-tor
+  eazy --update-ytdlp     Atualiza yt-dlp (binário oficial)
+  eazy -h / --help        Ajuda curta
+  eazy -V / --version     Versão
+
+Pacote .deb inclui: eazy, eazy-index.py, eazy-convert-m3u.py, eazy-live-watch.py, full.c, eazy-tor, eazy-ai.py, eazy-notes-editor

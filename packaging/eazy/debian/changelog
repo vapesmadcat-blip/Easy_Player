@@ -1,3 +1,11 @@
+eazy (5.2.0~rev56) UNRELEASED; urgency=medium
+
+  * Update the tested main-branch build to revision 56.
+  * Ship the live filesystem monitor, its full.c watcher, and the M3U converter.
+  * Refresh embedded and static help, installer scripts, manual, and package contents.
+
+ -- eazy contributors <vapesmadcat-blip@users.noreply.github.com>  Fri, 27 Nov 2026 18:08:00 -0300
+
 eazy (5.2.0) stable; urgency=medium
 
   * Move persistent queues and custom lists from legacy text files to individual SQLite tables.
